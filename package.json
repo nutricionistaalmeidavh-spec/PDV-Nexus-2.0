@@ -1,0 +1,14 @@
+{
+  "name": "pdv-nexus-2.0",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Núcleo local-first de PDV para restaurantes e lanchonetes",
+  "engines": { "node": ">=22.16.0" },
+  "scripts": {
+    "test:core": "node --experimental-strip-types --test packages/core/test/*.test.ts",
+    "test:db": "python3 -m unittest discover -s apps/server/tests -p 'test_*.py' -v",
+    "test": "npm run test:core && npm run test:db"
+  },
+  "license": "UNLICENSED"
+}
