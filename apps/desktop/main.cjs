@@ -18,4 +18,10 @@ app.whenReady().then(async () => {
   await window.loadURL(appUrl);
 });
 app.on('window-all-closed',()=>app.quit());
-app.on('before-quit',()=>{if(server)void server.close();});
+let shutdownInProgress = false;
+app.on('before-quit', event => {
+  if (!server || shutdownInProgress) return;
+  event.preventDefault();
+  shutdownInProgress = true;
+  void server.close().finally(() => app.quit());
+});

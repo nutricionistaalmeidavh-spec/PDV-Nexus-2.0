@@ -10,7 +10,7 @@ jobs:
         with:
           node-version: '22.16.0'
       - name: Test business and API logic
-        run: npm test
+        run: npm run test:core && npm run test:api
       - name: Install builder only when manually requested
         run: npm install --no-audit --no-fund
       - name: Package unsigned installer (no publishing)
