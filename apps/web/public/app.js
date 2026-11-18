@@ -126,12 +126,12 @@
   async function renderPrint(){const result=await api('GET','/api/print/jobs'),container=$('print-list');container.replaceChildren();if(!result.jobs.length)container.append(elt('p','empty','Nenhuma impressão pendente.'));for(const item of result.jobs){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.orderId.slice(0,8)}`),elt('small','',`Situação: ${item.status} · Tentativas: ${item.attempts}`));row.append(info);if(item.status!=='DONE'){const btn=elt('button','button secondary','Enviar ao dispositivo');btn.addEventListener('click',()=>perform(async()=>{await api('POST',`/api/print/jobs/${item.id}/send`,{});show('Dados enviados à impressora');await renderPrint();}));row.append(btn);}container.append(row);}}
   document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>perform(()=>changeView(e.dataset.view))));
   $('search').addEventListener('input',renderProducts);
-  $('product-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/products',{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price')),categoryId:f.get('categoryId')});e.currentTarget.reset();show('Produto cadastrado');await refresh();});});
-  $('category-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
+  $('product-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/products',{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price')),categoryId:f.get('categoryId')});form.reset();show('Produto cadastrado');await refresh();});});
+  $('category-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{
     await api('POST','/api/categories',{commandId:uid(),name:new FormData(e.currentTarget).get('name')});
-    e.currentTarget.reset();await refresh();show('Categoria criada');
+    form.reset();await refresh();show('Categoria criada');
   });});
-  $('pairing-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
+  $('pairing-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{
     const f=new FormData(e.currentTarget),role=f.get('role');
     const result=await api('POST','/api/pairing/start',{role,label:f.get('label')});
     const baseUrl=new URL(f.get('lanUrl'));
@@ -141,12 +141,12 @@
     const qr=$('pairing-qr');qr.src='/api/pairing/qr.svg?url='+encodeURIComponent(target.href);qr.hidden=false;
     await renderPairedDevices();
   });});
-  $('operator-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
+  $('operator-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{
     const f=new FormData(e.currentTarget);
     await api('POST','/api/auth/operators',{username:f.get('username'),password:f.get('password'),role:f.get('role'),commandId:uid()});
-    e.currentTarget.reset();show('Operador criado');
+    form.reset();show('Operador criado');
   });});
-  $('combo-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
+  $('combo-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{
     const f=new FormData(e.currentTarget);
     const ids=[...$('combo-components').selectedOptions].map(x=>x.value);
     if(!ids.length)throw Error('Selecione componentes para o combo');
@@ -160,7 +160,7 @@
       components.push({productId:id,quantity});
     }
     await api('POST','/api/combos',{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price')),components});
-    e.currentTarget.reset();await refresh();show('Combo cadastrado');
+    form.reset();await refresh();show('Combo cadastrado');
   });});
   $('split-order').addEventListener('click',()=>perform(async()=>{
     if(!order?.lines?.length)return;
@@ -178,22 +178,22 @@
     const result=await api('POST','/api/orders/'+order.id+'/split',{commandId:uid(),expectedRevision:order.revision,allocations});
     order=result.order;renderOrder();await showSplit();show('Comanda dividida por cliente');
   }));
-  $('modifier-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const f=new FormData(e.currentTarget);await api('POST',`/api/products/${f.get('productId')}/modifiers`,{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price'))});show('Adicional cadastrado');e.currentTarget.reset();await refresh();});});
+  $('modifier-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST',`/api/products/${f.get('productId')}/modifiers`,{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price'))});show('Adicional cadastrado');form.reset();await refresh();});});
   $('confirm-order').addEventListener('click',()=>perform(async()=>{order=(await api('POST',`/api/orders/${order.id}/confirm`,{commandId:uid(),expectedRevision:order.revision})).order;renderOrder();show('Pedido confirmado');}));
   $('cancel-order').addEventListener('click',()=>perform(async()=>{const reason=prompt('Informe o motivo do cancelamento');if(!reason?.trim())return;order=(await api('POST',`/api/orders/${order.id}/cancel`,{commandId:uid(),expectedRevision:order.revision,reason})).order;renderOrder();show('Pedido cancelado');}));
   $('pay-order').addEventListener('click',()=>{if(!session)return show('Abra o caixa primeiro',true);$('payment-amount').textContent=money(order.totalCents);$('payment-tendered').value=(order.totalCents/100).toFixed(2);$('split-enabled').checked=false;$('split-fields').hidden=true;$('payment-dialog').showModal();});
   $('close-payment').addEventListener('click',()=>$('payment-dialog').close());
   $('payment-method').addEventListener('change',()=>{$('tendered-wrap').hidden=$('payment-method').value!=='cash';});
   $('split-enabled').addEventListener('change',()=>{$('split-fields').hidden=!$('split-enabled').checked;$('split-first-amount').value=(order?.totalCents/200||0).toFixed(2);$('payment-tendered').value=$('split-enabled').checked?$('split-first-amount').value:(order?.totalCents/100||0).toFixed(2);});
-  $('payment-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const method=$('payment-method').value;const split=$('split-enabled').checked;const first=split?toCents($('split-first-amount').value):order.totalCents;
+  $('payment-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const method=$('payment-method').value;const split=$('split-enabled').checked;const first=split?toCents($('split-first-amount').value):order.totalCents;
     if(first<=0||first>order.totalCents||(split&&first===order.totalCents))throw Error('Divisão inválida');
     const pay={method,amountCents:first};if(method==='cash')pay.tenderedCents=toCents($('payment-tendered').value);
     const payments=[pay];if(split)payments.push({method:$('split-second-method').value,amountCents:order.totalCents-first});
     const result=await api('POST',`/api/orders/${order.id}/close`,{commandId:uid(),expectedRevision:order.revision,payments});order=result.order;$('payment-dialog').close();renderOrder();show(`Venda finalizada · Troco: ${money(result.changeCents)}`);await refresh();});});
-  $('cash-open-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{await api('POST','/api/cash/open',{commandId:uid(),openingCents:toCents(new FormData(e.currentTarget).get('amount'))});show('Caixa aberto');await refresh();});});
-  $('cash-movement-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/cash/movements',{commandId:uid(),kind:f.get('kind'),amountCents:toCents(f.get('amount'))});show('Movimento registrado');await refresh();});});
-  $('cash-close-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const result=await api('POST','/api/cash/close',{commandId:uid(),countedCents:toCents(new FormData(e.currentTarget).get('amount'))});show(`Caixa fechado · Diferença: ${money(result.differenceCents)}`);await refresh();});});
-  $('printer-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/printer',{commandId:uid(),host:f.get('host'),port:Number(f.get('port'))});show('Impressora configurada');await renderPrint();});});
+  $('cash-open-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{await api('POST','/api/cash/open',{commandId:uid(),openingCents:toCents(new FormData(e.currentTarget).get('amount'))});show('Caixa aberto');await refresh();});});
+  $('cash-movement-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/cash/movements',{commandId:uid(),kind:f.get('kind'),amountCents:toCents(f.get('amount'))});show('Movimento registrado');await refresh();});});
+  $('cash-close-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const result=await api('POST','/api/cash/close',{commandId:uid(),countedCents:toCents(new FormData(e.currentTarget).get('amount'))});show(`Caixa fechado · Diferença: ${money(result.differenceCents)}`);await refresh();});});
+  $('printer-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/printer',{commandId:uid(),host:f.get('host'),port:Number(f.get('port'))});show('Impressora configurada');await renderPrint();});});
   window.pdvAuth.ready().then(user=>{
     const isAdmin=user?.role==='admin';
     for(const view of ['products','print','fiscal','devices']){
