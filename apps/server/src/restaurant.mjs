@@ -33,7 +33,7 @@ export function restaurantRead(db,method,route,{missing}) {
       so.service_mode AS serviceMode,st.label AS tableLabel
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
       JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id
-      WHERE kt.status <> 'SERVED' ORDER BY kt.created_at ASC LIMIT 200`).all();
+      WHERE kt.status IN ('PENDING','PREPARING','READY') ORDER BY kt.created_at ASC LIMIT 200`).all();
     return {status:200,body:{tickets}};
   }
   if(route==='/api/restaurant/summary') {
@@ -49,7 +49,7 @@ export function restaurantWrite(db,method,route,body,h) {
   const {transact,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit,stamp}=h;
   if(method==='POST' && route==='/api/tables') return transact(db,route,body,()=>{
     const label=requireString(body.label,'Identificação da mesa',60);
-    if(db.prepare("SELECT 1 FROM service_table WHERE restaurant_id='r-local' AND label=?").get(label)) conflict('Já existe uma mesa com este nome');
+    if(db.prepare("SELECT 1 FROM service_table WHERE restaurant_id='r-local' AND label=? COLLATE NOCASE").get(label)) conflict('Já existe uma mesa com este nome');
     const table={id:randomUUID(),label};
     db.prepare('INSERT INTO service_table(id,restaurant_id,label) VALUES(?,?,?)').run(table.id,'r-local',label);
     audit(db,table.id,'TABLE_CREATED',{label});
@@ -59,7 +59,7 @@ export function restaurantWrite(db,method,route,body,h) {
   if(method==='PATCH'&&editTable) return transact(db,route,body,()=>{
     const id=editTable[1],label=requireString(body.label,'Identificação da mesa',60);
     if(!db.prepare('SELECT 1 FROM service_table WHERE id=?').get(id)) missing('Mesa');
-    if(db.prepare('SELECT 1 FROM service_table WHERE restaurant_id=? AND label=? AND id<>?').get('r-local',label,id))conflict('Já existe mesa com este nome');
+    if(db.prepare('SELECT 1 FROM service_table WHERE restaurant_id=? AND label=? COLLATE NOCASE AND id<>?').get('r-local',label,id))conflict('Já existe mesa com este nome');
     db.prepare('UPDATE service_table SET label=? WHERE id=?').run(label,id);audit(db,id,'TABLE_RENAMED',{label});return {table:{id,label}};
   });
   const openTable=route.match(/^\/api\/tables\/([^/]+)\/open$/);

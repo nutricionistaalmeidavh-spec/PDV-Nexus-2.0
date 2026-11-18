@@ -25,6 +25,7 @@ test('mesa única abre e reutiliza comanda sem duplicar',async t=>{
   const {request}=await fixture(t);
   const a=await table(request,'Mesa 01','table-1');
   assert.equal((await request('POST','/api/tables',command('table-duplicate',{label:'Mesa 01'}))).status,409);
+  assert.equal((await request('POST','/api/tables',command('table-duplicate-case',{label:'MESA 01'}))).status,409);
   const first=await request('POST',`/api/tables/${a.id}/open`,command('open-a'));
   assert.equal(first.status,201,JSON.stringify(first.body));
   const second=await request('POST',`/api/tables/${a.id}/open`,command('open-b'));
@@ -122,4 +123,18 @@ test('devolução integral auditada é única e não corrompe caixa anterior',as
 
 test('rede LAN falha fechada sem certificado e token por perfil',()=>{
   assert.throws(()=>createApp({lan:{}}),/certificado|TLS/i);
+});
+
+
+test('cancelamento libera mesa e remove tickets pendentes do painel',async t=>{
+  const {request}=await fixture(t),p=await product(request),tab=await table(request,'Mesa do cancelamento','cancel-tab');
+  const order=(await request('POST',`/api/tables/${tab.id}/open`,command('cancel-open'))).body.order;
+  await request('POST',`/api/orders/${order.id}/lines`,command('cancel-line',{expectedRevision:0,productId:p.id,quantity:1}));
+  await request('POST',`/api/orders/${order.id}/confirm`,command('cancel-confirm',{expectedRevision:1}));
+  assert.equal((await request('GET','/api/kitchen/tickets')).body.tickets.length,1);
+  const canceled=await request('POST',`/api/orders/${order.id}/cancel`,command('cancel-action',{expectedRevision:2,reason:'Cliente desistiu'}));
+  assert.equal(canceled.status,200,JSON.stringify(canceled.body));
+  assert.equal((await request('GET','/api/kitchen/tickets')).body.tickets.length,0);
+  const tableStatus=(await request('GET','/api/tables')).body.tables[0];
+  assert.equal(tableStatus.orderId,null);
 });
