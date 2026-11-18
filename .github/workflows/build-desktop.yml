@@ -1,6 +1,8 @@
 name: Desktop Installer (manual, no release)
 on:
   workflow_dispatch:
+  push:
+    branches: ['feat/p0-p1-hardening-20261118']
 jobs:
   windows:
     runs-on: windows-latest
@@ -9,10 +11,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
+      - name: Install open-source dependencies for unsigned QA build
+        run: npm install --no-audit --no-fund
       - name: Test business and API logic
         run: npm run test:core && npm run test:api
-      - name: Install builder only when manually requested
-        run: npm install --no-audit --no-fund
       - name: Package unsigned installer (no publishing)
         run: npm run build:win
       - uses: actions/upload-artifact@v4
