@@ -7,7 +7,7 @@
 | Issue | Implementado e testável | Pendente para marcar como concluído |
 |---|---|---|
 | #2 | HTTP loopback, SPA local, Electron shell, SQLite WAL com migrations, backup API e restauração offline | teste E2E real de desktop instalado, Windows/Linux, API LAN autenticada/pareada |
-| #3 | Catálogo CRUD básico, pedido balcão, snapshot, histórico, revisão otimista, comandos idempotentes | combos/modificadores, gestão completa de categorias, interface de edição de produto, testes de corrida multicaixa |
+| #3 | Catálogo com categorias e arquivamento, edição de preço/atividade, combos fixos, snapshots e comandos idempotentes | descontos avançados, estoque/fichas técnicas e testes E2E de múltiplos caixas reais |
 | #4 | Caixa aberto/fechado, sangria/suprimento, dinheiro/troco, Pix/cartão por confirmação manual, pagamento dividido via API, auditoria | estorno/devolução, relatórios avançados, impressão detalhada de fechamento, adquirentes de cartão |
 | #5 | Outbox durável e ESC/POS TCP para IP privado, fila manual, bloqueio de reenvio de job concluído, tests com socket falso | USB, balanças, gaveta, drivers específicos, teste físico, compatibilidade de code page; prova de entrega física |
 | #6 | Exportação CSV/JSON de vendas fechadas, com detalhes, pagamentos, devoluções, período e aviso não fiscal | Adequar o mapeamento ao sistema contábil/emissor externo utilizado |
@@ -54,7 +54,7 @@ A restauração exige integridade e versão compatível; recusa quando encontra 
 - Fechar pedido e pagamento insere auditoria/outbox de impressão na mesma transação. Falha na impressão não desfaz pagamento.
 - Fila de impressão marca sucesso como **envio TCP** e não como prova de impressão física; uma falha física posterior pode exigir segunda via auditada.
 - Modo operacional funciona sem emissão fiscal integrada; os comprovantes continuam não fiscais em qualquer modo.
-- HTTP escuta só `127.0.0.1`; PWA LAN exige autenticação e pareamento futuros. Não expor 0.0.0.0/portas da máquina na internet.
+- HTTP escuta só `127.0.0.1` por padrão; PWA LAN opcional usa HTTPS + pareamento por PIN, credencial individual e escopos. Não expor 0.0.0.0/portas da máquina na internet.
 - API local bloqueia origins externos e aceita mutações só com JSON e comando idempotente, quando apropriado.
 - Pix e cartão são **registro manual de recebimento confirmado**, não processadores de pagamento.
 
@@ -68,4 +68,4 @@ A restauração exige integridade e versão compatível; recusa quando encontra 
 - Windows: teste de instalador unsigned, SmartScreen, banco no `userData`, restart/backup e ausência de perda de dados.
 - Linux e Chromebooks: compatibilidade a validar separadamente; terminal ChromeOS não executa instalador Windows.
 - ESC/POS físico: diferentes fabricantes, páginas de código e interface de conexão.
-- Segurança: autenticação de usuários e permissões por operador antes de comercialização.
+- Segurança: contas locais de operador com scrypt e permissões implementadas; validar UX de recuperação presencial de acesso e tentativas de login em máquinas reais.

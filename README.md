@@ -9,9 +9,12 @@ PDV **local-first para restaurantes e lanchonetes**, sem assinatura, cloud, APIs
 Requer Node.js >= 22.16.0. Python 3 é utilizado **apenas nos testes históricos de esquema**, não no aplicativo distribuído.
 
 ```bash
+npm install --no-audit --no-fund
 npm test
 npm start
 ```
+
+A instalação inicial baixa dependências de código aberto (incluindo `qr` 0.7.2 para QR Code local). **O funcionamento posterior não requer internet, API de QR, serviço pago ou assinatura.**
 
 Abrir no próprio computador:
 
@@ -21,19 +24,26 @@ Abrir no próprio computador:
 
 O banco padrão é `~/.pdv-nexus-2/nexus.db`. Os pedidos e pagamentos são gravados em transações com chave idempotente. Não compartilhe o arquivo SQLite por rede.
 
+## Primeiro acesso e operadores
+
+Ao abrir o caixa pela primeira vez, cadastre o **supervisor** com usuário e senha de no mínimo 12 caracteres. Os logins são locais e a senha é protegida por `scrypt` com salt individual. A interface permite criar operadores do tipo caixa; estes não podem editar cardápio, cadastrar operadores, configurar impressoras, exportar ou registrar devoluções.
+
+As sessões são locais e expiram ou se invalidam com reinício do serviço. Não existe recuperação de senha na nuvem. Guarde o backup e as credenciais do supervisor com segurança.
+
 ## Implementação entregue
 
-- Catálogo, adicionais e observações por item, preços históricos, pedidos balcão/mesa/retirada/entrega.
+- Catálogo com categorias ativas/arquivadas, cadastro, edição e desativação de produtos, adicionais e observações por item, preços históricos, pedidos balcão/mesa/retirada/entrega.
 - Mesas ocupadas exclusivamente por comanda ativa; transferências com revisão otimista.
-- Cozinha com ticket por linha, estados de preparo, histórico e deduplicação persistente.
+- Cozinha com ticket por linha, estados de preparo, histórico e deduplicação persistente; eventos em tempo real SSE e reconexão com atualização de segurança a cada 30 segundos.
+- Combos fixos usando o mesmo cardápio, com componentes preservados; divisão da comanda por cliente/quantidade com resumo individual, sem pagamento parcial em etapas separadas.
 - Caixa, sangria, suprimento, troco, pagamentos divididos e devolução integral **manual** com registro financeiro separado.
 - Impressora ESC/POS em TCP privado com fila persistente; sucesso de envio TCP **não prova** impressão física.
 - Backup/restauração offline, testes automatizados Linux/Windows e PWA com cache apenas de arquivos estáticos.
-- HTTPS LAN opcional, tokens por perfil (`waiter`, `kitchen`, `manager`). O host, por padrão, escuta **somente** `127.0.0.1`.
+- HTTPS LAN opcional, token de gerente e pareamento de cada garçom/cozinha por QR de URL + PIN de 6 dígitos (2 minutos), com credenciais individuais válidas por 30 dias e revogáveis. O host, por padrão, escuta **somente** `127.0.0.1`.
 
 ### Acesso opcional por celulares na LAN (sem SaaS)
 
-É necessário fornecer um certificado TLS confiável para o IP/nome do host, tokens fortes e configurar explicitamente as variáveis de ambiente `PDV_LAN_HOST`, `PDV_LAN_CERT`, `PDV_LAN_KEY`, `PDV_LAN_WAITER_TOKEN`, `PDV_LAN_KITCHEN_TOKEN` e/ou `PDV_LAN_MANAGER_TOKEN`. Veja o passo a passo e regras de segurança em [P1_IMPLEMENTATION.md](docs/P1_IMPLEMENTATION.md). Sem HTTPS e token válido não há acesso remoto à API.
+É necessário fornecer certificado TLS confiável para IP/nome do host e ao menos um token de gerente robusto, com `PDV_LAN_HOST`, `PDV_LAN_CERT`, `PDV_LAN_KEY` e `PDV_LAN_MANAGER_TOKEN`. Os tokens estáticos do garçom/cozinha continuam opcionais, mas o pareamento via PIN individual é preferível. Veja o passo a passo e regras de segurança em [P1_IMPLEMENTATION.md](docs/P1_IMPLEMENTATION.md). Sem HTTPS e token válido não há acesso remoto à API.
 
 O PWA usa cache apenas para interface estática; **não cria pedidos offline** se o host estiver inacessível. Não exponha o host na internet.
 
@@ -50,8 +60,8 @@ npm run desktop
 
 - **Exportador:** disponível em CSV/JSON na tela "Exportar vendas", com data inicial/final opcional. A emissão de documentos fiscais, quando necessária, é externa e não faz parte do escopo do PDV. A exportação não é XML fiscal autorizado.
 - Testes físicos de impressora térmica, USB, balança, gaveta e escopo de dispositivos por modelo.
-- Login/PIN do operador local e validação do instalador em PCs reais.
-- Combos/fichas técnicas avançadas e sincronização entre unidades ficam para marcos posteriores.
+- Login local de operador implementado; faltam recuperação local assistida de acesso e validação do instalador em PCs reais.
+- Estoque por ficha técnica, combos de escolha dinâmica de componentes e sincronização entre unidades ficam para marcos posteriores.
 - Interface P0/P1 utiliza HTML/CSS/JS local, sem React/Vite; a possível migração deve ser uma decisão de produto explícita, não uma dependência oculta.
 
-Consulte [status/roadmap](docs/ROADMAP.md), [P0](docs/P0_IMPLEMENTATION.md), [P1](docs/P1_IMPLEMENTATION.md), [arquitetura](docs/ARCHITECTURE.md). Branches de trabalho e PRs #1 → #10 → #11 são empilhadas. **Não fazer merge ou release sem autorização.**
+Consulte o [checklist de QA](docs/QA_RUNBOOK.md), [status/roadmap](docs/ROADMAP.md), [P0](docs/P0_IMPLEMENTATION.md), [P1](docs/P1_IMPLEMENTATION.md), [arquitetura](docs/ARCHITECTURE.md). Branches de trabalho e PRs #1 → #10 → #11 → #12 → nova PR de hardening são empilhadas. **Não fazer merge ou release sem autorização.**
