@@ -34,10 +34,22 @@
           <button id="pay-order" class="button primary full">Receber pagamento</button></div>
       </section></div>
     </section>
-    <section id="view-products" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">GESTÃO DO CARDÁPIO</span><h2>Produtos cadastrados</h2></div></div>
+    <section id="view-products" class="view">
+      <div class="panel"><h2>Categorias</h2>
+        <form id="category-form" class="form-row"><label>Categoria<input name="name" maxlength="80" placeholder="Ex.: Hambúrgueres" required></label><button class="button primary">Criar categoria</button></form>
+        <div id="categories-list" class="data-list"></div>
+      </div><div class="panel"><div class="section-head"><div><span class="eyebrow">GESTÃO DO CARDÁPIO</span><h2>Produtos cadastrados</h2></div></div>
       <form id="product-form" class="form-row"><label>Nome<input name="name" required maxlength="120" placeholder="Ex.: X-Burger"/></label>
-        <label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required placeholder="19,90"/></label><button class="button primary" type="submit">Cadastrar produto</button></form>
-      <div id="product-list" class="data-list"></div></div><div class="panel"><h3>Adicionais por produto</h3><form id="modifier-form" class="form-row"><label>Produto<select name="productId" id="modifier-product"></select></label><label>Nome<input name="name" maxlength="80" required placeholder="Queijo extra"></label><label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required></label><button class="button secondary">Adicionar opção</button></form></div></section>
+        <label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required placeholder="19,90"/></label>
+        <label>Categoria<select id="product-category" name="categoryId" required></select></label>
+        <button class="button primary" type="submit">Cadastrar produto</button></form>
+      <div id="product-list" class="data-list"></div></div><div class="panel"><h3>Adicionais por produto</h3><form id="modifier-form" class="form-row"><label>Produto<select name="productId" id="modifier-product"></select></label><label>Nome<input name="name" maxlength="80" required placeholder="Queijo extra"></label><label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required></label><button class="button secondary">Adicionar opção</button></form></div>
+    <div class="panel" id="operators-panel"><h2>Operadores do caixa</h2><p class="note">Cada operador possui senha própria. Somente supervisores podem cadastrar novas contas.</p>
+      <form class="form-row" id="operator-form"><label>Usuário<input name="username" pattern="[a-zA-Z0-9._-]{3,40}" required></label>
+      <label>Senha temporária<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label>
+      <label>Perfil<select name="role"><option value="cashier">Caixa</option><option value="admin">Supervisor</option></select></label>
+      <button class="button primary">Criar operador</button></form>
+    </div></section>
     <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
     <section id="view-cash" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2>Sessão do caixa</h2></div></div><div id="cash-summary" class="metric"></div>
       <form id="cash-open-form" class="form-row"><label>Valor inicial (R$)<input name="amount" type="number" min="0" step="0.01" value="0" required/></label><button class="button primary">Abrir caixa</button></form>
