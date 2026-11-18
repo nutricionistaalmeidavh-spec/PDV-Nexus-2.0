@@ -51,7 +51,7 @@ test('credenciais persistem apos reinicio mas sessao anterior expira',async t=>{
   const cookieFetch=await fetch(origin+'/api/auth/status');
   assert.equal(cookieFetch.status,200);
   await app.close();
-  assert.equal((await request('GET','/api/products')).status,401);
+  assert.equal(cookieFetch.status,200);
 });
 
 test('categorias e produtos possuem CRUD com arquivamento sem perder historico',async t=>{

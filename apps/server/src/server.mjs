@@ -7,6 +7,8 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
+import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
+import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
@@ -121,6 +123,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
+  const operatorAuth=createOperatorAuth(db);
   let server, origin, closed=false;
   const sendingPrintJobs=new Set();
   async function handler(req,res) {
@@ -136,11 +139,25 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
+        if(route.startsWith('/api/auth/')){
+          if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
+            throw new HttpError(403,'LOCAL_ONLY','Autenticacao de operador permitida apenas no host local');
+          if(method!=='GET'&&method!=='POST')return response(res,405,{code:'METHOD_NOT_ALLOWED'});
+          const authBody=method==='POST'?await readJson(req):null;
+          return operatorAuth.handle(req,res,route,authBody);
+        }
         const role=lanRole(req,lanConfig);
         if(!role)throw new HttpError(401,'AUTH_REQUIRED','Token do dispositivo obrigatório');
         if(!roleAllows(role,method,route))throw new HttpError(403,'FORBIDDEN','A função do dispositivo não permite esta operação');
+        if(role==='local'){
+          const operator=operatorAuth.user(req);
+          if(!operator)throw new HttpError(401,'OPERATOR_REQUIRED','Entre com um operador local');
+          if(!allowedOperator(operator.role,method,route))throw new HttpError(403,'OPERATOR_FORBIDDEN','Perfil sem permissao para este comando');
+        }
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
-        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT id,name,price_cents AS priceCents,active,category_id AS categoryId FROM menu_product ORDER BY name').all()});
+        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        const cats=categoryRead(db,method,route);
+        if(cats)return response(res,cats.status,cats.body);
         if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
@@ -167,13 +184,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         const body=await readJson(req);
         let out;
         const h={transact,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit,stamp,cashSession,cashExpected};
-        const special=restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const special=categoryWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transact(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
             const categoryId=body.categoryId||'c-default';
-            if(!db.prepare('SELECT id FROM menu_category WHERE id=? AND restaurant_id=?').get(categoryId,'r-local')) bad('Categoria inválida');
+            if(!activeCategory(db,categoryId)) bad('Categoria inexistente ou arquivada');
             const product={id:randomUUID(),name,priceCents,categoryId};
             db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents) VALUES(?,?,?,?)').run(product.id,categoryId,name,priceCents);
             audit(db,product.id,'PRODUCT_CREATED',product);return {product};
@@ -182,9 +199,15 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const id=route.split('/').at(-1);
           out=transact(db,route,body,()=>{
             const record=db.prepare('SELECT * FROM menu_product WHERE id=?').get(id);if(!record)missing('Produto');
-            const name=requireString(body.name,'Nome do produto');const priceCents=requireCents(body.priceCents,'Preço');
-            db.prepare('UPDATE menu_product SET name=?,price_cents=? WHERE id=?').run(name,priceCents,id);
-            audit(db,id,'PRODUCT_UPDATED',{name,priceCents});return {product:{id,name,priceCents}};
+            const name=body.name===undefined?record.name:requireString(body.name,'Nome do produto');
+            const priceCents=body.priceCents===undefined?record.price_cents:requireCents(body.priceCents,'Preco');
+            const categoryId=body.categoryId===undefined?record.category_id:requireString(body.categoryId,'Categoria',128);
+            if(!activeCategory(db,categoryId))bad('Categoria inexistente ou arquivada');
+            const active=body.active===undefined?record.active:typeof body.active==='boolean'?(body.active?1:0):null;
+            if(active===null)bad('Ativo deve ser verdadeiro ou falso');
+            db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=? WHERE id=?').run(name,priceCents,categoryId,active,id);
+            audit(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active});
+            return {product:{id,name,priceCents,categoryId,active}};
           });
         } else if(method==='POST'&&route==='/api/orders') {
           out=transact(db,route,body,()=>{

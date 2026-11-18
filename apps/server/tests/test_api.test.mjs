@@ -9,12 +9,18 @@ async function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdv-nexus-'));
   const app = createApp({ dataPath: path.join(dir, 'pos.db') });
   const origin = await app.listen({ port: 0 });
+  let cookie='';
   const request = async (method, route, body) => {
-    const response = await fetch(origin + route, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body && JSON.stringify(body) });
-    return { status: response.status, body: await response.json() };
+    const headers=body?{'content-type':'application/json'}:{};
+    if(cookie)headers.cookie=cookie;
+    const response=await fetch(origin+route,{method,headers,body:body&&JSON.stringify(body)});
+    const setCookie=response.headers.get('set-cookie');if(setCookie)cookie=setCookie.split(';')[0];
+    return {status:response.status,body:await response.json()};
   };
+  const setup=await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'});
+  assert.equal(setup.status,201,JSON.stringify(setup.body));
   t.after(async () => { await app.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  return { dir, app, request };
+  return { dir, app, request, get cookie(){return cookie;} };
 }
 
 async function setupProduct(request) {
@@ -42,7 +48,9 @@ test('catálogo persistente após reiniciar e backup consistente', async (t) => 
   await app.close();
   const reloaded = createApp({ dataPath: path.join(dir, 'pos.db') });
   const restartOrigin = await reloaded.listen({ port: 0 });
-  const response = await fetch(restartOrigin + '/api/products').then(r => r.json());
+  const login=await fetch(restartOrigin+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaMuitoForte-2026'})});
+  const restoredCookie=login.headers.get('set-cookie').split(';')[0];
+  const response = await fetch(restartOrigin + '/api/products',{headers:{cookie:restoredCookie}}).then(r => r.json());
   assert.equal(response.products[0].name, 'X-salada');
   await reloaded.close();
 });
@@ -103,11 +111,11 @@ test('impressão falha sem desfazer venda e emissor fiscal não existe', async (
 });
 
 test('não aceita acesso cross-origin, comandos sem ID ou POST sem JSON', async(t)=>{
-  const {request,app} = await fixture(t);
+  const {request,app,cookie} = await fixture(t);
   assert.equal((await request('POST', '/api/products', {name:'x', priceCents:100})).status,400);
   const foreign=await fetch(app.origin+'/api/products',{method:'POST',headers:{'content-type':'application/json',origin:'https://evil.example'},body:JSON.stringify({commandId:'a', name:'x', priceCents:100})});
   assert.equal(foreign.status,403);
-  const malformed=await fetch(app.origin+'/api/products',{method:'POST',headers:{'content-type':'text/plain'},body:'123'});
+  const malformed=await fetch(app.origin+'/api/products',{method:'POST',headers:{'content-type':'text/plain',cookie},body:'123'});
   assert.equal(malformed.status,415);
 });
 
@@ -122,7 +130,9 @@ test('restauração offline restaura catálogo, preservando cópia anterior', as
   assert.ok(result.previous);
   const reopened=createApp({dataPath:path.join(dir,'pos.db')});
   const origin=await reopened.listen({port:0});
-  const names=(await fetch(origin+'/api/products').then(r=>r.json())).products.map(p=>p.name);
+  const login=await fetch(origin+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaMuitoForte-2026'})});
+  const restoredCookie=login.headers.get('set-cookie').split(';')[0];
+  const names=(await fetch(origin+'/api/products',{headers:{cookie:restoredCookie}}).then(r=>r.json())).products.map(p=>p.name);
   assert.deepEqual(names,['X-salada']);
   await reopened.close();
 });
