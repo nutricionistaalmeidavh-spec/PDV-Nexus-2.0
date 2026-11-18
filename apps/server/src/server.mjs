@@ -11,6 +11,7 @@ import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
 import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
 import {inventoryRead,inventoryWrite,snapshotLineRecipe,consumeStockForOrder} from './inventory.mjs';
+import {publicRead,createPublicRequests,deliveryRead,deliveryWrite} from './delivery.mjs';
 import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
@@ -124,13 +125,15 @@ async function readJson(req) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
   const operatorAuth=createOperatorAuth(db);
   const pairing=createDevicePairing(db);
+  const publicRequests=createPublicRequests(db);
+  const publicEnabled=publicMenuEnabled===true;
   let server, origin, closed=false;
   const sendingPrintJobs=new Set();
   const kitchenListeners=new Set();
@@ -161,6 +164,17 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
+        if(route.startsWith('/api/public/')){
+          if(!publicEnabled)return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
+          const found=publicRead(db,method,route);
+          if(found)return response(res,found.status,found.body);
+          if(method==='POST'&&route==='/api/public/delivery/requests'){
+            const payload=await readJson(req);
+            const result=publicRequests.submit(payload,req.socket.remoteAddress);
+            return response(res,result.status,result.body);
+          }
+          return response(res,404,{code:'NOT_FOUND'});
+        }
         if(route.startsWith('/api/auth/')){
           if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
             throw new HttpError(403,'LOCAL_ONLY','Autenticacao de operador permitida apenas no host local');
@@ -210,6 +224,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        const deliveryResult=deliveryRead(db,method,route);
+        if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
         const stockResult=inventoryRead(db,method,route,url.searchParams,{missing,bad});
         if(stockResult)return response(res,stockResult.status,stockResult.body);
         const cats=categoryRead(db,method,route);
@@ -249,8 +265,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected};
-        const special=inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
+        const special=deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
@@ -421,7 +437,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       }
       if(method!=='GET') return response(res,405,{code:'METHOD_NOT_ALLOWED'});
       const file=route==='/'?'index.html':route.slice(1);
-      if(!['index.html','app.js','styles.css','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
+      if(!['index.html','app.js','styles.css','menu.html','menu.js','menu.css','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});

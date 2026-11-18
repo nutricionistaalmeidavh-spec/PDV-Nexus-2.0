@@ -8,7 +8,7 @@ for(const role of ['waiter','kitchen','manager']) {
   if(env[variable])tokens[role]=env[variable];
 }
 const lan=lanHost?{certPath:env.PDV_LAN_CERT,keyPath:env.PDV_LAN_KEY,tokens}:null;
-const app=createApp({dataPath:env.PDV_DATA_PATH,operationMode:env.PDV_OPERATION_MODE??'demo',lan});
+const app=createApp({dataPath:env.PDV_DATA_PATH,operationMode:env.PDV_OPERATION_MODE??'demo',lan,publicMenuEnabled:env.PDV_PUBLIC_MENU_ENABLED==='true'});
 const origin=await app.listen({host:lanHost??'127.0.0.1',port:Number(env.PDV_PORT??3434)});
 console.log(`PDV Nexus 2.0 (comprovantes nao fiscais + exportacao externa): ${origin}`);
 if(lan)console.log('Acesso LAN exige HTTPS e um token por perfil; distribua URL e token separadamente.');
