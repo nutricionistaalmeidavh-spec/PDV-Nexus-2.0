@@ -46,15 +46,18 @@ test('primeiro supervisor define credenciais, login e logout revogam sessao',asy
 });
 
 test('credenciais persistem apos reinicio mas sessao anterior expira',async t=>{
-  const {app,request,folder,cookie}=await fixture(t);
+  const fixtureInstance=await fixture(t);
+  const {app,request,folder}=fixtureInstance;
   assert.equal((await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'})).status,201);
+  const previousCookie=fixtureInstance.cookie;
+  assert.ok(previousCookie.startsWith('nexus_sid='));
   const status=await request('GET','/api/auth/status');
   assert.equal(status.body.authenticated,true);
   await app.close();
   const reopened=createApp({dataPath:path.join(folder,'nexus.db')});
   const address=await reopened.listen({port:0});
   try {
-    const previous=await fetch(address+'/api/products',{headers:{cookie}});
+    const previous=await fetch(address+'/api/products',{headers:{cookie:previousCookie}});
     assert.equal(previous.status,401);
     const login=await fetch(address+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaMuitoForte-2026'})});
     assert.equal(login.status,200);
