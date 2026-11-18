@@ -134,7 +134,11 @@
   $('pairing-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
     const f=new FormData(e.currentTarget),role=f.get('role');
     const result=await api('POST','/api/pairing/start',{role,label:f.get('label')});
-    $('pairing-output').textContent='PIN '+result.code+' · válido por 2 minutos. Abra '+(role==='kitchen'?'/kitchen.html':'/restaurant.html')+' no dispositivo.';
+    const baseUrl=new URL(f.get('lanUrl'));
+    if(baseUrl.protocol!=='https:')throw Error('Use endereço HTTPS na rede privada');
+    const target=new URL(role==='kitchen'?'/kitchen.html':'/restaurant.html',baseUrl);
+    $('pairing-output').textContent='PIN '+result.code+' · válido por 2 minutos · '+target.href;
+    const qr=$('pairing-qr');qr.src='/api/pairing/qr.svg?url='+encodeURIComponent(target.href);qr.hidden=false;
     await renderPairedDevices();
   });});
   $('operator-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{

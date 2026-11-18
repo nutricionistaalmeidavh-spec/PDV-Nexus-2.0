@@ -45,5 +45,8 @@
       "target": "AppImage"
     },
     "publish": null
+  },
+  "dependencies": {
+    "qr": "0.7.2"
   }
 }

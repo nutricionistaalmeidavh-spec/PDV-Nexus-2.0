@@ -64,9 +64,12 @@
   <form id="pairing-form" class="form-row">
     <label>Perfil<select name="role"><option value="waiter">Garçom</option><option value="kitchen">Cozinha (KDS)</option></select></label>
     <label>Nome do dispositivo<input name="label" maxlength="80" placeholder="Celular garçom" required></label>
+    <label>Endereço HTTPS LAN<input name="lanUrl" type="url" placeholder="https://192.168.1.10:3434" required></label>
     <button class="button primary">Gerar PIN</button>
   </form>
   <p class="metric" id="pairing-output" aria-live="polite"></p>
+  <img id="pairing-qr" alt="QR Code para abrir a tela no dispositivo. O PIN deve ser digitado separadamente." width="240" height="240" hidden>
+  <p class="note">O QR contém apenas o endereço HTTPS de salão/cozinha. O PIN de seis dígitos é digitado no dispositivo e expira após dois minutos.</p>
   <h3>Dispositivos pareados</h3><div id="paired-device-list" class="data-list"></div>
   </div></section>
 <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>

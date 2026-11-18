@@ -188,6 +188,20 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           req.on('close',()=>{clearInterval(ping);kitchenListeners.delete(res);});
           return;
         }
+        if(method==='GET'&&route==='/api/pairing/qr.svg'){
+          const target=url.searchParams.get('url');
+          let candidate;
+          try{candidate=new URL(target);}catch{bad('URL do QR invalida');}
+          const isLanAddress=net.isIP(candidate.hostname)===4&&isPrivateIPv4(candidate.hostname)&&!candidate.hostname.startsWith('127.')
+            || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(candidate.hostname);
+          if(!target||target.length>256||candidate.protocol!=='https:'||!isLanAddress||candidate.username||candidate.password
+            ||!['/restaurant.html','/kitchen.html'].includes(candidate.pathname)||candidate.search||candidate.hash)
+            bad('Use URL HTTPS da rede privada para salao ou cozinha');
+          const module=await import('qr');
+          const svg=module.default(target,'svg',{ecc:'medium',border:3,scale:7});
+          res.writeHead(200,{'content-type':'image/svg+xml; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; style-src 'none'; sandbox"});
+          res.end(svg);return;
+        }
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
