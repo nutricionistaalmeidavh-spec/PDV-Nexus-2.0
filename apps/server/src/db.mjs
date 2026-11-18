@@ -19,7 +19,7 @@ export function openDatabase(dataPath = defaultDataPath()) {
 function migrate(db) {
   const current = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()
     ? new Set(db.prepare('SELECT version FROM schema_migrations').all().map(r => r.version)) : new Set();
-  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql']]) {
+  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql'],[3,'003_restaurant.sql'],[4,'004_refunds.sql']]) {
     if (current.has(version)) continue;
     db.exec('BEGIN IMMEDIATE');
     try {

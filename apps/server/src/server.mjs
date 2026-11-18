@@ -1,4 +1,5 @@
 import http from 'node:http';
+import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
@@ -6,6 +7,9 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
+import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
+import { refundWrite } from './refunds.mjs';
+import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
 
 const publicDir = fileURLToPath(new URL('../../web/public/', import.meta.url));
 const actorId = 'operator-local';
@@ -28,7 +32,9 @@ function databaseOrder(db, id) {
   if (!row) missing('Pedido');
   const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity FROM order_line WHERE order_id=? ORDER BY rowid').all(id);
   const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
-  const order={id:row.id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,lines, payments, totalCents:0};
+  for (const line of lines) line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
+  const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
+  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,lines,payments,refunded,totalCents:0};
   order.totalCents=orderTotalCents(order);
   return order;
 }
@@ -109,9 +115,10 @@ async function readJson(req) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null}={}) {
   // Falha fechada: sem adaptador fiscal homologado, o aplicativo não funciona como emissor comercial.
   if (operationMode!=='demo') throw new Error('Modo comercial bloqueado: NFC-e não implementada/homologada');
+  const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
   let server, origin, closed=false;
   const sendingPrintJobs=new Set();
@@ -121,10 +128,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) 
     const method=req.method;
     try {
       const host=req.headers.host||'';
-      if (!/^((127\.0\.0\.1|localhost)(:\d+)?)$/i.test(host)) throw new HttpError(403,'INVALID_HOST','Host não permitido');
-      const allowed=`http://${host}`;
-      if (req.headers.origin && req.headers.origin!==allowed) throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
+      const isLoopbackHost=/^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(host);
+      const hostname=host.split(':')[0];
+      const isLanHost=net.isIP(hostname)===4&&isPrivateIPv4(hostname) || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(hostname);
+      if(!isLoopbackHost && !(lanConfig&&isLanHost))throw new HttpError(403,'INVALID_HOST','Host não permitido');
+      const allowed=`${lanConfig?'https':'http'}://${host}`;
+      if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
+        const role=lanRole(req,lanConfig);
+        if(!role)throw new HttpError(401,'AUTH_REQUIRED','Token do dispositivo obrigatório');
+        if(!roleAllows(role,method,route))throw new HttpError(403,'FORBIDDEN','A função do dispositivo não permite esta operação');
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT id,name,price_cents AS priceCents,active,category_id AS categoryId FROM menu_product ORDER BY name').all()});
         if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
@@ -134,10 +147,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) 
         if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind='PRINT_RECEIPT' ORDER BY created_at DESC LIMIT 100").all()});
         if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled FROM printer_profile WHERE id='default'").get()??null});
         if(method==='GET'&&route==='/api/fiscal/status') return response(res,200,{available:false,environment:'not-configured',mode:operationMode,warning:'Sem emissor fiscal homologado. Recibos não substituem NFC-e.'});
+        const restaurantResult=restaurantRead(db,method,route,{missing});
+        if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req);
         let out;
-        if(method==='POST'&&route==='/api/products') {
+        const h={transact,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit,stamp,cashSession,cashExpected};
+        const special=restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transact(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
@@ -157,7 +174,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) 
           });
         } else if(method==='POST'&&route==='/api/orders') {
           out=transact(db,route,body,()=>{
-            if(body.serviceMode==='table' && !body.tableId) bad('Mesa obrigatória');
+            if(body.serviceMode==='table') {
+              if(!body.tableId)bad('Mesa obrigatória');
+              if(!db.prepare("SELECT 1 FROM service_table WHERE id=? AND restaurant_id='r-local'").get(body.tableId))missing('Mesa');
+              if(db.prepare("SELECT 1 FROM sales_order WHERE service_table_id=? AND status IN ('DRAFT','OPEN')").get(body.tableId))conflict('Mesa ocupada','TABLE_OCCUPIED');
+            } else if(body.tableId!==undefined)bad('Mesa apenas para atendimento em mesa');
             const order=createOrder({id:randomUUID(),serviceMode:body.serviceMode,createdAt:stamp()});
             db.prepare('INSERT INTO sales_order(id,restaurant_id,terminal_id,service_table_id,service_mode,status,revision,created_at) VALUES(?,?,?,?,?,?,?,?)')
               .run(order.id,'r-local','t-local',body.serviceMode==='table'?body.tableId:null,order.serviceMode,order.status,order.revision,order.createdAt);
@@ -169,17 +190,31 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) 
           out=transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
-            const next=addOrderLine(order,{id:randomUUID(),productId:product.id,productName:product.name,unitPriceCents:product.price_cents,quantity:body.quantity});
+            const ids=body.modifierIds??[];
+            if(!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length)bad('Adicionais inválidos');
+            const modifiers=[];let extraCents=0;
+            for(const modifierId of ids) {
+              if(typeof modifierId!=='string')bad('Adicional inválido');
+              const mod=db.prepare('SELECT * FROM product_modifier WHERE id=? AND product_id=? AND active=1').get(modifierId,product.id);
+              if(!mod)bad('Adicional indisponível para este produto');
+              extraCents+=mod.price_cents;if(!safeCents(extraCents))bad('Adicionais excedem limite seguro');
+              modifiers.push(mod);
+            }
+            const unitPriceCents=product.price_cents+extraCents;if(!safeCents(unitPriceCents))bad('Preço excede limite seguro');
+            const next=addOrderLine(order,{id:randomUUID(),productId:product.id,productName:product.name,unitPriceCents,quantity:body.quantity});
             const line=next.lines.at(-1);
             db.prepare('INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES (?,?,?,?,?,?)').run(line.id,id,line.productId,line.productName,line.unitPriceCents,line.quantity);
-            writeOrder(db,next);audit(db,id,'ORDER_ITEM_ADDED',line);
+            for(const mod of modifiers)db.prepare('INSERT INTO order_line_modifier(id,line_id,modifier_id,name_snapshot,price_cents_snapshot) VALUES (?,?,?,?,?)').run(randomUUID(),line.id,mod.id,mod.name,mod.price_cents);
+            writeOrder(db,next);
+            if(next.status==='OPEN')dispatchKitchenTickets(db,id,stamp);
+            audit(db,id,'ORDER_ITEM_ADDED',{...line,modifierIds:ids});
             return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/confirm$/)) {
           const id=route.split('/')[3];
           out=transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const next=confirmOrder(order);writeOrder(db,next);audit(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
+            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);audit(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
           const id=route.split('/')[3];
@@ -213,7 +248,9 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) 
           out=transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const reason=requireString(body.reason,'Motivo do cancelamento',240);
-            const next=cancelOrder(order);writeOrder(db,next);audit(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
+            const next=cancelOrder(order);writeOrder(db,next);
+            db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status NOT IN ('SERVED','CANCELLED')").run(stamp(),id);
+            audit(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route==='/api/cash/open') {
           out=transact(db,route,body,()=>{
@@ -271,22 +308,23 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo'}={}) 
       }
       if(method!=='GET') return response(res,405,{code:'METHOD_NOT_ALLOWED'});
       const file=route==='/'?'index.html':route.slice(1);
-      if(!['index.html','app.js','styles.css'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
+      if(!['index.html','app.js','styles.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
-      const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':'text/html; charset=utf-8';
-      res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
+      const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
+      res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
       fs.createReadStream(path.join(publicDir,file)).pipe(res);
     } catch(e) {
       const status=e instanceof HttpError?e.status:400;
       return response(res,status,{code:e.code??'INVALID_OPERATION',message:e instanceof HttpError?e.message:e.message||'Erro interno'});
     }
   }
-  server=http.createServer(handler);
+  server=lanConfig?https.createServer({cert:lanConfig.cert,key:lanConfig.key},handler):http.createServer(handler);
   return {
     get origin(){return origin;},
     listen({port=3434,host='127.0.0.1'}={}){return new Promise((resolve,reject)=>{
-      if(host!=='127.0.0.1') return reject(new Error('A API LAN requer autenticação e pareamento antes de ser habilitada'));
-      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`http://${host}:${address.port}`;server.off('error',reject);resolve(origin);});
+      if(!lanConfig&&host!=='127.0.0.1')return reject(new Error('A API LAN requer TLS e tokens por perfil'));
+      if(lanConfig&&!['0.0.0.0','127.0.0.1'].includes(host))return reject(new Error('Host LAN não autorizado'));
+      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);resolve(origin);});
     });},
     backup(dest){return createBackup(db,dest);},
     close(){return new Promise(resolve=>{if(closed)return resolve();closed=true;if(server.listening)server.close(()=>{db.close();resolve();});else{db.close();resolve();}});}

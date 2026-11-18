@@ -1,0 +1,16 @@
+/* Extension to the existing responsive design system. */
+.restaurant-shell{max-width:1520px;margin:0 auto;padding:28px;min-height:100vh;background:#f7f9fc;color:#1b293b}
+.restaurant-header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.restaurant-header h1{margin:4px 0;font-size:30px}
+.restaurant-nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.restaurant-nav a{color:#183c65;text-decoration:none;padding:10px 16px;border-radius:10px;background:#e6eef8;font-weight:650}
+.restaurant-layout{display:grid;grid-template-columns:minmax(280px,1.1fr) minmax(320px,1fr);gap:20px}
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;margin:16px 0}
+.table-choice{border:2px solid #e0e9f3;border-radius:14px;min-height:100px;padding:12px;background:#fff;color:#1b293b;text-align:left;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer}
+.table-choice.occupied{border-color:#f0c36a;background:#fff9ed}.table-choice.selected{outline:3px solid #3769d7}
+.table-choice small{color:#59728a}.modifier-list{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border:1px solid #dbe3ec;border-radius:12px;margin:12px 0}
+.modifier-option{display:flex;align-items:center;gap:8px;font-size:13px}
+.kitchen-grid{display:grid;grid-template-columns:repeat(3,minmax(240px,1fr));gap:18px;margin-top:18px}
+.kitchen-column{min-height:280px}.kitchen-ticket{display:flex;flex-direction:column;gap:12px;background:#f4f7fb;border:1px solid #e0e9f3;border-radius:14px;padding:18px;margin:12px 0}
+.kitchen-ticket p{margin:0}.kitchen-ticket button{align-self:flex-start}
+@media(max-width:850px){.restaurant-shell{padding:12px}.restaurant-layout,.kitchen-grid{grid-template-columns:1fr}.restaurant-header h1{font-size:24px}}
