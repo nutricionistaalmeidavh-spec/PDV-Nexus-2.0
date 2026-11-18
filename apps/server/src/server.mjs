@@ -46,9 +46,9 @@ function databaseOrder(db, id) {
   order.totalCents=orderTotalCents(order);
   return order;
 }
-function audit(db,aggregateId,action,payload={}) {
+function audit(db,aggregateId,action,payload={},currentActor=actorId) {
   db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
-    .run(randomUUID(),aggregateId,action,actorId,JSON.stringify(payload),stamp());
+    .run(randomUUID(),aggregateId,action,currentActor,JSON.stringify(payload),stamp());
 }
 function transact(db, route, body, handler, status=200) {
   const commandId = requireString(body.commandId,'Identificador do comando',128);
@@ -146,6 +146,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     return result;
   }
   async function handler(req,res) {
+    let requestActor='unauthenticated';
+    const auditForRequest=(db,aggregateId,action,payload={})=>audit(db,aggregateId,action,payload,requestActor);
     const url=new URL(req.url,'http://localhost');
     const route=url.pathname;
     const method=req.method;
@@ -173,11 +175,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,result.status,result.body);
         }
         const role=lanRole(req,lanConfig,token=>lookupPairedRole(db,token));
+        if(role&&role!=='local')requestActor='lan-'+role;
         if(!role)throw new HttpError(401,'AUTH_REQUIRED','Token do dispositivo obrigatório');
         if(!roleAllows(role,method,route))throw new HttpError(403,'FORBIDDEN','A função do dispositivo não permite esta operação');
         if(role==='local'){
           const operator=operatorAuth.user(req);
           if(!operator)throw new HttpError(401,'OPERATOR_REQUIRED','Entre com um operador local');
+          requestActor=operator.id;
           if(!allowedOperator(operator.role,method,route))throw new HttpError(403,'OPERATOR_FORBIDDEN','Perfil sem permissao para este comando');
         }
         if(method==='GET'&&route==='/api/kitchen/events'){
@@ -242,7 +246,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit,stamp,cashSession,cashExpected};
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,stamp,cashSession,cashExpected};
         const special=categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
@@ -252,7 +256,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             if(!activeCategory(db,categoryId)) bad('Categoria inexistente ou arquivada');
             const product={id:randomUUID(),name,priceCents,categoryId};
             db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents) VALUES(?,?,?,?)').run(product.id,categoryId,name,priceCents);
-            audit(db,product.id,'PRODUCT_CREATED',product);return {product};
+            auditForRequest(db,product.id,'PRODUCT_CREATED',product);return {product};
           },201);
         } else if(method==='PATCH'&&route.match(/^\/api\/products\/[^/]+$/)) {
           const id=route.split('/').at(-1);
@@ -265,7 +269,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const active=body.active===undefined?record.active:typeof body.active==='boolean'?(body.active?1:0):null;
             if(active===null)bad('Ativo deve ser verdadeiro ou falso');
             db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=? WHERE id=?').run(name,priceCents,categoryId,active,id);
-            audit(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active});
+            auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active});
             return {product:{id,name,priceCents,categoryId,active}};
           });
         } else if(method==='POST'&&route==='/api/orders') {
@@ -278,7 +282,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const order=createOrder({id:randomUUID(),serviceMode:body.serviceMode,createdAt:stamp()});
             db.prepare('INSERT INTO sales_order(id,restaurant_id,terminal_id,service_table_id,service_mode,status,revision,created_at) VALUES(?,?,?,?,?,?,?,?)')
               .run(order.id,'r-local','t-local',body.serviceMode==='table'?body.tableId:null,order.serviceMode,order.status,order.revision,order.createdAt);
-            audit(db,order.id,'ORDER_CREATED',{serviceMode:order.serviceMode});
+            auditForRequest(db,order.id,'ORDER_CREATED',{serviceMode:order.serviceMode});
             return {order:databaseOrder(db,order.id)};
           },201);
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/lines$/)) {
@@ -312,14 +316,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             for(const mod of modifiers)db.prepare('INSERT INTO order_line_modifier(id,line_id,modifier_id,name_snapshot,price_cents_snapshot) VALUES (?,?,?,?,?)').run(randomUUID(),line.id,mod.id,mod.name,mod.price_cents);
             writeOrder(db,next);
             if(next.status==='OPEN')dispatchKitchenTickets(db,id,stamp);
-            audit(db,id,'ORDER_ITEM_ADDED',{...line,modifierIds:ids});
+            auditForRequest(db,id,'ORDER_ITEM_ADDED',{...line,modifierIds:ids});
             return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/confirm$/)) {
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);audit(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
+            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);auditForRequest(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
           const id=route.split('/')[3];
@@ -346,7 +350,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             writeOrder(db,next);
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
               .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
-            audit(db,id,'ORDER_CLOSED',{payments,changeCents:change});
+            auditForRequest(db,id,'ORDER_CLOSED',{payments,changeCents:change});
             return {order:databaseOrder(db,id),changeCents:change};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/cancel$/)) {
@@ -356,13 +360,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const reason=requireString(body.reason,'Motivo do cancelamento',240);
             const next=cancelOrder(order);writeOrder(db,next);
             db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status NOT IN ('SERVED','CANCELLED')").run(stamp(),id);
-            audit(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
+            auditForRequest(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route==='/api/cash/open') {
           out=transactWithEvents(db,route,body,()=>{
             requireCents(body.openingCents,'Abertura');if(cashSession(db)) conflict('Já existe caixa aberto');
             const id=randomUUID();db.prepare('INSERT INTO cash_session(id,terminal_id,opened_at,opening_amount_cents,status) VALUES(?,?,?,?,?)')
-              .run(id,'t-local',stamp(),body.openingCents,'OPEN');audit(db,id,'CASH_OPENED',{openingCents:body.openingCents});return {session:visibleCash(db)};
+              .run(id,'t-local',stamp(),body.openingCents,'OPEN');auditForRequest(db,id,'CASH_OPENED',{openingCents:body.openingCents});return {session:visibleCash(db)};
           },201);
         } else if(method==='POST'&&route==='/api/cash/movements') {
           out=transactWithEvents(db,route,body,()=>{
@@ -372,7 +376,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             if(body.kind==='WITHDRAWAL'&&body.amountCents>cashExpected(db,session))bad('Sangria superior ao saldo');
             const id=randomUUID();db.prepare('INSERT INTO cash_movement(id,session_id,kind,amount_cents,actor_id,created_at) VALUES(?,?,?,?,?,?)')
               .run(id,session.id,body.kind,body.amountCents,actorId,stamp());
-            audit(db,session.id,'CASH_MOVEMENT',{kind:body.kind,amountCents:body.amountCents});return {session:visibleCash(db)};
+            auditForRequest(db,session.id,'CASH_MOVEMENT',{kind:body.kind,amountCents:body.amountCents});return {session:visibleCash(db)};
           },201);
         } else if(method==='POST'&&route==='/api/cash/close') {
           out=transactWithEvents(db,route,body,()=>{
@@ -380,7 +384,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             requireCents(body.countedCents,'Dinheiro contado');const expected=cashExpected(db,session);
             db.prepare("UPDATE cash_session SET status='CLOSED',counted_amount_cents=?,expected_amount_cents=?,closed_at=? WHERE id=?")
               .run(body.countedCents,expected,stamp(),session.id);
-            audit(db,session.id,'CASH_CLOSED',{expected,counted:body.countedCents});
+            auditForRequest(db,session.id,'CASH_CLOSED',{expected,counted:body.countedCents});
             return {id:session.id,expectedCents:expected,countedCents:body.countedCents,differenceCents:body.countedCents-expected};
           });
         } else if(method==='POST'&&route==='/api/printer') {
@@ -402,7 +406,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           try {
             await transmit(printer.host,printer.port,receiptBytes(JSON.parse(job.payload_json)));
             db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
-            audit(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio TCP concluído; impressão física não confirmada'}};
+            auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio TCP concluído; impressão física não confirmada'}};
           } catch(e) {
             db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
             out={status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
