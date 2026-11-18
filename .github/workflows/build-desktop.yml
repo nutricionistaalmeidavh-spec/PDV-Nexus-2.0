@@ -1,0 +1,22 @@
+name: Desktop Installer (manual, no release)
+on:
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Test business and API logic
+        run: npm test
+      - name: Install builder only when manually requested
+        run: npm install --no-audit --no-fund
+      - name: Package unsigned installer (no publishing)
+        run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDV-Nexus-Windows-unsigned
+          path: artifacts/*
+          retention-days: 7

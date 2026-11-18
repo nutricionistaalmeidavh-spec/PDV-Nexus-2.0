@@ -1,14 +1,49 @@
 {
   "name": "pdv-nexus-2.0",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
-  "description": "Núcleo local-first de PDV para restaurantes e lanchonetes",
-  "engines": { "node": ">=22.16.0" },
+  "description": "PDV local-first para restaurantes e lanchonetes — piloto não fiscal",
+  "engines": {
+    "node": ">=22.16.0"
+  },
   "scripts": {
     "test:core": "node --experimental-strip-types --test packages/core/test/*.test.ts",
     "test:db": "python3 -m unittest discover -s apps/server/tests -p 'test_*.py' -v",
-    "test": "npm run test:core && npm run test:db"
+    "test": "npm run test:core && npm run test:db && npm run test:api",
+    "test:api": "node --experimental-strip-types --test apps/server/tests/*.test.mjs",
+    "start": "node --experimental-strip-types apps/server/src/index.mjs",
+    "desktop": "electron .",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:linux": "electron-builder --linux AppImage --x64 --publish never"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "main": "apps/desktop/main.cjs",
+  "devDependencies": {
+    "electron": "45.3.4",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "dev.artisys.pdv-nexus-2",
+    "productName": "PDV Nexus 2.0",
+    "asar": true,
+    "files": [
+      "apps/server/src/**/*",
+      "apps/server/migrations/**/*",
+      "apps/web/public/**/*",
+      "apps/desktop/main.cjs",
+      "packages/core/src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "artifacts"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "publish": null
+  }
 }
