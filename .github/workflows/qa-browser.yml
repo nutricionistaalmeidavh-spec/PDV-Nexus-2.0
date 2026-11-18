@@ -5,7 +5,7 @@ on:
     branches: ['feat/p0-p1-hardening-20261118']
 jobs:
   browser-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
