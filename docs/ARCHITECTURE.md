@@ -17,7 +17,7 @@ flowchart LR
     A --> O[Outbox durável]
     O --> I[Spooler de impressão]
     O --> N[Notificação para KDS]
-    A -.-> F[Adapter fiscal por UF]
+    A --> F[Exportador CSV/JSON para emissao externa]
 ```
 
 - **Frontend**: React + TypeScript (Vite), telas mobile-first, responsivas, sem acesso direto a arquivos/dispositivos/banco.
@@ -27,7 +27,7 @@ flowchart LR
 - **Persistência**: SQLite `foreign_keys=ON`, WAL, migrations versionadas; por restaurante, um banco gerenciado exclusivamente no host (nunca compartilhar arquivo .sqlite via rede).
 - **PWA LAN**: acesso seguro ao host por pareamento do dispositivo. Se o host cair, clientes LAN não podem gravar; offline de terminais secundários exige protocolo separado de sincronização futura.
 - **Hardware**: adapters por protocolo, fila persistente, retentativas auditadas; imprimir não determina sucesso ou fracasso da venda.
-- **Fiscal**: módulo opcional de infraestrutura mas **obrigatório quando exigido pela operação legal**; cupom não fiscal não substitui documento fiscal.
+- **Fiscal**: apenas comprovantes não fiscais e exportacao de vendas CSV/JSON para processamento externo nesta versao. Nenhuma nota e emitida dentro do PDV; nao bloquear o caixa por ausencia de emissor integrado.
 
 ## Comando transacional esperado (a implementar em M0.2/M1)
 
@@ -35,7 +35,7 @@ flowchart LR
 2. Verifica autorização e idempotência: mesmo `commandId` + mesmo hash devolve resposta gravada; hash diferente retorna conflito.
 3. `BEGIN IMMEDIATE`; lê o aggregate; confere revisão; aplica regra no core.
 4. Grava pedidos/linhas/pagamentos + auditoria + `command_receipt` + eventos de outbox **na mesma transação**.
-5. `COMMIT`; responde ao solicitante; worker independente tenta emitir impressão/KDS/fiscal conforme política de operação.
+5. `COMMIT`; responde ao solicitante; worker independente tenta emitir impressao/KDS conforme politica de operacao. Exportacao contábil é leitura, nunca emissao fiscal.
 6. Cliente com timeout consulta o resultado pelo `commandId`, não repete venda com ID novo.
 
 ## Regras de modelagem

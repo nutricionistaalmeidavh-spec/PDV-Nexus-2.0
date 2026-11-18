@@ -19,7 +19,8 @@ Status em 18/11/2026. **CHECKED** significa código + teste automatizado impleme
 - [ ] Windows/Linux: validar instalador assinado/não assinado e restauração em máquinas reais
 - [ ] USB/balanças/gaveta/leitores: drivers, impressoras reais, diagnósticos e testes
 - [ ] Login e permissões por operador **no caixa local**
-- [ ] NFCE/SAT/outros fiscais conforme UF: integração, certificados, CSC e homologação — **bloqueador de lançamento comercial**
+- [x] Comprovantes não fiscais + exportação de vendas CSV/JSON para emissão fiscal externa; sem emissão integrada e sem travar o caixa
+- [ ] Validação de aderência do arquivo ao fluxo do escritório contábil/fornecedor de emissão externa escolhido pelo estabelecimento
 - [ ] Decidir migração de interface para React/Vite (o protótipo é web nativo)
 
 ## P1 — Restaurante e lanchonete (PR #11)
@@ -44,4 +45,4 @@ Status em 18/11/2026. **CHECKED** significa código + teste automatizado impleme
 
 ## Gates obrigatórios
 
-**Sem merge, release, publicação nem licença de produção sem autorização.** Nenhuma chave/secret pode entrar no Git. `npm test` precisa passar. QA de hardware/fiscal não pode ser inferido de testes simulados. O core permanece gratuito, open source na stack e self-hosted, sem serviços pagos obrigatórios.
+**Sem merge, release, publicação nem licença de produção sem autorização.** Nenhuma chave/secret pode entrar no Git. `npm test` precisa passar. QA de hardware não pode ser inferido de testes simulados. A responsabilidade por documentos fiscais legalmente exigidos permanece no fluxo externo. O core permanece gratuito, open source na stack e self-hosted, sem serviços pagos obrigatórios.

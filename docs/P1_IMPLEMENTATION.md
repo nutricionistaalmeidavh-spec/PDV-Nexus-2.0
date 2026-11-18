@@ -20,7 +20,7 @@ npm start
 # browser: http://127.0.0.1:3434/ , /restaurant.html , /kitchen.html
 ```
 
-O modo padrão permanece **DEMONSTRAÇÃO NÃO FISCAL**. Não usar como emissor fiscal na operação de varejo.
+O caixa gera comprovantes não fiscais e exportações para o processo de emissão externa. A ausência de NFC-e integrada não impede a operação do PDV.
 
 ## Ativar rede LAN de forma segura (opcional, self-hosted, zero assinatura)
 
@@ -33,9 +33,9 @@ Não há login cloud, assinatura ou API paga. Tokens ficam somente em `sessionSt
 
 O service worker guarda **apenas arquivos estáticos**. Perda da LAN interrompe alterações; não existe fila offline para operações feitas em outros dispositivos. Isso evita aceitar pedidos sem confirmação.
 
-## P0 — bloqueadores para uso comercial
+## P0 — validações pendentes
 
-- **NFC-e:** emissão real exige credenciamento, certificado, CSC, assinatura/XML, transmissão SEFAZ, homologação, eventos e contingência conforme UF. O código continua **bloqueando modo production** e retorna 501 para emitir NFC-e. O adaptador fiscal NÃO está homologado. Não marcar #6 como concluída.
+- **Fiscal:** escopo fixo nesta versão é comprovante não fiscal + exportação CSV/JSON para processamento fiscal externo. Não há emissão NFC-e/NF-e no PDV e ela não bloqueia o caixa. O escritório/fornecedor externo deve validar o arquivo e cumprir as obrigações legais aplicáveis.
 - **Hardware:** TCP ESC/POS testável, porém impressão real/USB, gaveta, balanças e páginas de código precisam de testes físicos e adaptadores específicos. Não marcar #5 como concluída.
 - **Desktop:** validação do instalador com Windows/Linux reais e antivírus/SmartScreen ainda não comprovada. Build não publica release.
 - **Autenticação de operador no próprio caixa:** a interface local funciona sem login no host; é necessário definir papéis por operador para produção.

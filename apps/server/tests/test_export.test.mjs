@@ -39,7 +39,7 @@ test('operação comum não depende de NFC-e e exporta vendas fechadas em JSON',
   const id=await closeSale(json,'X-burger');
   const health=await json('GET','/api/health');
   assert.equal(health.status,200);
-  const status=await json('GET','/api/fiscal/status');
+  const status=await json('GET','/api/exports/status');
   assert.equal(status.body.exportAvailable,true);
   assert.equal(status.body.emissionAvailable,false);
   const response=await fetch(origin+'/api/exports/sales.json');

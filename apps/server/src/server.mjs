@@ -147,7 +147,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
         if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind='PRINT_RECEIPT' ORDER BY created_at DESC LIMIT 100").all()});
         if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled FROM printer_profile WHERE id='default'").get()??null});
-        if(method==='GET'&&route==='/api/fiscal/status') return response(res,200,{emissionAvailable:false,exportAvailable:true,emissionScope:'external-only',mode:operationMode,warning:'Comprovantes nao fiscais. Exporte as vendas para processamento fiscal externo.'});
+        if(method==='GET'&&route==='/api/exports/status') return response(res,200,{emissionAvailable:false,exportAvailable:true,emissionScope:'external-only',mode:operationMode,warning:'Comprovantes nao fiscais. Exporte as vendas para processamento fiscal externo.'});
         if(method==='GET'&&/^\/api\/exports\/sales\.(?:csv|json)$/.test(route)){
           const isCsv=route.endsWith('.csv');
           const document=buildSalesDocument(db,url.searchParams);

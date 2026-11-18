@@ -2,7 +2,7 @@
 
 PDV **local-first para restaurantes e lanchonetes**, sem assinatura, cloud, APIs pagas ou dependências proprietárias obrigatórias. Um host SQLite atende caixa, mesas e cozinha; garçom/KDS acessam por rede local HTTPS com credenciais por perfil.
 
-> **ESTÁGIO: DEMONSTRAÇÃO NÃO FISCAL.** O protótipo funciona para QA técnico, mas NÃO está homologado para emissão fiscal nem validado em hardware comercial. `operationMode='production'` permanece bloqueado.
+> **ESCOPO FISCAL DEFINIDO: COMPROVANTES NÃO FISCAIS + EXPORTADOR.** Não existe emissão integrada de NF-e/NFC-e, e sua ausência não bloqueia o funcionamento do caixa. Ainda faltam validações presenciais de hardware e instalador antes da distribuição.
 
 ## Início rápido no host
 
@@ -46,9 +46,9 @@ npm run desktop
 
 `npm run build:win` e `npm run build:linux` geram pacotes locais com `--publish never`. O instalador real e os dispositivos USB/balanças ainda exigem QA presencial; não há publicação automática.
 
-## Bloqueadores comerciais e decisões pendentes
+## Validações operacionais e decisões pendentes
 
-- NFC-e: credenciamento, certificado, CSC, assinatura XML, SEFAZ homologação, contingência, cancelamento e regras vigentes da UF. **Não implementado**; endpoint devolve 501.
+- **Exportador:** disponível em CSV/JSON na tela "Exportar vendas", com data inicial/final opcional. A emissão de documentos fiscais, quando necessária, é externa e não faz parte do escopo do PDV. A exportação não é XML fiscal autorizado.
 - Testes físicos de impressora térmica, USB, balança, gaveta e escopo de dispositivos por modelo.
 - Login/PIN do operador local e validação do instalador em PCs reais.
 - Combos/fichas técnicas avançadas e sincronização entre unidades ficam para marcos posteriores.

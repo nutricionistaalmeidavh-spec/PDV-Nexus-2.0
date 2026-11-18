@@ -13,13 +13,13 @@
       <a href="/kitchen.html" class="nav-item">Cozinha (KDS)</a>
       <button data-view="cash" class="nav-item">Gestão do caixa</button>
       <button data-view="print" class="nav-item">Impressão</button>
-      <button data-view="fiscal" class="nav-item">Fiscal</button>
+      <button data-view="fiscal" class="nav-item">Exportar vendas</button>
     </nav>
     <div class="sidebar-bottom">Operação local<br/><span>Sem assinaturas obrigatórias</span></div>
   </aside>
   <main class="main">
     <header class="topbar"><div><span class="eyebrow">RESTAURANTE · BALCÃO</span><h1 id="view-title">Caixa e vendas</h1></div>
-      <div class="topbar-right"><span id="connection" class="connection">Conectado ao host</span><span class="nonfiscal">DEMONSTRAÇÃO — SEM VALOR FISCAL</span></div>
+      <div class="topbar-right"><span id="connection" class="connection">Conectado ao host</span><span class="nonfiscal">COMPROVANTES NÃO FISCAIS</span></div>
     </header>
     <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
     <section id="view-pos" class="view visible">
@@ -49,7 +49,16 @@
       <p class="note">Impressão ESC/POS de recibo não fiscal. O envio TCP não garante que o papel tenha sido impresso.</p>
       <form id="printer-form" class="form-row"><label>IPv4 local<input name="host" placeholder="192.168.1.100" required/></label><label>Porta<input name="port" type="number" value="9100" min="1" max="65535" required/></label><button class="button primary">Salvar impressora</button></form>
       <h3>Fila de impressão</h3><div id="print-list" class="data-list"></div></div></section>
-    <section id="view-fiscal" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">DOCUMENTOS FISCAIS</span><h2>Integração NFC-e</h2></div></div><p class="warning">A emissão fiscal ainda não foi homologada. Este programa é apenas para testes e não pode ser utilizado como emissor de NFC-e.</p><p class="note">Emissão real requer informações do estabelecimento, credenciamento, certificado, regras da UF e implementação do leiaute vigente. Não há fallback para emissão fictícia.</p></div></section>
+    <section id="view-fiscal" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">ARQUIVOS PARA CONTABILIDADE</span><h2>Exportar vendas</h2></div></div>
+      <p class="note">Exportação de dados operacionais de vendas fechadas para contabilidade ou emissão externa. Não gera NF-e/NFC-e ou outro documento fiscal.</p>
+      <form id="export-form" method="get" class="form-row">
+        <label>Data inicial<input type="date" name="from" id="export-from"/></label>
+        <label>Data final<input type="date" name="to" id="export-to"/></label>
+        <button type="submit" class="button primary" formaction="/api/exports/sales.csv">Baixar CSV</button>
+        <button type="submit" class="button secondary" formaction="/api/exports/sales.json">Baixar JSON</button>
+      </form>
+      <p class="note">Sem informar datas, exporta todas as vendas fechadas, até 10.000 por arquivo. Valores em centavos, pagamentos, devoluções e adicionais preservados.</p>
+      <p class="warning">Comprovante de venda e exportação de dados não substituem o documento fiscal exigido. A emissão, quando aplicável, deverá ser realizada externamente.</p></div></section>
   </main>
 </div>
 <dialog id="payment-dialog" class="modal"><form id="payment-form"><div class="section-head"><h2>Receber pagamento</h2><button class="button ghost" type="button" id="close-payment">Fechar</button></div>
