@@ -31,6 +31,7 @@
         <div id="cart-lines" class="cart-lines"><p class="empty">Adicione produtos para iniciar.</p></div>
         <div class="cart-bottom"><div class="total-line"><span>Total</span><strong id="cart-total">R$ 0,00</strong></div>
           <div class="cart-actions"><button id="cancel-order" class="button ghost">Cancelar</button><button id="confirm-order" class="button secondary">Confirmar pedido</button></div>
+          <button id="split-order" class="button secondary full" type="button">Dividir por cliente / quantidade</button><div id="split-summary" class="note" aria-live="polite"></div>
           <button id="pay-order" class="button primary full">Receber pagamento</button></div>
       </section></div>
     </section>
@@ -44,6 +45,13 @@
         <label>Categoria<select id="product-category" name="categoryId" required></select></label>
         <button class="button primary" type="submit">Cadastrar produto</button></form>
       <div id="product-list" class="data-list"></div></div><div class="panel"><h3>Adicionais por produto</h3><form id="modifier-form" class="form-row"><label>Produto<select name="productId" id="modifier-product"></select></label><label>Nome<input name="name" maxlength="80" required placeholder="Queijo extra"></label><label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required></label><button class="button secondary">Adicionar opção</button></form></div>
+    <div class="panel" id="combo-panel"><h2>Combos de preço fixo</h2><p class="note">O combo é cadastrado como um produto do cardápio. Sua composição fica preservada no pedido e é exibida para a cozinha.</p>
+      <form id="combo-form" class="form-row">
+        <label>Nome do combo<input name="name" maxlength="120" required placeholder="Combo almoço"></label>
+        <label>Preço do combo (R$)<input name="price" type="number" step="0.01" min="0" required></label>
+        <label>Componentes (Ctrl/⌘ para vários)<select name="components" id="combo-components" multiple size="5" required></select></label>
+        <button class="button primary">Cadastrar combo</button>
+      </form></div>
     <div class="panel" id="operators-panel"><h2>Operadores do caixa</h2><p class="note">Cada operador possui senha própria. Somente supervisores podem cadastrar novas contas.</p>
       <form class="form-row" id="operator-form"><label>Usuário<input name="username" pattern="[a-zA-Z0-9._-]{3,40}" required></label>
       <label>Senha temporária<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label>

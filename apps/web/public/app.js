@@ -25,6 +25,7 @@
       button.addEventListener('click',()=>perform(async()=>addProductToOrder(product)));grid.append(button);
     }
     const modSelect=$('modifier-product');modSelect.replaceChildren();for(const p of products.filter(p=>p.active&&p.categoryActive)){const opt=elt('option','',p.name);opt.value=p.id;modSelect.append(opt);}
+    const comboSelect=$('combo-components');comboSelect.replaceChildren();for(const p of products.filter(p=>p.active&&p.categoryActive&&!p.isCombo)){const opt=elt('option','',p.name);opt.value=p.id;comboSelect.append(opt);}
     for(const product of products){
       const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',product.name),elt('small','',`ID: ${product.id.slice(0,8)}`));
       const state=elt('span','',product.active&&product.categoryActive?'Ativo':'Inativo');
@@ -80,18 +81,26 @@
     $('confirm-order').disabled=status!=='DRAFT'||!lineList.length;
     $('pay-order').disabled=status!=='OPEN'||!session;
     $('cancel-order').disabled=!['DRAFT','OPEN'].includes(status);
+    $('split-order').disabled=!['DRAFT','OPEN'].includes(status)||!lineList.length;
+    if(!['DRAFT','OPEN'].includes(status))$('split-summary').textContent='';
   };
   async function refresh(){const [p,c,cat]=await Promise.all([api('GET','/api/products'),api('GET','/api/cash/current'),api('GET','/api/categories')]);products=p.products;session=c.session;categories=cat.categories;renderProducts();renderCategories();renderOrder();renderCash();}
   async function perform(task){try{await task();}catch(e){show(e.message,true);}}
+  async function showSplit(){
+    if(!order)return;
+    const r=await api('GET','/api/orders/'+order.id+'/split');
+    const split=r.split;
+    $('split-summary').textContent=split.guests.length?split.guests.map(x=>x.guest+': '+money(x.totalCents)).join(' · '):'Comanda não dividida';
+  }
   async function addProductToOrder(product){
     if(!order||['CLOSED','CANCELLED'].includes(order.status))order=(await api('POST','/api/orders',{commandId:uid(),serviceMode:'counter'})).order;
     const result=await api('POST',`/api/orders/${order.id}/lines`,{commandId:uid(),expectedRevision:order.revision,productId:product.id,quantity:1});
-    order=result.order;renderOrder();show(`${product.name} adicionado`);
+    order=result.order;renderOrder();$('split-summary').textContent='';show(`${product.name} adicionado`);
   }
   async function changeView(next){view=next;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('visible',e.id==='view-'+next));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===next));$('view-title').textContent={pos:'Caixa e vendas',products:'Cardápio',history:'Histórico de pedidos',cash:'Gestão do caixa',print:'Impressão',devices:'Dispositivos',fiscal:'Exportação de vendas'}[next];
     if(next==='history')await renderHistory();if(next==='devices')await renderPairedDevices();if(next==='print')await renderPrint();if(next==='cash'){const c=await api('GET','/api/cash/current');session=c.session;renderCash();}
   }
-  async function renderHistory(){const result=await api('GET','/api/orders'),container=$('history-list');container.replaceChildren();if(!result.orders.length)container.append(elt('p','empty','Nenhum pedido registrado.'));for(const item of result.orders){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.id.slice(0,8)}`),elt('small','',`${item.serviceMode} · ${new Date(item.createdAt).toLocaleString('pt-BR')}`));row.append(info,elt('span','',item.status));if(item.status==='CLOSED'){const b=elt('button','button ghost','Registrar devolução');b.addEventListener('click',()=>perform(async()=>{const reason=prompt('Motivo da devolução integral');if(!reason?.trim())return;const externalRefundConfirmed=confirm('Se houve Pix/cartão, a devolução já foi feita externamente? Confirme somente após executá-la.');await api('POST',`/api/orders/${item.id}/refund`,{commandId:uid(),reason,externalRefundConfirmed});show('Devolução registrada');await renderHistory();}));row.append(b);}if(['DRAFT','OPEN'].includes(item.status)){const btn=elt('button','button secondary','Abrir no caixa');btn.addEventListener('click',()=>perform(async()=>{order=(await api('GET',`/api/orders/${item.id}`)).order;renderOrder();await changeView('pos');show('Comanda carregada');}));row.append(btn);}container.append(row);}}
+  async function renderHistory(){const result=await api('GET','/api/orders'),container=$('history-list');container.replaceChildren();if(!result.orders.length)container.append(elt('p','empty','Nenhum pedido registrado.'));for(const item of result.orders){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.id.slice(0,8)}`),elt('small','',`${item.serviceMode} · ${new Date(item.createdAt).toLocaleString('pt-BR')}`));row.append(info,elt('span','',item.status));if(item.status==='CLOSED'&&window.pdvAuth.currentUser?.role==='admin'){const b=elt('button','button ghost','Registrar devolução');b.addEventListener('click',()=>perform(async()=>{const reason=prompt('Motivo da devolução integral');if(!reason?.trim())return;const externalRefundConfirmed=confirm('Se houve Pix/cartão, a devolução já foi feita externamente? Confirme somente após executá-la.');await api('POST',`/api/orders/${item.id}/refund`,{commandId:uid(),reason,externalRefundConfirmed});show('Devolução registrada');await renderHistory();}));row.append(b);}if(['DRAFT','OPEN'].includes(item.status)){const btn=elt('button','button secondary','Abrir no caixa');btn.addEventListener('click',()=>perform(async()=>{order=(await api('GET',`/api/orders/${item.id}`)).order;renderOrder();await changeView('pos');show('Comanda carregada');}));row.append(btn);}container.append(row);}}
 
   async function renderPairedDevices(){
     const data=await api('GET','/api/pairing/devices'),list=$('paired-device-list');
@@ -133,6 +142,38 @@
     await api('POST','/api/auth/operators',{username:f.get('username'),password:f.get('password'),role:f.get('role'),commandId:uid()});
     e.currentTarget.reset();show('Operador criado');
   });});
+  $('combo-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
+    const f=new FormData(e.currentTarget);
+    const ids=[...$('combo-components').selectedOptions].map(x=>x.value);
+    if(!ids.length)throw Error('Selecione componentes para o combo');
+    const components=[];
+    for(const id of ids){
+      const product=products.find(p=>p.id===id);
+      const qty=prompt('Quantidade de '+product.name+' no combo:','1');
+      if(qty===null)return;
+      const quantity=Number(qty);
+      if(!Number.isSafeInteger(quantity)||quantity<1)throw Error('Quantidade inválida');
+      components.push({productId:id,quantity});
+    }
+    await api('POST','/api/combos',{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price')),components});
+    e.currentTarget.reset();await refresh();show('Combo cadastrado');
+  });});
+  $('split-order').addEventListener('click',()=>perform(async()=>{
+    if(!order?.lines?.length)return;
+    const allocations=[];
+    for(const line of order.lines){
+      const raw=prompt('Divida '+line.quantity+'x '+line.productName+'. Informe Nome:quantidade separados por vírgula.','Cliente 1:'+line.quantity);
+      if(raw===null)return;
+      const guests=raw.split(',').map(part=>{
+        const sep=part.lastIndexOf(':'),guest=part.slice(0,sep).trim(),quantity=Number(part.slice(sep+1).trim());
+        if(sep<=0||!guest||!Number.isSafeInteger(quantity)||quantity<=0)throw Error('Formato inválido. Use Ana:1,Bruno:2');
+        return {guest,quantity};
+      });
+      allocations.push({lineId:line.id,guests});
+    }
+    const result=await api('POST','/api/orders/'+order.id+'/split',{commandId:uid(),expectedRevision:order.revision,allocations});
+    order=result.order;renderOrder();await showSplit();show('Comanda dividida por cliente');
+  }));
   $('modifier-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{const f=new FormData(e.currentTarget);await api('POST',`/api/products/${f.get('productId')}/modifiers`,{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price'))});show('Adicional cadastrado');e.currentTarget.reset();await refresh();});});
   $('confirm-order').addEventListener('click',()=>perform(async()=>{order=(await api('POST',`/api/orders/${order.id}/confirm`,{commandId:uid(),expectedRevision:order.revision})).order;renderOrder();show('Pedido confirmado');}));
   $('cancel-order').addEventListener('click',()=>perform(async()=>{const reason=prompt('Informe o motivo do cancelamento');if(!reason?.trim())return;order=(await api('POST',`/api/orders/${order.id}/cancel`,{commandId:uid(),expectedRevision:order.revision,reason})).order;renderOrder();show('Pedido cancelado');}));
