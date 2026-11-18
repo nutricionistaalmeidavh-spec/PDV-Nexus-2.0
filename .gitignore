@@ -10,3 +10,8 @@ coverage/
 .env.*
 !.env.example
 .DS_Store
+artifacts/
+__pycache__/
+*.pyc
+*.pre-restore.bak
+*.restore-*.tmp

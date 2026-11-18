@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PDV Nexus 2.0 — Caixa</title><link rel="stylesheet" href="/styles.css"/></head>
+<body>
+<div class="layout">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand"><span class="brand-mark">N</span><span><strong>PDV Nexus</strong><small>ArtiSys · 2.0</small></span></div>
+    <nav id="tabs" class="navigation">
+      <button data-view="pos" class="nav-item active">Caixa e vendas</button>
+      <button data-view="products" class="nav-item">Cardápio</button>
+      <button data-view="history" class="nav-item">Histórico</button>
+      <button data-view="cash" class="nav-item">Gestão do caixa</button>
+      <button data-view="print" class="nav-item">Impressão</button>
+      <button data-view="fiscal" class="nav-item">Fiscal</button>
+    </nav>
+    <div class="sidebar-bottom">Operação local<br/><span>Sem assinaturas obrigatórias</span></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div><span class="eyebrow">RESTAURANTE · BALCÃO</span><h1 id="view-title">Caixa e vendas</h1></div>
+      <div class="topbar-right"><span id="connection" class="connection">Conectado ao host</span><span class="nonfiscal">DEMONSTRAÇÃO — SEM VALOR FISCAL</span></div>
+    </header>
+    <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+    <section id="view-pos" class="view visible">
+      <div class="pos-grid"><section class="catalog panel"><div class="section-head"><div><span class="eyebrow">ATENDIMENTO</span><h2>Selecione os produtos</h2></div><span class="small-tag">Balcão</span></div>
+        <label class="sr-only" for="search">Buscar produtos</label><input id="search" class="search" placeholder="Pesquisar no cardápio..." autocomplete="off"/>
+        <div id="product-grid" class="product-grid"></div>
+      </section>
+      <section class="cart panel"><div class="section-head"><div><span class="eyebrow">PEDIDO ATUAL</span><h2>Resumo da venda</h2></div><span id="order-status" class="small-tag">Novo pedido</span></div>
+        <div id="cart-lines" class="cart-lines"><p class="empty">Adicione produtos para iniciar.</p></div>
+        <div class="cart-bottom"><div class="total-line"><span>Total</span><strong id="cart-total">R$ 0,00</strong></div>
+          <div class="cart-actions"><button id="cancel-order" class="button ghost">Cancelar</button><button id="confirm-order" class="button secondary">Confirmar pedido</button></div>
+          <button id="pay-order" class="button primary full">Receber pagamento</button></div>
+      </section></div>
+    </section>
+    <section id="view-products" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">GESTÃO DO CARDÁPIO</span><h2>Produtos cadastrados</h2></div></div>
+      <form id="product-form" class="form-row"><label>Nome<input name="name" required maxlength="120" placeholder="Ex.: X-Burger"/></label>
+        <label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required placeholder="19,90"/></label><button class="button primary" type="submit">Cadastrar produto</button></form>
+      <div id="product-list" class="data-list"></div></div></section>
+    <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
+    <section id="view-cash" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2>Sessão do caixa</h2></div></div><div id="cash-summary" class="metric"></div>
+      <form id="cash-open-form" class="form-row"><label>Valor inicial (R$)<input name="amount" type="number" min="0" step="0.01" value="0" required/></label><button class="button primary">Abrir caixa</button></form>
+      <form id="cash-movement-form" class="form-row" hidden><label>Tipo<select name="kind"><option value="SUPPLY">Suprimento</option><option value="WITHDRAWAL">Sangria</option></select></label>
+        <label>Valor (R$)<input name="amount" type="number" min="0.01" step="0.01" required/></label><button class="button secondary">Registrar</button></form>
+      <form id="cash-close-form" class="form-row" hidden><label>Dinheiro contado (R$)<input name="amount" type="number" min="0" step="0.01" required/></label><button class="button danger">Fechar caixa</button></form>
+    </div></section>
+    <section id="view-print" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">HARDWARE</span><h2>Impressora térmica TCP</h2></div></div>
+      <p class="note">Impressão ESC/POS de recibo não fiscal. O envio TCP não garante que o papel tenha sido impresso.</p>
+      <form id="printer-form" class="form-row"><label>IPv4 local<input name="host" placeholder="192.168.1.100" required/></label><label>Porta<input name="port" type="number" value="9100" min="1" max="65535" required/></label><button class="button primary">Salvar impressora</button></form>
+      <h3>Fila de impressão</h3><div id="print-list" class="data-list"></div></div></section>
+    <section id="view-fiscal" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">DOCUMENTOS FISCAIS</span><h2>Integração NFC-e</h2></div></div><p class="warning">A emissão fiscal ainda não foi homologada. Este programa é apenas para testes e não pode ser utilizado como emissor de NFC-e.</p><p class="note">Emissão real requer informações do estabelecimento, credenciamento, certificado, regras da UF e implementação do leiaute vigente. Não há fallback para emissão fictícia.</p></div></section>
+  </main>
+</div>
+<dialog id="payment-dialog" class="modal"><form id="payment-form"><div class="section-head"><h2>Receber pagamento</h2><button class="button ghost" type="button" id="close-payment">Fechar</button></div>
+  <div id="payment-amount" class="metric"></div><label>Forma de pagamento<select id="payment-method"><option value="cash">Dinheiro</option><option value="pix">Pix confirmado manualmente</option><option value="credit">Cartão de crédito (manual)</option><option value="debit">Cartão de débito (manual)</option></select></label>
+  <label id="tendered-wrap">Valor recebido em dinheiro (R$)<input id="payment-tendered" type="number" step="0.01" min="0" required/></label>
+  <p class="note">Pagamentos eletrônicos são registrados após confirmação manual. Não existe captura automática.</p><button class="button primary full" type="submit">Concluir venda</button></form></dialog>
+<script src="/app.js" defer></script></body></html>
