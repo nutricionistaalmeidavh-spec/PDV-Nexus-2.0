@@ -148,8 +148,8 @@ test('impressão ESC/POS TCP envia bytes apenas uma vez após confirmação', as
   assert.equal((await request('POST',`/api/print/jobs/${id}/send`,{})).status,409);
 });
 
-test('modo produção permanece bloqueado sem homologação fiscal', () => {
-  assert.throws(()=>createApp({operationMode:'production'}),/Modo comercial bloqueado/);
+test('modo invalido e rejeitado, mas o operacional nao requer emissor fiscal', () => {
+  assert.throws(()=>createApp({operationMode:'fiscal'}),/Modo de operacao invalido/);
 });
 
 test('rejeita encerramento de pedido sem caixa e pagamentos incorretos',async t=>{
