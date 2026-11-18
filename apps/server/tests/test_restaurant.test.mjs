@@ -9,10 +9,15 @@ async function fixture(t) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'pdv-restaurant-'));
   const app=createApp({dataPath:path.join(dir,'local.db')});
   const origin=await app.listen({port:0});
+  let cookie='';
   const request=async(method,route,body)=>{
-    const r=await fetch(origin+route,{method,headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+    const headers=body?{'content-type':'application/json'}:{};if(cookie)headers.cookie=cookie;
+    const r=await fetch(origin+route,{method,headers,body:body?JSON.stringify(body):undefined});
+    const sc=r.headers.get('set-cookie');if(sc)cookie=sc.split(';')[0];
     return {status:r.status,body:await r.json()};
   };
+  const setup=await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'});
+  assert.equal(setup.status,201);
   t.after(async()=>{await app.close();fs.rmSync(dir,{recursive:true,force:true});});
   return {dir,app,request};
 }

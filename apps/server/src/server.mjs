@@ -7,6 +7,10 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
+import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
+import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
+import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
+import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
@@ -33,15 +37,18 @@ function databaseOrder(db, id) {
   if (!row) missing('Pedido');
   const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? ORDER BY rowid').all(id);
   const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
-  for (const line of lines) line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
+  for(const line of lines){
+    line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
+    line.comboComponents=db.prepare('SELECT product_id AS productId,product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid').all(line.id);
+  }
   const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
   const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,lines,payments,refunded,totalCents:0};
   order.totalCents=orderTotalCents(order);
   return order;
 }
-function audit(db,aggregateId,action,payload={}) {
+function audit(db,aggregateId,action,payload={},currentActor=actorId) {
   db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
-    .run(randomUUID(),aggregateId,action,actorId,JSON.stringify(payload),stamp());
+    .run(randomUUID(),aggregateId,action,currentActor,JSON.stringify(payload),stamp());
 }
 function transact(db, route, body, handler, status=200) {
   const commandId = requireString(body.commandId,'Identificador do comando',128);
@@ -121,9 +128,26 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
+  const operatorAuth=createOperatorAuth(db);
+  const pairing=createDevicePairing(db);
   let server, origin, closed=false;
   const sendingPrintJobs=new Set();
+  const kitchenListeners=new Set();
+  function notifyKitchen() {
+    const message='event: changed\ndata: {"changed":true}\n\n';
+    for(const res of kitchenListeners){
+      if(res.destroyed){kitchenListeners.delete(res);continue;}
+      try{res.write(message);}catch{kitchenListeners.delete(res);}
+    }
+  }
+  function transactWithEvents(db,route,body,handler,status){
+    const result=transact(db,route,body,handler,status);
+    queueMicrotask(notifyKitchen);
+    return result;
+  }
   async function handler(req,res) {
+    let requestActor='unauthenticated';
+    const auditForRequest=(db,aggregateId,action,payload={})=>audit(db,aggregateId,action,payload,requestActor);
     const url=new URL(req.url,'http://localhost');
     const route=url.pathname;
     const method=req.method;
@@ -136,11 +160,59 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
-        const role=lanRole(req,lanConfig);
+        if(route.startsWith('/api/auth/')){
+          if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
+            throw new HttpError(403,'LOCAL_ONLY','Autenticacao de operador permitida apenas no host local');
+          if(method!=='GET'&&method!=='POST')return response(res,405,{code:'METHOD_NOT_ALLOWED'});
+          const authBody=method==='POST'?await readJson(req):null;
+          return operatorAuth.handle(req,res,route,authBody);
+        }
+        // Resgate de PIN é público somente no host local ou na LAN HTTPS configurada.
+        if(method==='POST'&&route==='/api/pairing/redeem'){
+          if(!isLoopbackHost&&!lanConfig)throw new HttpError(403,'LOCAL_OR_TLS_ONLY','Pareamento exige host local ou HTTPS LAN');
+          const payload=await readJson(req);
+          const result=pairing.redeem(payload,req.socket.remoteAddress);
+          return response(res,result.status,result.body);
+        }
+        const role=lanRole(req,lanConfig,token=>lookupPairedRole(db,token));
+        if(role&&role!=='local')requestActor='lan-'+role;
         if(!role)throw new HttpError(401,'AUTH_REQUIRED','Token do dispositivo obrigatório');
         if(!roleAllows(role,method,route))throw new HttpError(403,'FORBIDDEN','A função do dispositivo não permite esta operação');
+        if(role==='local'){
+          const operator=operatorAuth.user(req);
+          if(!operator)throw new HttpError(401,'OPERATOR_REQUIRED','Entre com um operador local');
+          requestActor=operator.id;
+          if(!allowedOperator(operator.role,method,route))throw new HttpError(403,'OPERATOR_FORBIDDEN','Perfil sem permissao para este comando');
+        }
+        if(method==='GET'&&route==='/api/kitchen/events'){
+          res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-cache, no-store, must-revalidate','connection':'keep-alive','x-content-type-options':'nosniff'});
+          res.write('retry: 2500\nevent: ready\ndata: {}\n\n');
+          kitchenListeners.add(res);
+          const ping=setInterval(()=>{if(!res.destroyed)res.write(': ping\n\n');},25000);
+          req.on('close',()=>{clearInterval(ping);kitchenListeners.delete(res);});
+          return;
+        }
+        if(method==='GET'&&route==='/api/pairing/qr.svg'){
+          const target=url.searchParams.get('url');
+          let candidate;
+          try{candidate=new URL(target);}catch{bad('URL do QR invalida');}
+          const isLanAddress=net.isIP(candidate.hostname)===4&&isPrivateIPv4(candidate.hostname)&&!candidate.hostname.startsWith('127.')
+            || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(candidate.hostname);
+          if(!target||target.length>256||candidate.protocol!=='https:'||!isLanAddress||candidate.username||candidate.password
+            ||!['/restaurant.html','/kitchen.html'].includes(candidate.pathname)||candidate.search||candidate.hash)
+            bad('Use URL HTTPS da rede privada para salao ou cozinha');
+          const module=await import('qr');
+          const svg=module.default(target,'svg',{ecc:'medium',border:3,scale:7});
+          res.writeHead(200,{'content-type':'image/svg+xml; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; style-src 'none'; sandbox"});
+          res.end(svg);return;
+        }
+        if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
-        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT id,name,price_cents AS priceCents,active,category_id AS categoryId FROM menu_product ORDER BY name').all()});
+        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        const cats=categoryRead(db,method,route);
+        if(cats)return response(res,cats.status,cats.body);
+        const comboResult=comboRead(db,method,route,{missing});
+        if(comboResult)return response(res,comboResult.status,comboResult.body);
         if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
@@ -165,29 +237,43 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req);
+        if(method==='POST'&&route==='/api/pairing/start'){
+          try{return response(res,201,pairing.start(body));}
+          catch(e){return response(res,400,{code:'PAIRING_INVALID',message:e.message});}
+        }
+        if(method==='POST'&&route==='/api/pairing/revoke'){
+          const revoked=pairing.revoke(body.deviceId);
+          return response(res,revoked?200:404,{revoked});
+        }
         let out;
-        const h={transact,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit,stamp,cashSession,cashExpected};
-        const special=restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,stamp,cashSession,cashExpected};
+        const special=categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
             const categoryId=body.categoryId||'c-default';
-            if(!db.prepare('SELECT id FROM menu_category WHERE id=? AND restaurant_id=?').get(categoryId,'r-local')) bad('Categoria inválida');
+            if(!activeCategory(db,categoryId)) bad('Categoria inexistente ou arquivada');
             const product={id:randomUUID(),name,priceCents,categoryId};
             db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents) VALUES(?,?,?,?)').run(product.id,categoryId,name,priceCents);
-            audit(db,product.id,'PRODUCT_CREATED',product);return {product};
+            auditForRequest(db,product.id,'PRODUCT_CREATED',product);return {product};
           },201);
         } else if(method==='PATCH'&&route.match(/^\/api\/products\/[^/]+$/)) {
           const id=route.split('/').at(-1);
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const record=db.prepare('SELECT * FROM menu_product WHERE id=?').get(id);if(!record)missing('Produto');
-            const name=requireString(body.name,'Nome do produto');const priceCents=requireCents(body.priceCents,'Preço');
-            db.prepare('UPDATE menu_product SET name=?,price_cents=? WHERE id=?').run(name,priceCents,id);
-            audit(db,id,'PRODUCT_UPDATED',{name,priceCents});return {product:{id,name,priceCents}};
+            const name=body.name===undefined?record.name:requireString(body.name,'Nome do produto');
+            const priceCents=body.priceCents===undefined?record.price_cents:requireCents(body.priceCents,'Preco');
+            const categoryId=body.categoryId===undefined?record.category_id:requireString(body.categoryId,'Categoria',128);
+            if(!activeCategory(db,categoryId))bad('Categoria inexistente ou arquivada');
+            const active=body.active===undefined?record.active:typeof body.active==='boolean'?(body.active?1:0):null;
+            if(active===null)bad('Ativo deve ser verdadeiro ou falso');
+            db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=? WHERE id=?').run(name,priceCents,categoryId,active,id);
+            auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active});
+            return {product:{id,name,priceCents,categoryId,active}};
           });
         } else if(method==='POST'&&route==='/api/orders') {
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             if(body.serviceMode==='table') {
               if(!body.tableId)bad('Mesa obrigatória');
               if(!db.prepare("SELECT 1 FROM service_table WHERE id=? AND restaurant_id='r-local'").get(body.tableId))missing('Mesa');
@@ -196,12 +282,12 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const order=createOrder({id:randomUUID(),serviceMode:body.serviceMode,createdAt:stamp()});
             db.prepare('INSERT INTO sales_order(id,restaurant_id,terminal_id,service_table_id,service_mode,status,revision,created_at) VALUES(?,?,?,?,?,?,?,?)')
               .run(order.id,'r-local','t-local',body.serviceMode==='table'?body.tableId:null,order.serviceMode,order.status,order.revision,order.createdAt);
-            audit(db,order.id,'ORDER_CREATED',{serviceMode:order.serviceMode});
+            auditForRequest(db,order.id,'ORDER_CREATED',{serviceMode:order.serviceMode});
             return {order:databaseOrder(db,order.id)};
           },201);
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/lines$/)) {
           const id=route.split('/')[3];
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
             const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
@@ -221,22 +307,29 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const line=next.lines.at(-1);
             db.prepare('INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES (?,?,?,?,?,?)').run(line.id,id,line.productId,line.productName,line.unitPriceCents,line.quantity);
             db.prepare('UPDATE order_line SET note_snapshot=? WHERE id=?').run(note,line.id);
+            if(product.is_combo){
+              const items=db.prepare('SELECT c.product_id AS productId,c.quantity,p.name FROM menu_combo_item c JOIN menu_product p ON p.id=c.product_id WHERE c.combo_id=?').all(product.id);
+              if(!items.length)conflict('Combo sem componentes cadastrados');
+              const save=db.prepare('INSERT INTO order_line_combo_item(id,line_id,product_id,product_name_snapshot,quantity) VALUES(?,?,?,?,?)');
+              for(const item of items)save.run(randomUUID(),line.id,item.productId,item.name,item.quantity);
+            }
             for(const mod of modifiers)db.prepare('INSERT INTO order_line_modifier(id,line_id,modifier_id,name_snapshot,price_cents_snapshot) VALUES (?,?,?,?,?)').run(randomUUID(),line.id,mod.id,mod.name,mod.price_cents);
             writeOrder(db,next);
             if(next.status==='OPEN')dispatchKitchenTickets(db,id,stamp);
-            audit(db,id,'ORDER_ITEM_ADDED',{...line,modifierIds:ids});
+            auditForRequest(db,id,'ORDER_ITEM_ADDED',{...line,modifierIds:ids});
             return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/confirm$/)) {
           const id=route.split('/')[3];
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);audit(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
+            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);auditForRequest(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
           const id=route.split('/')[3];
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
             const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
             const payments=body.payments;if(!Array.isArray(payments)||payments.length===0||payments.length>10)bad('Pagamentos inválidos');
             let amount=0,change=0;
@@ -257,45 +350,45 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             writeOrder(db,next);
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
               .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
-            audit(db,id,'ORDER_CLOSED',{payments,changeCents:change});
+            auditForRequest(db,id,'ORDER_CLOSED',{payments,changeCents:change});
             return {order:databaseOrder(db,id),changeCents:change};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/cancel$/)) {
           const id=route.split('/')[3];
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const reason=requireString(body.reason,'Motivo do cancelamento',240);
             const next=cancelOrder(order);writeOrder(db,next);
             db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status NOT IN ('SERVED','CANCELLED')").run(stamp(),id);
-            audit(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
+            auditForRequest(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route==='/api/cash/open') {
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             requireCents(body.openingCents,'Abertura');if(cashSession(db)) conflict('Já existe caixa aberto');
             const id=randomUUID();db.prepare('INSERT INTO cash_session(id,terminal_id,opened_at,opening_amount_cents,status) VALUES(?,?,?,?,?)')
-              .run(id,'t-local',stamp(),body.openingCents,'OPEN');audit(db,id,'CASH_OPENED',{openingCents:body.openingCents});return {session:visibleCash(db)};
+              .run(id,'t-local',stamp(),body.openingCents,'OPEN');auditForRequest(db,id,'CASH_OPENED',{openingCents:body.openingCents});return {session:visibleCash(db)};
           },201);
         } else if(method==='POST'&&route==='/api/cash/movements') {
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const session=cashSession(db);if(!session)conflict('Caixa fechado');
             if(!['SUPPLY','WITHDRAWAL'].includes(body.kind))bad('Tipo de movimentação inválido');
             requireCents(body.amountCents,'Valor',false);
             if(body.kind==='WITHDRAWAL'&&body.amountCents>cashExpected(db,session))bad('Sangria superior ao saldo');
             const id=randomUUID();db.prepare('INSERT INTO cash_movement(id,session_id,kind,amount_cents,actor_id,created_at) VALUES(?,?,?,?,?,?)')
               .run(id,session.id,body.kind,body.amountCents,actorId,stamp());
-            audit(db,session.id,'CASH_MOVEMENT',{kind:body.kind,amountCents:body.amountCents});return {session:visibleCash(db)};
+            auditForRequest(db,session.id,'CASH_MOVEMENT',{kind:body.kind,amountCents:body.amountCents});return {session:visibleCash(db)};
           },201);
         } else if(method==='POST'&&route==='/api/cash/close') {
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const session=cashSession(db);if(!session)conflict('Caixa fechado');
             requireCents(body.countedCents,'Dinheiro contado');const expected=cashExpected(db,session);
             db.prepare("UPDATE cash_session SET status='CLOSED',counted_amount_cents=?,expected_amount_cents=?,closed_at=? WHERE id=?")
               .run(body.countedCents,expected,stamp(),session.id);
-            audit(db,session.id,'CASH_CLOSED',{expected,counted:body.countedCents});
+            auditForRequest(db,session.id,'CASH_CLOSED',{expected,counted:body.countedCents});
             return {id:session.id,expectedCents:expected,countedCents:body.countedCents,differenceCents:body.countedCents-expected};
           });
         } else if(method==='POST'&&route==='/api/printer') {
-          out=transact(db,route,body,()=>{
+          out=transactWithEvents(db,route,body,()=>{
             const host=requireString(body.host,'IP da impressora',64);
             if(!isPrivateIPv4(host))bad('Use IPv4 da rede local');
             const port=body.port;if(!Number.isInteger(port)||port<1||port>65535)bad('Porta inválida');
@@ -313,7 +406,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           try {
             await transmit(printer.host,printer.port,receiptBytes(JSON.parse(job.payload_json)));
             db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
-            audit(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio TCP concluído; impressão física não confirmada'}};
+            auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio TCP concluído; impressão física não confirmada'}};
           } catch(e) {
             db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
             out={status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
@@ -323,7 +416,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       }
       if(method!=='GET') return response(res,405,{code:'METHOD_NOT_ALLOWED'});
       const file=route==='/'?'index.html':route.slice(1);
-      if(!['index.html','app.js','styles.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
+      if(!['index.html','app.js','styles.css','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
@@ -342,6 +435,6 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);resolve(origin);});
     });},
     backup(dest){return createBackup(db,dest);},
-    close(){return new Promise(resolve=>{if(closed)return resolve();closed=true;if(server.listening)server.close(()=>{db.close();resolve();});else{db.close();resolve();}});}
+    close(){return new Promise(resolve=>{if(closed)return resolve();closed=true;for(const client of kitchenListeners)client.end();kitchenListeners.clear();if(server.listening)server.close(()=>{db.close();resolve();});else{db.close();resolve();}});}
   };
 }

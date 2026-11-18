@@ -2,7 +2,7 @@
 const MAX_ORDERS=10000;
 
 function periodDate(value,label){
-  if(value===null)return null;
+  if(value===null||value==='')return null;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error(label+' invalida: use AAAA-MM-DD');
   const date=new Date(value+'T00:00:00.000Z');
   if(!Number.isFinite(date.valueOf())||date.toISOString().slice(0,10)!==value)throw new Error(label+' invalida');
@@ -40,6 +40,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
   const lineQuery=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? ORDER BY rowid');
   const modifierQuery=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=? ORDER BY rowid');
   const paymentQuery=db.prepare("SELECT method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? AND state='CONFIRMED' ORDER BY rowid");
+  const comboQuery=db.prepare('SELECT product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid');
   const sales=orders.map(row=>{
     let grossCents=0;
     const lines=lineQuery.all(row.id).map(line=>{
@@ -47,7 +48,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
       const lineTotalCents=line.unitPriceCents*line.quantity;
       if(!Number.isSafeInteger(lineTotalCents)||lineTotalCents<0)throw new Error('Subtotal invalido no pedido');
       grossCents=addCents(grossCents,lineTotalCents);
-      return {...line,modifiers,lineTotalCents};
+      return {...line,modifiers,comboComponents:comboQuery.all(line.id),lineTotalCents};
     });
     const payments=paymentQuery.all(row.id);
     const paidCents=payments.reduce((sum,p)=>addCents(sum,p.amountCents),0);

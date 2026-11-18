@@ -16,12 +16,14 @@ Status em 18/11/2026. **CHECKED** significa código + teste automatizado impleme
 - [x] Devolução integral **manual**, ledger financeiro auditável, sem supor reembolso automático via Pix/adquirente
 - [x] ESC/POS **TCP simulado**, fila persistente e falha de impressão sem desfazer venda
 - [x] Rede LAN opt-in exigindo HTTPS + tokens por perfil; sem exposição por padrão
-- [ ] Windows/Linux: validar instalador assinado/não assinado e restauração em máquinas reais
+- [x] Build unsigned do instalador Windows em GitHub Actions, sem publicar release
+- [ ] Windows/Linux: validar execução instalada, reinício, SmartScreen e restauração em máquinas reais
 - [ ] USB/balanças/gaveta/leitores: drivers, impressoras reais, diagnósticos e testes
-- [ ] Login e permissões por operador **no caixa local**
+- [x] Login de operador local, senha com scrypt, supervisor e caixa com permissões e sessões com expiração
 - [x] Comprovantes não fiscais + exportação de vendas CSV/JSON para emissão fiscal externa; sem emissão integrada e sem travar o caixa
 - [ ] Validação de aderência do arquivo ao fluxo do escritório contábil/fornecedor de emissão externa escolhido pelo estabelecimento
-- [ ] Decidir migração de interface para React/Vite (o protótipo é web nativo)
+- [ ] Avaliar migração futura para React/Vite (a interface atual é web nativa, funcional sem CDN)
+- [ ] QA E2E real de navegador e verificação de capturas: `Browser QA (headless, no release)`
 
 ## P1 — Restaurante e lanchonete (PR #11)
 
@@ -33,9 +35,14 @@ Status em 18/11/2026. **CHECKED** significa código + teste automatizado impleme
 - [x] Pagamento dividido em duas formas e liberação de mesa após fechamento
 - [x] Testes reais de API SQLite, LAN HTTPS/TLS e papéis com CI Linux/Windows
 - [ ] Validar no celular físico, certificado confiável, impressora de cozinha e Wi-Fi intermitente
-- [ ] Pareamento guiado por QR/PIN (hoje usa token colado pelo operador)
-- [ ] Atualização push em tempo real de tickets (hoje KDS consulta a cada 4 s)
-- [ ] Combos, adicionais com estoque e divisão de conta por convidado/item (hoje split é por **meio de pagamento**)
+- [x] Pareamento via QR local + PIN único de seis dígitos, credencial hash no SQLite, expiração e revogação
+- [x] KDS com stream SSE em tempo real e reconexão; polling defensivo a cada 30 s
+- [x] Combos de preço fixo com snapshot de composição e divisão da comanda por convidado/quantidade
+- [ ] Pagamentos parciais independentes por pessoa, combos de escolhas dinâmicas e estoque de ingredientes
+
+## Plano de integração controlado
+
+PRs **#1 → #10 → #11 → #12 → hardening** devem ser revisadas em ordem, com CI e sem diferenças perdidas. Somente fazer merge na `main` após autorização explícita; nunca publicar release automaticamente. Compilação unsigned no GitHub não comprova funcionamento de USB ou instalação em PCs reais.
 
 ## P2 — Expansão
 

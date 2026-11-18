@@ -4,6 +4,13 @@ const isLocal=['127.0.0.1','localhost'].includes(location.hostname);
 let token=sessionStorage.getItem('pdv-nexus-token')||'',tables=[],products=[],order=null,tableId=null;
 const msg=(value,error=false)=>{const n=$('restaurant-alert');n.textContent=value;n.classList.toggle('error',error);n.hidden=false;setTimeout(()=>n.hidden=true,4500);};
 async function api(method,route,data){const headers={};if(token)headers.authorization='Bearer '+token;if(data)headers['content-type']='application/json';let r;try{r=await fetch(route,{method,headers,body:data?JSON.stringify(data):undefined});}catch{throw Error('Host offline. Nenhuma alteração foi confirmada.');}const result=await r.json();if(!r.ok)throw Error(result.message||'Acesso negado, verifique o token do dispositivo');return result;}
+async function exchangePin(value){
+ const pin=value.trim();
+ if(!/^\d{6}$/.test(pin))return pin;
+ const r=await fetch('/api/pairing/redeem',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:pin})});
+ const result=await r.json();if(!r.ok)throw Error(result.message||'PIN inválido');
+ return result.token;
+}
 const node=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;};
 async function run(f){try{await f();}catch(e){msg(e.message,true);}}
 function renderTables(){const el=$('tables-grid');el.replaceChildren();for(const t of tables){const b=node('button','table-choice'+(t.id===tableId?' selected':'')+(t.orderId?' occupied':''));b.type='button';b.append(node('strong','',t.label),node('small','',t.orderId?'Ocupada':'Disponível'));b.onclick=()=>run(()=>selectTable(t));el.append(b);}if(!tables.length)el.append(node('p','empty','Sem mesas. Crie uma no caixa.'));}
@@ -12,12 +19,18 @@ async function loadTables(){tables=(await api('GET','/api/tables')).tables;rende
 async function selectTable(t){tableId=t.id;const r=await api('POST',`/api/tables/${t.id}/open`,{commandId:uuid()});order=r.order;await loadTables();renderOrder();}
 async function loadModifiers(){const p=$('product-select').value,el=$('modifiers-list');el.replaceChildren();if(!p)return;const data=await api('GET',`/api/products/${p}/modifiers`);for(const m of data.modifiers.filter(m=>m.active)){const label=node('label','modifier-option'),box=node('input');box.type='checkbox';box.value=m.id;label.append(box,document.createTextNode(`${m.name} · ${money(m.priceCents)}`));el.append(label);}if(!el.childElementCount)el.append(node('small','', 'Nenhum adicional cadastrado.'));}
 async function init(){products=(await api('GET','/api/products')).products.filter(p=>p.active);const sel=$('product-select');sel.replaceChildren();for(const p of products){const o=node('option','',`${p.name} · ${money(p.priceCents)}`);o.value=p.id;sel.append(o);}await loadTables();await loadModifiers();renderOrder();$('new-table-form').hidden=!isLocal;}
-$('pair-device').onclick=()=>{const next=prompt('Cole o token da função garçom ou gerente (mínimo 32 caracteres):',token);if(next===null)return;token=next.trim();sessionStorage.setItem('pdv-nexus-token',token);run(init);};
+$('pair-device').onclick=()=>run(async()=>{
+ const next=prompt('Digite o PIN de 6 dígitos do servidor (ou token de dispositivo):','');
+ if(next===null)return;
+ token=await exchangePin(next);
+ sessionStorage.setItem('pdv-nexus-token',token);
+ await init();msg('Dispositivo vinculado');
+});
 $('refresh-tables').onclick=()=>run(loadTables);
 $('product-select').onchange=()=>run(loadModifiers);
-$('new-table-form').onsubmit=e=>{e.preventDefault();run(async()=>{const label=new FormData(e.currentTarget).get('label');await api('POST','/api/tables',{commandId:uuid(),label});e.currentTarget.reset();await loadTables();msg('Mesa criada');});};
+$('new-table-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;run(async()=>{const label=new FormData(e.currentTarget).get('label');await api('POST','/api/tables',{commandId:uuid(),label});form.reset();await loadTables();msg('Mesa criada');});};
 $('add-item-form').onsubmit=e=>{e.preventDefault();if(!order)return;run(async()=>{const modifiers=[...$('modifiers-list').querySelectorAll('input:checked')].map(n=>n.value),quantity=Number($('item-quantity').value);const r=await api('POST',`/api/orders/${order.id}/lines`,{commandId:uuid(),expectedRevision:order.revision,productId:$('product-select').value,quantity,modifierIds:modifiers,note:$('item-note').value});order=r.order;$('item-note').value='';renderOrder();msg('Item registrado na comanda');});};
 $('confirm-comanda').onclick=()=>run(async()=>{const r=await api('POST',`/api/orders/${order.id}/confirm`,{commandId:uuid(),expectedRevision:order.revision});order=r.order;renderOrder();msg('Pedido encaminhado à cozinha');});
 $('transfer-comanda').onclick=()=>run(async()=>{const target=prompt('Identificação exata da mesa de destino');if(!target)return;const table=tables.find(t=>t.label.toLowerCase()===target.trim().toLowerCase());if(!table)throw Error('Mesa não encontrada');const r=await api('POST',`/api/orders/${order.id}/transfer-table`,{commandId:uuid(),expectedRevision:order.revision,tableId:table.id});order=r.order;tableId=table.id;await loadTables();renderOrder();msg('Comanda transferida');});
-init().catch(e=>msg(e.message,true));
+window.pdvAuth.ready().then(init).catch(e=>msg(e.message,true));
 })();

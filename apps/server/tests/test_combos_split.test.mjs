@@ -1,0 +1,60 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import {createApp} from '../src/server.mjs';
+const command=(name,body={})=>({commandId:'combo-'+name,...body});
+async function fixture(t){
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-combo-'));
+ const app=createApp({dataPath:path.join(folder,'test.db')}),origin=await app.listen({port:0});
+ let cookie='';
+ const request=async(method,route,body)=>{
+  const headers=body?{'content-type':'application/json'}:{};if(cookie)headers.cookie=cookie;
+  const r=await fetch(origin+route,{method,headers,body:body?JSON.stringify(body):undefined});
+  const sc=r.headers.get('set-cookie');if(sc)cookie=sc.split(';')[0];
+  return {status:r.status,body:await r.json()};
+ };
+ t.after(async()=>{await app.close();fs.rmSync(folder,{recursive:true,force:true});});
+ assert.equal((await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'})).status,201);
+ return {request};
+}
+test('combo é produto único com componentes e preço fixo, preservando snapshot',async t=>{
+ const {request}=await fixture(t);
+ const burger=(await request('POST','/api/products',command('burger',{name:'X-Burguer',priceCents:2000}))).body.product;
+ const soda=(await request('POST','/api/products',command('soda',{name:'Refri lata',priceCents:500}))).body.product;
+ const combo=await request('POST','/api/combos',command('combo-create',{name:'Combo almoço',priceCents:2190,components:[{productId:burger.id,quantity:1},{productId:soda.id,quantity:2}]}));
+ assert.equal(combo.status,201,JSON.stringify(combo.body));
+ assert.equal((await request('GET','/api/products')).body.products.find(x=>x.id===combo.body.combo.id).isCombo,1);
+ const order=(await request('POST','/api/orders',command('order',{serviceMode:'counter'}))).body.order;
+ const line=await request('POST','/api/orders/'+order.id+'/lines',command('line',{productId:combo.body.combo.id,expectedRevision:0,quantity:2}));
+ assert.equal(line.status,200,JSON.stringify(line.body));
+ assert.equal(line.body.order.totalCents,4380);
+ assert.equal(line.body.order.lines[0].comboComponents.length,2);
+ assert.equal(line.body.order.lines[0].comboComponents[1].quantity,2);
+ await request('PATCH','/api/products/'+burger.id,command('reprice',{name:'X-Burguer premium',priceCents:3490}));
+ const reopened=(await request('GET','/api/orders/'+order.id)).body.order;
+ assert.equal(reopened.lines[0].comboComponents[0].productName,'X-Burguer');
+ assert.equal(reopened.totalCents,4380);
+ await request('POST','/api/orders/'+order.id+'/confirm',command('confirm',{expectedRevision:1}));
+ const kds=(await request('GET','/api/kitchen/tickets')).body.tickets[0];
+ assert.match(kds.comboDetails,/X-Burguer/);
+});
+test('divisão de comanda por quantidade/cliente impede soma incorreta e preserva revisão',async t=>{
+ const {request}=await fixture(t);
+ const p=(await request('POST','/api/products',command('item',{name:'Pastel',priceCents:700}))).body.product;
+ const order=(await request('POST','/api/orders',command('order2',{serviceMode:'counter'}))).body.order;
+ const line=(await request('POST','/api/orders/'+order.id+'/lines',command('line2',{productId:p.id,quantity:3,expectedRevision:0}))).body.order;
+ const allocation={allocations:[{lineId:line.lines[0].id,guests:[{guest:'Ana',quantity:1},{guest:'Bruno',quantity:2}]}]};
+ assert.equal((await request('POST','/api/orders/'+order.id+'/split',command('bad',{expectedRevision:1,allocations:[{lineId:line.lines[0].id,guests:[{guest:'Ana',quantity:1}]}]}))).status,400);
+ const result=await request('POST','/api/orders/'+order.id+'/split',command('allocate',{expectedRevision:1,...allocation}));
+ assert.equal(result.status,200,JSON.stringify(result.body));
+ const guests=result.body.split.guests;
+ assert.equal(guests.find(x=>x.guest==='Ana').totalCents,700);
+ assert.equal(guests.find(x=>x.guest==='Bruno').totalCents,1400);
+ assert.equal(result.body.split.totalCents,2100);
+ assert.equal((await request('POST','/api/orders/'+order.id+'/split',command('stale',{expectedRevision:1,...allocation}))).status,409);
+ assert.deepEqual((await request('GET','/api/orders/'+order.id+'/split')).body.split,result.body.split);
+ const conf=await request('POST','/api/orders/'+order.id+'/confirm',command('confirm2',{expectedRevision:2}));
+ assert.equal(conf.status,200);
+ await request('POST','/api/cash/open',command('cash',{openingCents:0}));
+ const closed=await request('POST','/api/orders/'+order.id+'/close',command('close',{expectedRevision:3,payments:[{method:'pix',amountCents:2100}]}));
+ assert.equal(closed.status,200,JSON.stringify(closed.body));
+});

@@ -10,12 +10,17 @@ async function fixture(t, operationMode='production') {
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-export-'));
   const app=createApp({dataPath:path.join(directory,'nexus.db'),operationMode});
   const origin=await app.listen({port:0});
+  let cookie='';
   t.after(async()=>{await app.close();fs.rmSync(directory,{recursive:true,force:true});});
   async function json(method,url,body){
-    const r=await fetch(origin+url,{method,headers:body?{'content-type':'application/json'}:{},body:body&&JSON.stringify(body)});
+    const headers=body?{'content-type':'application/json'}:{};if(cookie)headers.cookie=cookie;
+    const r=await fetch(origin+url,{method,headers,body:body&&JSON.stringify(body)});
+    const sc=r.headers.get('set-cookie');if(sc)cookie=sc.split(';')[0];
     return {status:r.status,body:await r.json()};
   }
-  return {origin,json};
+  const setup=await json('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'});
+  assert.equal(setup.status,201);
+  return {origin,json,get cookie(){return cookie;}};
 }
 const command=(commandId,rest={})=>({commandId,...rest});
 
@@ -35,14 +40,14 @@ async function closeSale(json,name='=HYPERLINK("https://malicioso.exemplo")'){
 }
 
 test('operação comum não depende de NFC-e e exporta vendas fechadas em JSON',async t=>{
-  const {origin,json}=await fixture(t);
+  const {origin,json,cookie}=await fixture(t);
   const id=await closeSale(json,'X-burger');
   const health=await json('GET','/api/health');
   assert.equal(health.status,200);
   const status=await json('GET','/api/exports/status');
   assert.equal(status.body.exportAvailable,true);
   assert.equal(status.body.emissionAvailable,false);
-  const response=await fetch(origin+'/api/exports/sales.json');
+  const response=await fetch(origin+'/api/exports/sales.json',{headers:{cookie}});
   assert.equal(response.status,200);
   assert.match(response.headers.get('content-disposition')??'',/attachment/);
   const doc=await response.json();
@@ -59,9 +64,9 @@ test('operação comum não depende de NFC-e e exporta vendas fechadas em JSON',
 });
 
 test('CSV é baixável, preserva centavos e protege contra fórmula de planilha',async t=>{
-  const {origin,json}=await fixture(t);
+  const {origin,json,cookie}=await fixture(t);
   await closeSale(json);
-  const response=await fetch(origin+'/api/exports/sales.csv');
+  const response=await fetch(origin+'/api/exports/sales.csv',{headers:{cookie}});
   assert.equal(response.status,200);
   assert.match(response.headers.get('content-type')??'',/text\/csv/);
   const csv=await response.text();
@@ -72,9 +77,9 @@ test('CSV é baixável, preserva centavos e protege contra fórmula de planilha'
 });
 
 test('período é opcional, validado e aplicado sobre a data de fechamento',async t=>{
-  const {origin,json}=await fixture(t);
+  const {origin,json,cookie}=await fixture(t);
   await closeSale(json,'Pastel');
-  const outside=await fetch(origin+'/api/exports/sales.json?from=2000-01-01&to=2000-01-31');
+  const outside=await fetch(origin+'/api/exports/sales.json?from=2000-01-01&to=2000-01-31',{headers:{cookie}});
   assert.equal(outside.status,200);
   assert.equal((await outside.json()).sales.length,0);
   const bad=await json('GET','/api/exports/sales.json?from=2026-02-31');
@@ -84,11 +89,11 @@ test('período é opcional, validado e aplicado sobre a data de fechamento',asyn
 });
 
 test('devoluções integrais aparecem na exportação sem alterar venda original',async t=>{
-  const {origin,json}=await fixture(t);
+  const {origin,json,cookie}=await fixture(t);
   const id=await closeSale(json,'Hambúrguer');
   const refund=await json('POST','/api/orders/'+id+'/refund',command('refund-export',{reason:'Cliente devolveu'}));
   assert.equal(refund.status,201,JSON.stringify(refund.body));
-  const r=await fetch(origin+'/api/exports/sales.json');
+  const r=await fetch(origin+'/api/exports/sales.json',{headers:{cookie}});
   const sale=(await r.json()).sales[0];
   assert.equal(sale.grossCents,5000);
   assert.equal(sale.refundedCents,5000);
@@ -103,4 +108,14 @@ test('apenas gerente/host pode exportar dados operacionais na LAN',()=>{
     assert.equal(roleAllows('manager','GET',endpoint),true);
     assert.equal(roleAllows('local','GET',endpoint),true);
   }
+});
+
+test('formulario de exportacao com datas em branco nao deve falhar',async t=>{
+  const {origin,json,cookie}=await fixture(t);
+  await closeSale(json,'Produto sem periodo');
+  const r=await fetch(origin+'/api/exports/sales.csv?from=&to=',{headers:{cookie}});
+  assert.equal(r.status,200);
+  assert.match(r.headers.get('content-type')??'',/text\/csv/);
+  const csv=await r.text();
+  assert.match(csv,/Produto sem periodo/);
 });
