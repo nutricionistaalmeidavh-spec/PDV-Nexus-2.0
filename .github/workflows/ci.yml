@@ -14,3 +14,21 @@ jobs:
           node-version: '22.16.0'
       - name: Unit and SQLite schema tests
         run: npm test
+      - name: JavaScript syntax checks
+        run: |
+          node --check apps/server/src/server.mjs
+          node --check apps/server/src/restaurant.mjs
+          node --check apps/server/src/refunds.mjs
+          node --check apps/server/src/lan-security.mjs
+          node --check apps/web/public/app.js
+          node --check apps/web/public/restaurant.js
+          node --check apps/web/public/kitchen.js
+  api-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: API tests on Windows
+        run: npm run test:api

@@ -4,6 +4,7 @@
 
 - **Mesas/comandas:** cadastro/renomeação, mesa única ocupada, abertura/reuso, transferência com revisão otimista, liberação após pagamento/cancelamento.
 - **Adicionais:** preço histórico agregado à linha e snapshot nominal; validação por produto e preço em centavos.
+- **Observações para cozinha:** cada linha preserva texto do garçom e adicionais; cozinha apresenta os dois.
 - **KDS:** fila persistente em `kitchen_ticket` vinculada a `order_line`, `UNIQUE(line_id)` evita tickets duplicados, etapas `PENDING→PREPARING→READY→SERVED`, cancelamento, revisão otimista e auditoria. Novos itens em comanda aberta geram novos tickets.
 - **Garçom:** interface responsiva `/restaurant.html`, separada do caixa e instalada como PWA quando HTTPS e certificado confiável. Ações de garçom só são confirmadas após resposta do host.
 - **Cozinha:** `/kitchen.html`, exibição por etapas e polling local a cada 4 s. Sem dependência externa.

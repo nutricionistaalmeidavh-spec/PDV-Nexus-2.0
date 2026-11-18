@@ -28,7 +28,8 @@ export function restaurantRead(db,method,route,{missing}) {
   }
   if(route==='/api/kitchen/tickets') {
     const tickets=db.prepare(`SELECT kt.id,kt.order_id AS orderId,kt.line_id AS lineId,kt.status,kt.revision,
-      kt.created_at AS createdAt,ol.product_name_snapshot AS productName,ol.quantity,
+      kt.created_at AS createdAt,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
+      (SELECT group_concat(name_snapshot, ', ') FROM order_line_modifier WHERE line_id=kt.line_id) AS modifiers,
       so.service_mode AS serviceMode,st.label AS tableLabel
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
       JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id

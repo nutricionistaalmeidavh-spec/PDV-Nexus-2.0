@@ -42,16 +42,19 @@ test('adicionais preservam preço e cozinha recebe somente após confirmar',asyn
   const extra=await request('POST',`/api/products/${p.id}/modifiers`,command('add-cheese',{name:'Queijo extra',priceCents:350}));
   assert.equal(extra.status,201,JSON.stringify(extra.body));
   const order=(await request('POST',`/api/tables/${tab.id}/open`,command('open-tab-2'))).body.order;
-  const added=await request('POST',`/api/orders/${order.id}/lines`,command('add-with-extra',{expectedRevision:0,productId:p.id,quantity:2,modifierIds:[extra.body.modifier.id]}));
+  const added=await request('POST',`/api/orders/${order.id}/lines`,command('add-with-extra',{expectedRevision:0,productId:p.id,quantity:2,modifierIds:[extra.body.modifier.id],note:'Sem tomate'}));
   assert.equal(added.status,200,JSON.stringify(added.body));
   assert.equal(added.body.order.totalCents,3700);
   assert.equal(added.body.order.lines[0].modifiers[0].name,'Queijo extra');
+  assert.equal(added.body.order.lines[0].note,'Sem tomate');
   const before=await request('GET','/api/kitchen/tickets');assert.equal(before.body.tickets.length,0);
   const confirmed=await request('POST',`/api/orders/${order.id}/confirm`,command('confirm-tab-2',{expectedRevision:1}));
   assert.equal(confirmed.status,200,JSON.stringify(confirmed.body));
   const tickets=(await request('GET','/api/kitchen/tickets')).body.tickets;
   assert.equal(tickets.length,1);
   assert.equal(tickets[0].tableLabel,'Mesa 02');
+  assert.equal(tickets[0].note,'Sem tomate');
+  assert.equal(tickets[0].modifiers,'Queijo extra');
   // Retry do mesmo comando não cria novo ticket
   await request('POST',`/api/orders/${order.id}/confirm`,command('confirm-tab-2',{expectedRevision:1}));
   assert.equal((await request('GET','/api/kitchen/tickets')).body.tickets.length,1);

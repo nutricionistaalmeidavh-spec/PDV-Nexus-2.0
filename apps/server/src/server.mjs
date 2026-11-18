@@ -30,7 +30,7 @@ const digest = (x) => createHash('sha256').update(JSON.stringify(canonical(x))).
 function databaseOrder(db, id) {
   const row=db.prepare('SELECT * FROM sales_order WHERE id=?').get(id);
   if (!row) missing('Pedido');
-  const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity FROM order_line WHERE order_id=? ORDER BY rowid').all(id);
+  const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? ORDER BY rowid').all(id);
   const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
   for (const line of lines) line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
   const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
@@ -190,6 +190,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           out=transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
+            const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
+            if(note===null||note.length>240)bad('Observação inválida');
             const ids=body.modifierIds??[];
             if(!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length)bad('Adicionais inválidos');
             const modifiers=[];let extraCents=0;
@@ -204,6 +206,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const next=addOrderLine(order,{id:randomUUID(),productId:product.id,productName:product.name,unitPriceCents,quantity:body.quantity});
             const line=next.lines.at(-1);
             db.prepare('INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES (?,?,?,?,?,?)').run(line.id,id,line.productId,line.productName,line.unitPriceCents,line.quantity);
+            db.prepare('UPDATE order_line SET note_snapshot=? WHERE id=?').run(note,line.id);
             for(const mod of modifiers)db.prepare('INSERT INTO order_line_modifier(id,line_id,modifier_id,name_snapshot,price_cents_snapshot) VALUES (?,?,?,?,?)').run(randomUUID(),line.id,mod.id,mod.name,mod.price_cents);
             writeOrder(db,next);
             if(next.status==='OPEN')dispatchKitchenTickets(db,id,stamp);
