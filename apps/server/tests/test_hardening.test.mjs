@@ -19,7 +19,7 @@ async function fixture(t) {
     return {status:result.status,body:await result.json()};
   }
   t.after(async()=>{await app.close();fs.rmSync(folder,{recursive:true,force:true});});
-  return {app,origin,request,folder};
+  return {app,origin,request,folder,get cookie(){return cookie;}};
 }
 const cmd=(id,params={})=>({commandId:'hard-'+id,...params});
 
@@ -46,12 +46,22 @@ test('primeiro supervisor define credenciais, login e logout revogam sessao',asy
 });
 
 test('credenciais persistem apos reinicio mas sessao anterior expira',async t=>{
-  const {app,request,origin}=await fixture(t);
+  const {app,request,folder,cookie}=await fixture(t);
   assert.equal((await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'})).status,201);
-  const cookieFetch=await fetch(origin+'/api/auth/status');
-  assert.equal(cookieFetch.status,200);
+  const status=await request('GET','/api/auth/status');
+  assert.equal(status.body.authenticated,true);
   await app.close();
-  assert.equal(cookieFetch.status,200);
+  const reopened=createApp({dataPath:path.join(folder,'nexus.db')});
+  const address=await reopened.listen({port:0});
+  try {
+    const previous=await fetch(address+'/api/products',{headers:{cookie}});
+    assert.equal(previous.status,401);
+    const login=await fetch(address+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaMuitoForte-2026'})});
+    assert.equal(login.status,200);
+    const newCookie=login.headers.get('set-cookie').split(';')[0];
+    const refreshed=await fetch(address+'/api/products',{headers:{cookie:newCookie}});
+    assert.equal(refreshed.status,200);
+  }finally{await reopened.close();}
 });
 
 test('categorias e produtos possuem CRUD com arquivamento sem perder historico',async t=>{
