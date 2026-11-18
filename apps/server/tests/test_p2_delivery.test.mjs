@@ -56,7 +56,7 @@ test('cardapio LAN opcional é somente leitura e pedido externo necessita aceite
  assert.equal((await request('GET','/api/delivery/requests')).body.requests[0].status,'ACCEPTED');
  const kitchen=await request('GET','/api/kitchen/tickets');
  assert.equal(kitchen.body.tickets.length,0,'pedido não deve ser enviado à cozinha sem confirmação');
- const confirm=await request('POST','/api/orders/'+accepted.body.order.id+'/confirm',cmd('confirm',{expectedRevision:2}));
+ const confirm=await request('POST','/api/orders/'+accepted.body.order.id+'/confirm',cmd('confirm',{expectedRevision:accepted.body.order.revision}));
  assert.equal(confirm.status,200,JSON.stringify(confirm.body));
  assert.equal((await request('GET','/api/kitchen/tickets')).body.tickets.length,1);
 });
