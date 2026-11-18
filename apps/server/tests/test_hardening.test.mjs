@@ -19,7 +19,7 @@ async function fixture(t) {
     return {status:result.status,body:await result.json()};
   }
   t.after(async()=>{await app.close();fs.rmSync(folder,{recursive:true,force:true});});
-  return {app,origin,request};
+  return {app,origin,request,folder};
 }
 const cmd=(id,params={})=>({commandId:'hard-'+id,...params});
 
@@ -85,4 +85,19 @@ test('caixa local exige papel habilitado, enquanto operador gerente gerencia usu
   assert.equal((await request('POST','/api/auth/operators',cmd('bad-user',{username:'intruso',password:'senhA123456',role:'admin'}))).status,403);
   assert.equal((await request('POST','/api/printer',cmd('bad-printer',{host:'192.168.1.3',port:9100}))).status,403);
   assert.equal((await request('POST','/api/cash/open',cmd('open-cash',{openingCents:0}))).status,201);
+});
+
+test('auditoria registra identidade canônica do operador autenticado',async t=>{
+  const {request,folder}=await fixture(t);
+  const setup=await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'});
+  assert.equal(setup.status,201);
+  const expectedActor=setup.body.user.id;
+  const prod=await request('POST','/api/products',cmd('audit-product',{name:'Suco QA',priceCents:900}));
+  assert.equal(prod.status,201);
+  const {openDatabase}=await import('../src/db.mjs');
+  const db=openDatabase(path.join(folder,'nexus.db'));
+  try{
+    const audit=db.prepare("SELECT actor_id AS actorId FROM audit_log WHERE action='PRODUCT_CREATED' ORDER BY created_at DESC LIMIT 1").get();
+    assert.equal(audit.actorId,expectedActor);
+  }finally{db.close();}
 });
