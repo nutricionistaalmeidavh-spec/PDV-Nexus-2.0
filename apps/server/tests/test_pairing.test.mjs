@@ -40,3 +40,16 @@ test('sem supervisor não gera PIN e não permite token de gerente no pareamento
  assert.equal(await request('/api/pairing/start',{role:'waiter'}),401);
  assert.equal(await request('/api/pairing/redeem',{code:'123456'}),401);
 });
+
+test('QR offline do estabelecimento contém URL HTTPS privada, sem colocar PIN no QR',async t=>{
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-qr-'));const app=createApp({dataPath:path.join(folder,'qr.sqlite')});const origin=await app.listen({port:0});
+ t.after(async()=>{await app.close();fs.rmSync(folder,{recursive:true,force:true});});
+ const login=await fetch(origin+'/api/auth/setup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaMuitoForte-2026'})});
+ const cookie=login.headers.get('set-cookie').split(';')[0];
+ const url=encodeURIComponent('https://192.168.1.10:3434/restaurant.html');
+ const qr=await fetch(origin+'/api/pairing/qr.svg?url='+url,{headers:{cookie}});
+ assert.equal(qr.status,200);assert.match(qr.headers.get('content-type')??'',/image\/svg\+xml/);
+ const text=await qr.text();assert.match(text,/<svg/);assert.ok(text.length>300);
+ assert.equal((await fetch(origin+'/api/pairing/qr.svg?url='+encodeURIComponent('http://192.168.1.10:3434/restaurant.html'),{headers:{cookie}})).status,400);
+ assert.equal((await fetch(origin+'/api/pairing/qr.svg?url='+encodeURIComponent('https://malicious.example/restaurant.html'),{headers:{cookie}})).status,400);
+});
