@@ -16,7 +16,7 @@ export function validateLanConfig(lan) {
   if(new Set(Object.values(tokens)).size!==Object.values(tokens).length)throw new Error('Tokens LAN não podem ser compartilhados entre perfis');
   return {cert:fs.readFileSync(lan.certPath),key:fs.readFileSync(lan.keyPath),digests:Object.entries(tokens).map(([role,token])=>({role,hash:sha(token)}))};
 }
-export function lanRole(req,config) {
+export function lanRole(req,config,dynamicRole=()=>null) {
   if(!config)return 'local';
   const address=req.socket.remoteAddress;
   const host=req.headers.host??'';
@@ -27,7 +27,7 @@ export function lanRole(req,config) {
   if(token.length<32||token.length>512)return null;
   const digest=sha(token);
   const match=config.digests.find(entry=>timingSafeEqual(entry.hash,digest));
-  return match?.role??null;
+  return match?.role??dynamicRole(token);
 }
 export function roleAllows(role,method,route) {
   if(role==='local'||role==='manager')return true;
