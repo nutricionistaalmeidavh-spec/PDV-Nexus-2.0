@@ -12,7 +12,7 @@
       <a href="/restaurant.html" class="nav-item">Mesas e comandas</a>
       <a href="/kitchen.html" class="nav-item">Cozinha (KDS)</a>
       <button data-view="cash" class="nav-item">Gestão do caixa</button>
-      <button data-view="print" class="nav-item">Impressão</button>
+      <button data-view="print" class="nav-item">Impressão</button><button data-view="devices" class="nav-item">Dispositivos</button>
       <button data-view="fiscal" class="nav-item">Exportar vendas</button>
     </nav>
     <div class="sidebar-bottom">Operação local<br/><span>Sem assinaturas obrigatórias</span></div>
@@ -50,7 +50,18 @@
       <label>Perfil<select name="role"><option value="cashier">Caixa</option><option value="admin">Supervisor</option></select></label>
       <button class="button primary">Criar operador</button></form>
     </div></section>
-    <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
+    <section id="view-devices" class="view"><div class="panel">
+  <div class="section-head"><div><span class="eyebrow">ACESSO LOCAL À REDE</span><h2>Parear dispositivos</h2></div></div>
+  <p class="note">No servidor, gere um PIN temporário e abra a tela de salão ou cozinha no dispositivo. Os dados trafegam apenas em HTTPS da rede privada.</p>
+  <form id="pairing-form" class="form-row">
+    <label>Perfil<select name="role"><option value="waiter">Garçom</option><option value="kitchen">Cozinha (KDS)</option></select></label>
+    <label>Nome do dispositivo<input name="label" maxlength="80" placeholder="Celular garçom" required></label>
+    <button class="button primary">Gerar PIN</button>
+  </form>
+  <p class="metric" id="pairing-output" aria-live="polite"></p>
+  <h3>Dispositivos pareados</h3><div id="paired-device-list" class="data-list"></div>
+  </div></section>
+<section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
     <section id="view-cash" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2>Sessão do caixa</h2></div></div><div id="cash-summary" class="metric"></div>
       <form id="cash-open-form" class="form-row"><label>Valor inicial (R$)<input name="amount" type="number" min="0" step="0.01" value="0" required/></label><button class="button primary">Abrir caixa</button></form>
       <form id="cash-movement-form" class="form-row" hidden><label>Tipo<select name="kind"><option value="SUPPLY">Suprimento</option><option value="WITHDRAWAL">Sangria</option></select></label>

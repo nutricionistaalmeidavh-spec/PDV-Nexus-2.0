@@ -1,6 +1,13 @@
 (()=>{'use strict';const $=id=>document.getElementById(id),uuid=()=>crypto.randomUUID();let token=sessionStorage.getItem('pdv-nexus-token')||'',busy=false;
 let streamController=null;
 const states=[{status:'PENDING',label:'Aguardando',next:'PREPARING',button:'Iniciar preparo'},{status:'PREPARING',label:'Preparando',next:'READY',button:'Marcar pronto'},{status:'READY',label:'Prontos',next:'SERVED',button:'Entregue'}];
+async function exchangePin(value){
+ const pin=value.trim();
+ if(!/^\d{6}$/.test(pin))return pin;
+ const r=await fetch('/api/pairing/redeem',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:pin})});
+ const result=await r.json();if(!r.ok)throw Error(result.message||'PIN inválido');
+ return result.token;
+}
 const node=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;};
 const alert=(message,error=true)=>{const n=$('kitchen-alert');n.textContent=message;n.classList.toggle('error',error);n.hidden=false;setTimeout(()=>n.hidden=true,5000);};
 async function api(method,route,body){const headers={};if(token)headers.authorization='Bearer '+token;if(body)headers['content-type']='application/json';let r;try{r=await fetch(route,{method,headers,body:body?JSON.stringify(body):undefined});}catch{throw Error('Conexão com host perdida. Nenhuma atualização confirmada.');}const value=await r.json();if(!r.ok)throw Error(value.message||`Erro ${r.status}`);return value;}
@@ -36,6 +43,9 @@ async function connectLive(){
     backoff=Math.min(backoff*2,15000);
   }
 }
-$('pair-device').onclick=()=>{const next=prompt('Token de acesso da cozinha:',token);if(next===null)return;token=next.trim();sessionStorage.setItem('pdv-nexus-token',token);refresh();void connectLive();};
+$('pair-device').onclick=()=>{const next=prompt('Digite o PIN de 6 dígitos do servidor (ou token de dispositivo):','');
+ if(next===null)return;
+ void (async()=>{try{token=await exchangePin(next);sessionStorage.setItem('pdv-nexus-token',token);await refresh();void connectLive();}catch(e){alert(e.message);}})();
+};
 window.pdvAuth.ready().then(()=>{refresh();void connectLive();setInterval(refresh,30000);}).catch(e=>alert(e.message));
 })();
