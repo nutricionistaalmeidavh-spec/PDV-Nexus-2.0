@@ -31,7 +31,7 @@ export function lanRole(req,config) {
 }
 export function roleAllows(role,method,route) {
   if(role==='local'||role==='manager')return true;
-  if(role==='kitchen') return (method==='GET'&&route==='/api/kitchen/tickets') ||
+  if(role==='kitchen') return (method==='GET'&&['/api/kitchen/tickets','/api/kitchen/events'].includes(route)) ||
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
   if(role==='waiter')return (method==='GET'&&(
