@@ -87,7 +87,7 @@ test('pagamento, troco e fechamento de caixa sem duplicar venda', async (t) => {
   assert.equal(c.body.differenceCents, 0);
 });
 
-test('impressão falha sem desfazer venda e fiscal bloqueia emissões fictícias', async (t) => {
+test('impressão falha sem desfazer venda e emissor fiscal não existe', async (t) => {
   const { request } = await fixture(t);
   const product = await setupProduct(request);
   await request('POST', '/api/cash/open', { commandId: 'cash-open-2', openingCents: 0 });
@@ -97,8 +97,8 @@ test('impressão falha sem desfazer venda e fiscal bloqueia emissões fictícias
   assert.equal((await request('GET', '/api/print/jobs')).body.jobs.length, 1);
   assert.equal((await request('POST', '/api/print/jobs/bogus/send', { host: '127.0.0.1', port: 9100 })).status, 404);
   const blocked = await request('POST', `/api/fiscal/orders/${order.id}/issue`, { commandId: 'fiscal-1' });
-  assert.equal(blocked.status, 501);
-  assert.equal(blocked.body.code, 'FISCAL_NOT_CONFIGURED');
+  assert.equal(blocked.status, 404);
+  assert.equal(blocked.body.code, 'NOT_FOUND');
   assert.equal((await request('GET', `/api/orders/${order.id}`)).body.order.status, 'CLOSED');
 });
 
@@ -148,8 +148,8 @@ test('impressão ESC/POS TCP envia bytes apenas uma vez após confirmação', as
   assert.equal((await request('POST',`/api/print/jobs/${id}/send`,{})).status,409);
 });
 
-test('modo produção permanece bloqueado sem homologação fiscal', () => {
-  assert.throws(()=>createApp({operationMode:'production'}),/Modo comercial bloqueado/);
+test('modo invalido e rejeitado, mas o operacional nao requer emissor fiscal', () => {
+  assert.throws(()=>createApp({operationMode:'fiscal'}),/Modo de operacao invalido/);
 });
 
 test('rejeita encerramento de pedido sem caixa e pagamentos incorretos',async t=>{

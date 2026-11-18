@@ -7,6 +7,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
+import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
 import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
@@ -116,8 +117,8 @@ async function readJson(req) {
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
 export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null}={}) {
-  // Falha fechada: sem adaptador fiscal homologado, o aplicativo não funciona como emissor comercial.
-  if (operationMode!=='demo') throw new Error('Modo comercial bloqueado: NFC-e não implementada/homologada');
+  // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
+  if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
   let server, origin, closed=false;
@@ -146,7 +147,20 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
         if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind='PRINT_RECEIPT' ORDER BY created_at DESC LIMIT 100").all()});
         if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled FROM printer_profile WHERE id='default'").get()??null});
-        if(method==='GET'&&route==='/api/fiscal/status') return response(res,200,{available:false,environment:'not-configured',mode:operationMode,warning:'Sem emissor fiscal homologado. Recibos não substituem NFC-e.'});
+        if(method==='GET'&&route==='/api/exports/status') return response(res,200,{emissionAvailable:false,exportAvailable:true,emissionScope:'external-only',mode:operationMode,warning:'Comprovantes nao fiscais. Exporte as vendas para processamento fiscal externo.'});
+        if(method==='GET'&&/^\/api\/exports\/sales\.(?:csv|json)$/.test(route)){
+          const isCsv=route.endsWith('.csv');
+          const document=buildSalesDocument(db,url.searchParams);
+          const filename='pdv-nexus-vendas.'+(isCsv?'csv':'json');
+          res.writeHead(200,{
+            'content-type':isCsv?'text/csv; charset=utf-8':'application/json; charset=utf-8',
+            'content-disposition':'attachment; filename="'+filename+'"',
+            'cache-control':'no-store',
+            'x-content-type-options':'nosniff'
+          });
+          res.end(isCsv?salesToCsv(document):JSON.stringify(document));
+          return;
+        }
         const restaurantResult=restaurantRead(db,method,route,{missing});
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
@@ -304,8 +318,6 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
             out={status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
           } finally {sendingPrintJobs.delete(id);}
-        } else if(method==='POST'&&route.match(/^\/api\/fiscal\/orders\/[^/]+\/issue$/)) {
-          out={status:501,body:{code:'FISCAL_NOT_CONFIGURED',message:'Emissão NFC-e indisponível. É necessária implementação e homologação fiscal conforme UF.'}};
         } else return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
         return response(res,out.status,out.body);
       }

@@ -13,7 +13,7 @@ Restaurantes e lanchonetes precisam continuar vendendo sem internet, frequenteme
 - O host sobrevive sem internet. A LAN e os celulares dependem dele nesta fase, **não** prometemos offline independente para cada garçom.
 - Regras de pedidos ficam em pacote de domínio puro, sem dependência do framework.
 - Comandos recebem idempotency key e revisão, persistidos atomicamente com o estado e outbox.
-- Adapters de impressão, fiscal, integrações e pagamentos externos são substituíveis.
+- Adapters de impressão e pagamentos externos são substituíveis; o fiscal desta versão limita-se a comprovante não fiscal e exportação de dados para emissão externa.
 
 ## Alternativas descartadas nesta fase
 

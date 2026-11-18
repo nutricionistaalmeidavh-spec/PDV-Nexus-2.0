@@ -2,7 +2,7 @@
 
 ## Estado em 17/11/2026
 
-> Esta implementação **não é um PDV comercial homologado**. Não emitir cupom como se fosse fiscal.
+> Escopo fiscal aprovado: comprovantes não fiscais e exportação CSV/JSON para emissão externa. O caixa não depende de emissão integrada. Comprovante e exportação não são documento fiscal.
 
 | Issue | Implementado e testável | Pendente para marcar como concluído |
 |---|---|---|
@@ -10,7 +10,7 @@
 | #3 | Catálogo CRUD básico, pedido balcão, snapshot, histórico, revisão otimista, comandos idempotentes | combos/modificadores, gestão completa de categorias, interface de edição de produto, testes de corrida multicaixa |
 | #4 | Caixa aberto/fechado, sangria/suprimento, dinheiro/troco, Pix/cartão por confirmação manual, pagamento dividido via API, auditoria | estorno/devolução, relatórios avançados, impressão detalhada de fechamento, adquirentes de cartão |
 | #5 | Outbox durável e ESC/POS TCP para IP privado, fila manual, bloqueio de reenvio de job concluído, tests com socket falso | USB, balanças, gaveta, drivers específicos, teste físico, compatibilidade de code page; prova de entrega física |
-| #6 | Bloqueio explícito de emissão NFC-e, gate comercial fail-closed e texto de conformidade | adapter fiscal real, homologação UF, certificado, XML assinado, NFC-e, inutilização quando legalmente aplicável, DANFE, contingência, cancelamento |
+| #6 | Exportação CSV/JSON de vendas fechadas, com detalhes, pagamentos, devoluções, período e aviso não fiscal | Adequar o mapeamento ao sistema contábil/emissor externo utilizado |
 
 ## Setup local
 
@@ -53,15 +53,15 @@ A restauração exige integridade e versão compatível; recusa quando encontra 
 - Pedidos usam `expectedRevision` para detectar conflitos em alterações.
 - Fechar pedido e pagamento insere auditoria/outbox de impressão na mesma transação. Falha na impressão não desfaz pagamento.
 - Fila de impressão marca sucesso como **envio TCP** e não como prova de impressão física; uma falha física posterior pode exigir segunda via auditada.
-- Modo operacional **demo obrigatório**; `operationMode='production'` falha antes de abrir o banco.
+- Modo operacional funciona sem emissão fiscal integrada; os comprovantes continuam não fiscais em qualquer modo.
 - HTTP escuta só `127.0.0.1`; PWA LAN exige autenticação e pareamento futuros. Não expor 0.0.0.0/portas da máquina na internet.
 - API local bloqueia origins externos e aceita mutações só com JSON e comando idempotente, quando apropriado.
 - Pix e cartão são **registro manual de recebimento confirmado**, não processadores de pagamento.
 
-## Fontes para fiscalização
+## Exportação para emissão externa
 
-- SEFAZ/SP: https://portal.fazenda.sp.gov.br/servicos/nfce — NFC-e obrigatória ao varejo paulista desde 01/01/2026.
-- MOC NF-e/NFC-e: https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=ndIjl+iEFdE%3D — utilizar regras e NT vigentes da UF antes de homologar.
+- O exportador fornece dados operacionais de vendas fechadas em CSV/JSON, inclusive devoluções; não é NF-e/NFC-e nem XML homologado.
+- A emissão dos documentos fiscais legalmente aplicáveis é responsabilidade do processo externo utilizado pelo estabelecimento.
 
 ## QA ainda necessário
 
