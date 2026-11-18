@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>PDV Nexus 2.0 — Caixa</title><link rel="stylesheet" href="/styles.css"/></head>
+<title>PDV Nexus 2.0 — Caixa</title><link rel="stylesheet" href="/styles.css"/><link rel="stylesheet" href="/auth.css"/></head>
 <body>
 <div class="layout">
   <aside class="sidebar" aria-label="Menu principal">
@@ -67,4 +67,4 @@
   <label><input id="split-enabled" type="checkbox"> Dividir pagamento entre duas formas</label>
   <div id="split-fields" hidden><label>Valor da primeira forma (R$)<input id="split-first-amount" type="number" step="0.01" min="0.01"/></label><label>Segunda forma<select id="split-second-method"><option value="pix">Pix confirmado</option><option value="credit">Crédito confirmado</option><option value="debit">Débito confirmado</option><option value="cash">Dinheiro</option></select></label></div>
   <p class="note">Pagamentos eletrônicos são registrados após confirmação manual. Não existe captura automática.</p><button class="button primary full" type="submit">Concluir venda</button></form></dialog>
-<script src="/app.js" defer></script></body></html>
+<script src="/auth.js" defer></script><script src="/app.js" defer></script></body></html>
