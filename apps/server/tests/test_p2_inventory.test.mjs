@@ -23,9 +23,9 @@ async function fixture(t){
 }
 async function sale(request,productId,quantity,tag){
   const order=(await request('POST','/api/orders',cmd('order-'+tag,{serviceMode:'counter'}))).body.order;
-  const added=await request('POST',\`/api/orders/\${order.id}/lines\`,cmd('line-'+tag,{productId,quantity,expectedRevision:0}));
+  const added=await request('POST',`/api/orders/${order.id}/lines`,cmd('line-'+tag,{productId,quantity,expectedRevision:0}));
   assert.equal(added.status,200,JSON.stringify(added.body));
-  const confirmed=await request('POST',\`/api/orders/\${order.id}/confirm\`,cmd('confirm-'+tag,{expectedRevision:1}));
+  const confirmed=await request('POST',`/api/orders/${order.id}/confirm`,cmd('confirm-'+tag,{expectedRevision:1}));
   assert.equal(confirmed.status,200,JSON.stringify(confirmed.body));
   return {orderId:order.id,totalCents:confirmed.body.order.totalCents};
 }
@@ -34,21 +34,21 @@ test('entrada, ficha técnica e venda geram baixa única e custo contábil coere
   const ingredient=await request('POST','/api/stock/ingredients',cmd('ing',{name:'Carne bovina',unit:'g',lowStockMilli:100000}));
   assert.equal(ingredient.status,201,JSON.stringify(ingredient.body));
   const id=ingredient.body.ingredient.id;
-  const receive=await request('POST',\`/api/stock/ingredients/\${id}/receive\`,cmd('receive',{quantityMilli:2000000,costCents:1000}));
+  const receive=await request('POST',`/api/stock/ingredients/${id}/receive`,cmd('receive',{quantityMilli:2000000,costCents:1000}));
   assert.equal(receive.status,201,JSON.stringify(receive.body));
   const product=(await request('POST','/api/products',cmd('burger',{name:'X-Burger',priceCents:2000}))).body.product;
-  const recipe=await request('POST',\`/api/stock/recipes/\${product.id}\`,cmd('recipe',{items:[{ingredientId:id,quantityMilli:200000}]}));
+  const recipe=await request('POST',`/api/stock/recipes/${product.id}`,cmd('recipe',{items:[{ingredientId:id,quantityMilli:200000}]}));
   assert.equal(recipe.status,200,JSON.stringify(recipe.body));
   assert.equal((await request('POST','/api/cash/open',cmd('cash',{openingCents:0}))).status,201);
   const {orderId}=await sale(request,product.id,2,'a');
   const closeBody=cmd('close-a',{expectedRevision:2,payments:[{method:'pix',amountCents:4000}]});
-  const close=await request('POST',\`/api/orders/\${orderId}/close\`,closeBody);
+  const close=await request('POST',`/api/orders/${orderId}/close`,closeBody);
   assert.equal(close.status,200,JSON.stringify(close.body));
-  assert.deepEqual((await request('POST',\`/api/orders/\${orderId}/close\`,closeBody)).body,close.body);
+  assert.deepEqual((await request('POST',`/api/orders/${orderId}/close`,closeBody)).body,close.body);
   const stock=(await request('GET','/api/stock/ingredients')).body.ingredients.find(x=>x.id===id);
   assert.equal(stock.onHandMilli,1600000);
   assert.equal(stock.bookValueCents,800);
-  const history=(await request('GET',\`/api/stock/ingredients/\${id}/movements\`)).body.movements;
+  const history=(await request('GET',`/api/stock/ingredients/${id}/movements`)).body.movements;
   assert.equal(history.filter(x=>x.kind==='SALE').length,1);
   assert.equal(history.find(x=>x.kind==='SALE').valueDeltaCents,-200);
   const report=await request('GET','/api/stock/report');
@@ -62,14 +62,14 @@ test('entrada, ficha técnica e venda geram baixa única e custo contábil coere
 test('venda sem saldo falha atomicamente antes de registrar pagamentos',async t=>{
   const {request}=await fixture(t);
   const ing=(await request('POST','/api/stock/ingredients',cmd('ing-low',{name:'Queijo',unit:'g'}))).body.ingredient;
-  await request('POST',\`/api/stock/ingredients/\${ing.id}/receive\`,cmd('receive-low',{quantityMilli:1000,costCents:50}));
+  await request('POST',`/api/stock/ingredients/${ing.id}/receive`,cmd('receive-low',{quantityMilli:1000,costCents:50}));
   const p=(await request('POST','/api/products',cmd('p-low',{name:'Queijo quente',priceCents:900}))).body.product;
-  await request('POST',\`/api/stock/recipes/\${p.id}\`,cmd('recipe-low',{items:[{ingredientId:ing.id,quantityMilli:10000}]}));
+  await request('POST',`/api/stock/recipes/${p.id}`,cmd('recipe-low',{items:[{ingredientId:ing.id,quantityMilli:10000}]}));
   await request('POST','/api/cash/open',cmd('cash-low',{openingCents:0}));
   const {orderId}=await sale(request,p.id,1,'low');
-  const closed=await request('POST',\`/api/orders/\${orderId}/close\`,cmd('close-low',{expectedRevision:2,payments:[{method:'cash',amountCents:900}]}));
+  const closed=await request('POST',`/api/orders/${orderId}/close`,cmd('close-low',{expectedRevision:2,payments:[{method:'cash',amountCents:900}]}));
   assert.equal(closed.status,409,JSON.stringify(closed.body));
-  const after=(await request('GET',\`/api/orders/\${orderId}\`)).body.order;
+  const after=(await request('GET',`/api/orders/${orderId}`)).body.order;
   assert.equal(after.status,'OPEN');
   assert.equal(after.payments.length,0);
   assert.equal((await request('GET','/api/stock/ingredients')).body.ingredients[0].onHandMilli,1000);
@@ -77,13 +77,13 @@ test('venda sem saldo falha atomicamente antes de registrar pagamentos',async t=
 test('alterações de receita não reprecificam o consumo de linha já criada',async t=>{
  const {request}=await fixture(t);
  const ing=(await request('POST','/api/stock/ingredients',cmd('ing-edit',{name:'Farinha',unit:'g'}))).body.ingredient;
- await request('POST',\`/api/stock/ingredients/\${ing.id}/receive\`,cmd('rcv-edit',{quantityMilli:1000000,costCents:1000}));
+ await request('POST',`/api/stock/ingredients/${ing.id}/receive`,cmd('rcv-edit',{quantityMilli:1000000,costCents:1000}));
  const p=(await request('POST','/api/products',cmd('p-edit',{name:'Massa',priceCents:3000}))).body.product;
- await request('POST',\`/api/stock/recipes/\${p.id}\`,cmd('recipe-edit',{items:[{ingredientId:ing.id,quantityMilli:100000}]}));
+ await request('POST',`/api/stock/recipes/${p.id}`,cmd('recipe-edit',{items:[{ingredientId:ing.id,quantityMilli:100000}]}));
  await request('POST','/api/cash/open',cmd('cash-edit',{openingCents:0}));
  const s=await sale(request,p.id,1,'edit');
- await request('POST',\`/api/stock/recipes/\${p.id}\`,cmd('recipe-new',{items:[{ingredientId:ing.id,quantityMilli:300000}]}));
- const result=await request('POST',\`/api/orders/\${s.orderId}/close\`,cmd('close-edit',{expectedRevision:2,payments:[{method:'pix',amountCents:3000}]}));
+ await request('POST',`/api/stock/recipes/${p.id}`,cmd('recipe-new',{items:[{ingredientId:ing.id,quantityMilli:300000}]}));
+ const result=await request('POST',`/api/orders/${s.orderId}/close`,cmd('close-edit',{expectedRevision:2,payments:[{method:'pix',amountCents:3000}]}));
  assert.equal(result.status,200,JSON.stringify(result.body));
  const stock=(await request('GET','/api/stock/ingredients')).body.ingredients[0];
  assert.equal(stock.onHandMilli,900000);
@@ -94,10 +94,10 @@ test('baixa manual auditada e validação de número seguro, unidade e permissã
  assert.equal((await request('POST','/api/stock/ingredients',cmd('invalid',{name:'Sem unidade',unit:'kg'}))).status,400);
  const ing=(await request('POST','/api/stock/ingredients',cmd('valid',{name:'Óleo',unit:'ml'}))).body.ingredient;
  const receive=cmd('receive-dup',{quantityMilli:100000,costCents:800});
- assert.equal((await request('POST',\`/api/stock/ingredients/\${ing.id}/receive\`,receive)).status,201);
- assert.equal((await request('POST',\`/api/stock/ingredients/\${ing.id}/receive\`,receive)).status,201);
- assert.equal((await request('POST',\`/api/stock/ingredients/\${ing.id}/adjust\`,cmd('waste',{quantityMilli:-20000,reason:'Derramado'}))).status,201);
- assert.equal((await request('POST',\`/api/stock/ingredients/\${ing.id}/adjust\`,cmd('over',{quantityMilli:-90000,reason:'Quebra'}))).status,409);
+ assert.equal((await request('POST',`/api/stock/ingredients/${ing.id}/receive`,receive)).status,201);
+ assert.equal((await request('POST',`/api/stock/ingredients/${ing.id}/receive`,receive)).status,201);
+ assert.equal((await request('POST',`/api/stock/ingredients/${ing.id}/adjust`,cmd('waste',{quantityMilli:-20000,reason:'Derramado'}))).status,201);
+ assert.equal((await request('POST',`/api/stock/ingredients/${ing.id}/adjust`,cmd('over',{quantityMilli:-90000,reason:'Quebra'}))).status,409);
  const stock=(await request('GET','/api/stock/ingredients')).body.ingredients[0];
  assert.equal(stock.onHandMilli,80000);
  assert.equal(stock.bookValueCents,640);
