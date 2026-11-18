@@ -109,3 +109,13 @@ test('apenas gerente/host pode exportar dados operacionais na LAN',()=>{
     assert.equal(roleAllows('local','GET',endpoint),true);
   }
 });
+
+test('formulario de exportacao com datas em branco nao deve falhar',async t=>{
+  const {origin,json,cookie}=await fixture(t);
+  await closeSale(json,'Produto sem periodo');
+  const r=await fetch(origin+'/api/exports/sales.csv?from=&to=',{headers:{cookie}});
+  assert.equal(r.status,200);
+  assert.match(r.headers.get('content-type')??'',/text\/csv/);
+  const csv=await r.text();
+  assert.match(csv,/Produto sem periodo/);
+});
