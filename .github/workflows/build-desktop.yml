@@ -13,6 +13,11 @@ jobs:
           node-version: '22.16.0'
       - name: Install open-source dependencies for unsigned QA build
         run: npm install --no-audit --no-fund
+      - name: Prepare React UI bundle for API, restart and package verification
+        run: |
+          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm run ui:test
+          npm run ui:build
       - name: Test business and API logic
         run: npm run test:core && npm run test:api && npm run ui:test
       - name: Package unsigned installer (no publishing)
