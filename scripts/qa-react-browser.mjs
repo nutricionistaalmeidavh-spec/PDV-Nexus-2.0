@@ -34,7 +34,7 @@ try {
  await clickNav('Produtos e cardápio');
  await page.locator('.product-form input').nth(0).fill('X-QA-React');
  await page.locator('.product-form input').nth(1).fill('25,00');
- await page.locator('.product-form button[type=submit]').click();
+ await page.locator('.product-form button.btn.primary').click();
  await page.locator('.product-list').getByText('X-QA-React').waitFor();
  await snap('react-01-cardapio');
  await clickNav('Controle de caixa');
