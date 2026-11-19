@@ -15,7 +15,7 @@ app.whenReady().then(async () => {
   window.webContents.on('will-navigate',(event,url)=>{if(!url.startsWith(appUrl+'/'))event.preventDefault();});
   window.webContents.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
   window.once('ready-to-show',()=>window.show());
-  await window.loadURL(appUrl);
+  await window.loadURL(appUrl+'/ui/?embedded=1');
 });
 app.on('window-all-closed',()=>app.quit());
 let shutdownInProgress = false;
