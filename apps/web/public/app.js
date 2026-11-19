@@ -200,6 +200,6 @@
       const button=document.querySelector('[data-view="'+view+'"]');if(button&&!isAdmin)button.hidden=true;
     }
     $('operators-panel').hidden=!isAdmin;
-    return refresh();
+    return refresh().then(()=>{const desired=new URLSearchParams(location.search).get('view');const allowed=['pos','products','history','cash','print','devices','fiscal','stock','delivery'];if(allowed.includes(desired)){const target=document.querySelector('[data-view="'+desired+'"]');if(target&&!target.hidden)return changeView(desired);}});
   }).catch(e=>show(e.message,true));
 })();
