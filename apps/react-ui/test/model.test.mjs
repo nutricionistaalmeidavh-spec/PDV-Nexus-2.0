@@ -33,6 +33,6 @@ test('pedido fictício usa cópias imutáveis e total canônico', () => {
 
 test('ilustrações são arquivos locais e produtos desconhecidos usam fallback', async () => {
   const {foodAsset}=await import('../src/media.mjs');
-  assert.equal(foodAsset({id:'xburger',name:'X-Burger'}),'/assets/xburger.png');
+  assert.equal(foodAsset({id:'xburger',name:'X-Burger'}),'/ui/assets/xburger.png');
   assert.equal(foodAsset({id:'outro',name:'Produto novo'}),null);
 });
