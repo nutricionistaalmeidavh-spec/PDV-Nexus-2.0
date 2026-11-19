@@ -1,0 +1,27 @@
+name: React UI — checks sem release
+on:
+  pull_request:
+  push:
+    branches: ['feat/react-ui-*']
+  workflow_dispatch:
+jobs:
+  react-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Instalar dependências open source (sem publicação)
+        working-directory: apps/react-ui
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Testes de domínio da interface
+        working-directory: apps/react-ui
+        run: npm test
+      - name: Compilar React
+        working-directory: apps/react-ui
+        run: npm run build
+      - name: Conferir ausência de fiscal integrado no frontend
+        run: |
+          ! grep -R -E '/api/(nfce|nfe|fiscal/issue|sefa[z])' apps/react-ui/src
+          test -f apps/react-ui/dist/index.html
