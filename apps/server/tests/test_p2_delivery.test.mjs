@@ -74,3 +74,20 @@ test('rejeição e proteção contra pedidos adulterados não criam venda',async
  const pending=(await request('GET','/api/delivery/requests')).body.requests.find(x=>x.id===created.body.requestId);
  assert.equal(pending.status,'REJECTED');
 });
+
+test('supervisor ativa e desativa o cardápio público de forma persistente e idempotente',async t=>{
+ const {request}=await fixture(t);
+ assert.equal((await request('GET','/api/delivery/settings')).body.enabled,false);
+ assert.equal((await request('GET','/api/public/menu',null,true)).status,404);
+ const toggle=cmd('menu-enable',{enabled:true});
+ assert.equal((await request('POST','/api/delivery/settings',toggle)).status,200);
+ assert.deepEqual((await request('POST','/api/delivery/settings',toggle)).body,{enabled:true});
+ assert.equal((await request('GET','/api/public/menu',null,true)).status,200);
+ assert.equal((await request('POST','/api/delivery/settings',cmd('menu-disable',{enabled:false}))).status,200);
+ assert.equal((await request('GET','/api/public/menu',null,true)).status,404);
+});
+test('um cliente não consegue alterar preferências nem consultar entregas',async t=>{
+ const {request}=await fixture(t,{enabled:true});
+ assert.equal((await request('POST','/api/delivery/settings',cmd('attack',{enabled:true}),true)).status,401);
+ assert.equal((await request('GET','/api/delivery/requests',null,true)).status,401);
+});
