@@ -14,6 +14,11 @@ jobs:
           node-version: '22.16.0'
       - name: Install minimal free runtime QR library
         run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Build offline React UI before host route integration tests
+        run: |
+          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm run ui:test
+          npm run ui:build
       - name: Unit and SQLite schema tests
         run: npm test
       - name: JavaScript syntax checks
@@ -38,5 +43,10 @@ jobs:
           node-version: '22.16.0'
       - name: Install minimal free runtime QR library
         run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Build React UI on Windows
+        run: |
+          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm run ui:test
+          npm run ui:build
       - name: API tests on Windows
         run: npm run test:api
