@@ -2,7 +2,7 @@ name: Desktop Installer (manual, no release)
 on:
   workflow_dispatch:
   push:
-    branches: ['feat/p0-p1-hardening-20261118']
+    branches: ['feat/p0-p1-hardening-20261118', 'feat/p2-stock-delivery-selfhost-20261118']
 jobs:
   windows:
     runs-on: windows-latest

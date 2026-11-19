@@ -25,6 +25,10 @@ jobs:
           node --check apps/web/public/app.js
           node --check apps/web/public/restaurant.js
           node --check apps/web/public/kitchen.js
+          node --check apps/server/src/inventory.mjs
+          node --check apps/server/src/delivery.mjs
+          node --check apps/web/public/menu.js
+          node --check apps/web/public/p2-admin.js
   api-windows:
     runs-on: windows-latest
     steps:
