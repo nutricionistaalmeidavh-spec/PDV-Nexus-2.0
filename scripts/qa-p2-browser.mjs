@@ -80,7 +80,7 @@ try{
  assert.equal(deliveries.requests[0].status,'ACCEPTED');
  await snap('13-p2-delivery-aceito');
  await page.locator('[data-view="units"]').click();
- await page.locator('#sync-summary').getByText('Unidades:',{exact:false}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('#sync-summary')?.textContent.includes('Unidades:'));
  const [unitFile]=await Promise.all([page.waitForEvent('download'),page.locator('#sync-export').click()]);
  const packet=JSON.parse(fs.readFileSync(await unitFile.path(),'utf8'));
  assert.equal(packet.documentType,'PDV_NEXUS_UNIT_SUMMARY');
@@ -88,7 +88,7 @@ try{
  assert.ok(packet.hash.length===64);
  await snap('14-p2-consolidacao-unidades');
  await page.locator('[data-view="delivery"]').click();
- await page.locator('#delivery-privacy-report').getByText('Aguardando:',{exact:false}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('#delivery-privacy-report')?.textContent.includes('Aguardando:'));
  await snap('15-p2-privacidade-delivery');
  await guestContext.close();
  console.log('P2 browser E2E PASS: stock, recipe, sale-cost, margin, menu, approval, multiunit export, privacy controls');
