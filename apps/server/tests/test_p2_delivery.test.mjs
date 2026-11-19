@@ -91,3 +91,23 @@ test('um cliente não consegue alterar preferências nem consultar entregas',asy
  assert.equal((await request('POST','/api/delivery/settings',cmd('attack',{enabled:true}),true)).status,401);
  assert.equal((await request('GET','/api/delivery/requests',null,true)).status,401);
 });
+
+test('portal público self-hosted usa porta isolada e não expõe API administrativa',async t=>{
+ const {request,origin}=await fixture(t,{enabled:true});
+ const appRef=undefined; // O segundo servidor compartilha o mesmo SQLite, nunca cria outro writer.
+ const repoPath=await import('../src/server.mjs');
+ const fs=await import('node:fs'),os=await import('node:os'),path=await import('node:path');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'pdv-portal-'));
+ const app=repoPath.createApp({dataPath:path.join(dir,'portal.db'),publicMenuEnabled:true});
+ t.after(async()=>{await app.close();fs.rmSync(dir,{recursive:true,force:true});});
+ await app.listen({port:0});
+ const portal=await app.startPublicPortal({port:0});
+ assert.ok(portal.startsWith('http://127.0.0.1:'));
+ assert.equal((await fetch(portal+'/menu.html')).status,200);
+ assert.equal((await fetch(portal+'/menu.js')).status,200);
+ assert.equal((await fetch(portal+'/api/public/menu')).status,200);
+ assert.equal((await fetch(portal+'/api/products')).status,404);
+ assert.equal((await fetch(portal+'/api/auth/login')).status,404);
+ assert.equal((await fetch(portal+'/index.html')).status,404);
+ await assert.rejects(app.startPublicPortal({port:0,host:'0.0.0.0'}),/loopback|127.0.0.1/i);
+});
