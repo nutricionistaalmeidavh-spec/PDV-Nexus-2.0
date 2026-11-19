@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 const money=value=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value/100);
 const node=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=value;return n;};
-let products=[],cart=new Map();
+let products=[],cart=new Map(),pendingRequest=null;
 function notify(message,error=false){const el=$('menu-alert');el.hidden=false;el.textContent=message;el.classList.toggle('error',error);}
 function render(){
  const items=$('menu-items');items.replaceChildren();
@@ -34,11 +34,14 @@ async function init(){
 $('menu-checkout').onsubmit=async e=>{e.preventDefault();if(!cart.size)return;
  const form=e.currentTarget,button=$('send-request'),data=new FormData(form);
  const items=[...cart].map(([productId,quantity])=>({productId,quantity}));
+ const payload={customerName:data.get('customerName'),phone:data.get('phone'),address:data.get('address'),note:data.get('note'),items};
+ const body=JSON.stringify(payload);
+ if(!pendingRequest||pendingRequest.body!==body)pendingRequest={body,id:crypto.randomUUID()};
  button.disabled=true;try{
-  const res=await fetch('/api/public/delivery/requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({customerName:data.get('customerName'),phone:data.get('phone'),address:data.get('address'),note:data.get('note'),items})});
+  const res=await fetch('/api/public/delivery/requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,clientRequestId:pendingRequest.id})});
   const result=await res.json();if(!res.ok)throw Error(result.message||'Não foi possível enviar sua solicitação');
   notify('Solicitação registrada (protocolo '+result.requestId.slice(0,8)+'). A loja ainda precisa confirmar disponibilidade e entrega.');
-  cart.clear();form.reset();renderCart();
+  pendingRequest=null;cart.clear();form.reset();renderCart();
  }catch(error){notify(error.message,true);button.disabled=false;}
 };
 void init();

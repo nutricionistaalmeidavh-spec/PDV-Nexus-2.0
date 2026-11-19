@@ -1,5 +1,5 @@
 /** Explicit opt-in guest menu on a self-hosted LAN; guest requests remain pending until staff accepts. */
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {createOrder,addOrderLine} from '../../../packages/core/src/order.ts';
 const canPay=x=>Number.isSafeInteger(x)&&x>=0;
 const requireText=(x,min,max)=>typeof x==='string'&&x.trim().length>=min&&x.trim().length<=max?x.trim():null;
@@ -13,6 +13,19 @@ export function publicRead(db,method,route){
 export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
   const perIp=new Map();
   function submit(body,remoteAddress){
+    const clientRequestId=body.clientRequestId??null;
+    if(clientRequestId!==null&&(typeof clientRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId)))
+      return {status:400,body:{code:'INVALID_REQUEST_ID',message:'Identificador da solicitação inválido'}};
+    const fingerprint=clientRequestId?createHash('sha256').update(JSON.stringify({
+      customerName:body.customerName,phone:body.phone,address:body.address,note:body.note??'',items:body.items
+    })).digest('hex'):null;
+    if(clientRequestId){
+      const old=db.prepare('SELECT id,status,total_cents AS totalCents,request_fingerprint AS fingerprint FROM delivery_request WHERE client_request_id=?').get(clientRequestId);
+      if(old){
+        if(old.fingerprint!==fingerprint)return {status:409,body:{code:'REQUEST_ID_REUSED',message:'Identificador usado em outra solicitação'}};
+        return {status:202,body:{requestId:old.id,status:old.status,totalCents:old.totalCents,notice:'Solicitação já recebida. Não houve duplicação.'}};
+      }
+    }
     const ip=remoteAddress??'unknown',t=Date.now(),previous=perIp.get(ip);
     const entry=previous&&previous.until>t?previous:{count:0,until:t+windowMs};
     if(entry.count>=maxPerWindow)return {status:429,body:{code:'RATE_LIMIT',message:'Muitas solicitações. Contate a loja.'}};
@@ -37,8 +50,8 @@ export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
     const id=randomUUID(),createdAt=new Date().toISOString();
     db.exec('BEGIN IMMEDIATE');
     try{
-      db.prepare("INSERT INTO delivery_request(id,restaurant_id,customer_name,phone,address,note,total_cents,created_at) VALUES(?,'r-local',?,?,?,?,?,?)")
-        .run(id,customerName,body.phone,address,note,totalCents,createdAt);
+      db.prepare("INSERT INTO delivery_request(id,restaurant_id,customer_name,phone,address,note,total_cents,created_at,client_request_id,request_fingerprint) VALUES(?,'r-local',?,?,?,?,?,?,?,?)")
+        .run(id,customerName,body.phone,address,note,totalCents,createdAt,clientRequestId,fingerprint);
       const ins=db.prepare('INSERT INTO delivery_request_line(id,request_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES(?,?,?,?,?,?)');
       for(const line of lines)ins.run(randomUUID(),id,line.id,line.name,line.priceCents,line.quantity);
       db.exec('COMMIT');

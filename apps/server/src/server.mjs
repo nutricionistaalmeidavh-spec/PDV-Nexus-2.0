@@ -13,6 +13,8 @@ import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mj
 import {inventoryRead,inventoryWrite,snapshotLineRecipe,consumeStockForOrder} from './inventory.mjs';
 import {publicRead,createPublicRequests,deliveryRead,deliveryWrite} from './delivery.mjs';
 import {installationRead} from './install-identity.mjs';
+import {syncRead,syncWrite} from './multiunit-sync.mjs';
+import {privacyRead,privacyWrite} from './delivery-privacy.mjs';
 import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
@@ -118,10 +120,10 @@ async function transmit(host,port,buffer) {
     socket.once('close',hadError=>{if(!hadError)resolve();});
   });
 }
-async function readJson(req) {
+async function readJson(req,maxLength=32768) {
   if (!req.headers['content-type']?.toLowerCase().startsWith('application/json')) throw new HttpError(415,'UNSUPPORTED_MEDIA_TYPE','Envie JSON');
   let input='';
-  for await (const chunk of req) { input+=chunk; if(input.length>32768) throw new HttpError(413,'PAYLOAD_TOO_LARGE','Dados excedem 32KB'); }
+  for await (const chunk of req) { input+=chunk; if(input.length>maxLength) throw new HttpError(413,'PAYLOAD_TOO_LARGE','Dados excedem o tamanho permitido'); }
   try { const value=JSON.parse(input);if(!value||Array.isArray(value)||typeof value!=='object') bad('JSON inválido');return value; }
   catch(e) { if(e instanceof HttpError) throw e;bad('JSON inválido'); }
 }
@@ -228,6 +230,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
+        const syncResult=syncRead(db,method,route);
+        if(syncResult)return response(res,syncResult.status,syncResult.body);
+        const privacyResult=privacyRead(db,method,route);
+        if(privacyResult)return response(res,privacyResult.status,privacyResult.body);
         const deliveryResult=deliveryRead(db,method,route);
         if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
         const stockResult=inventoryRead(db,method,route,url.searchParams,{missing,bad});
@@ -259,7 +265,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         const restaurantResult=restaurantRead(db,method,route,{missing});
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
-        const body=await readJson(req);
+        const body=await readJson(req,route==='/api/sync/import'?524288:32768);
         if(method==='POST'&&route==='/api/pairing/start'){
           try{return response(res,201,pairing.start(body));}
           catch(e){return response(res,400,{code:'PAIRING_INVALID',message:e.message});}
@@ -270,7 +276,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         let out;
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
-        const special=deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const special=syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');

@@ -27,3 +27,13 @@ O core usa SQLite local e componentes open source. QR é gerado offline por bibl
 ## Critério de lançamento
 
 CI verde não equivale a instalação homologada. Não liberar a versão a clientes antes da revisão da cadeia de PRs e autorização de merge/release. Serviços cloud, gateway pago e emissão fiscal dentro do PDV estão fora do core.
+
+## P2 — Consolidar e proteger dados
+
+- [x] Testes automatizados com dois bancos SQLite de unidades distintas, pacote idempotente, revisões, hash e ausência de cópia de pedidos ou estoque remoto.
+- [x] Testes de recusa a pacote alterado e revisão antiga, permissão de supervisor e anonimização restrita a delivery encerrado/rejeitado.
+- [x] Reenvio com a mesma chave pública não duplica solicitação no banco.
+- [ ] Manual: exportar pacote de uma loja, importar em outro Windows, comparar totais e registrar conflito de histórico real.
+- [ ] Manual: informar política de retenção e testar HTTPS do proxy reverso, privacidade e carga de múltiplos clientes no ambiente final.
+
+O P2 disponibiliza consolidação por arquivos, não replicação distribuída de pedidos/estoques em tempo real. Não liberar portal público sem revisão de segurança e LGPD.

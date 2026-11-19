@@ -25,8 +25,14 @@ Atualizado em 18/11/2026. Código nesta branch; **homologação física e de exp
 ### Preparação para múltiplas unidades
 
 - Migração `012_installation_identity.sql` gera identificador persistente diferente para cada banco local. `GET /api/system/identity` informa identidade e `syncEnabled:false`.
-- **Não existe sincronização multiunidade automática**, fila de replicação, central de conflitos nem integração de gateways de pagamento nessa etapa. Não duplicar bancos canônicos ou inferir sincronização pelo identificador.
+- Existe **consolidação multiunidade manual opt-in**: pacotes JSON sem PII com revisões/hash, detecção de divergência e importação idempotente de resumos financeiros. Não há replicação automática de caixa, pedidos, fichas ou estoque entre lojas, nem gateway de pagamento obrigatório. Consultar [P2_FINALIZATION.md](P2_FINALIZATION.md).
 - Todos os pagamentos eletrônicos atuais continuam registros manuais de confirmação; integrações pagas serão somente opt-in explícito.
+
+## Finalização técnica
+
+- Migrations 013–015: histórico de exportações/importações de unidades, registro de conflitos, anonimização de delivery e chave de reenvio idempotente por solicitação.
+- Gestão na interface: aba **Unidades**, exportação JSON, importação local e visualização de conflitos; em **Delivery**, anonimização de finalizados e limpeza manual por prazo.
+- A sincronização operacional entre lojas, replicação automática e integrações bancárias continuam explicitamente fora do escopo entregue.
 
 ## QA de código
 

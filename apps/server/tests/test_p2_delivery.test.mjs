@@ -111,3 +111,17 @@ test('portal público self-hosted usa porta isolada e não expõe API administra
  assert.equal((await fetch(portal+'/index.html')).status,404);
  await assert.rejects(app.startPublicPortal({port:0,host:'0.0.0.0'}),/loopback|127.0.0.1/i);
 });
+
+test('reenvio de solicitação delivery com a mesma chave não cria duas encomendas',async t=>{
+ const {request}=await fixture(t,{enabled:true});
+ const product=(await request('POST','/api/products',cmd('idemp-p',{name:'Esfiha',priceCents:1100}))).body.product;
+ const payload={clientRequestId:'688e4ae2-c552-48de-8ccc-0561cf78fbef',customerName:'Cliente Teste',
+  phone:'16998765432',address:'Rua do Comércio número 123',items:[{productId:product.id,quantity:2}]};
+ const a=await request('POST','/api/public/delivery/requests',payload,true);
+ const b=await request('POST','/api/public/delivery/requests',payload,true);
+ assert.equal(a.status,202);assert.equal(b.status,202);
+ assert.equal(a.body.requestId,b.body.requestId);
+ assert.equal((await request('GET','/api/delivery/requests')).body.requests.length,1);
+ const changed=await request('POST','/api/public/delivery/requests',{...payload,items:[{productId:product.id,quantity:1}]},true);
+ assert.equal(changed.status,409);
+});

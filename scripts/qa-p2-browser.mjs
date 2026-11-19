@@ -79,7 +79,18 @@ try{
  const deliveries=await page.evaluate(async()=>{const r=await fetch('/api/delivery/requests');return r.json();});
  assert.equal(deliveries.requests[0].status,'ACCEPTED');
  await snap('13-p2-delivery-aceito');
+ await page.locator('[data-view="units"]').click();
+ await page.waitForFunction(()=>document.querySelector('#sync-summary')?.textContent.includes('Unidades:'));
+ const [unitFile]=await Promise.all([page.waitForEvent('download'),page.locator('#sync-export').click()]);
+ const packet=JSON.parse(fs.readFileSync(await unitFile.path(),'utf8'));
+ assert.equal(packet.documentType,'PDV_NEXUS_UNIT_SUMMARY');
+ assert.equal(packet.daily[0].grossSalesCents,2400);
+ assert.ok(packet.hash.length===64);
+ await snap('14-p2-consolidacao-unidades');
+ await page.locator('[data-view="delivery"]').click();
+ await page.waitForFunction(()=>document.querySelector('#delivery-privacy-report')?.textContent.includes('Aguardando:'));
+ await snap('15-p2-privacidade-delivery');
  await guestContext.close();
- console.log('P2 browser E2E PASS: stock, recipe, sale-cost, margin, opt-in public menu, guest request, admin approval');
+ console.log('P2 browser E2E PASS: stock, recipe, sale-cost, margin, menu, approval, multiunit export, privacy controls');
 }catch(error){await snap('erro-p2-qa');console.error('P2 browser QA failed:',error);process.exitCode=1;
 }finally{if(browser)await browser.close();await app.close();fs.rmSync(folder,{recursive:true,force:true});}

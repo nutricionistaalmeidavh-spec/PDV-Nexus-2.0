@@ -52,11 +52,13 @@ PRs #1, #10, #11, #12 e #13 integradas à `main` em 18/11/2026 com autorização
 - [x] Cardápio público e delivery opt-in: pedidos pendentes exigem aprovação do operador
 - [x] Portal público separado no loopback para proxy HTTPS self-hosted sem expor admin
 - [x] Identificador persistente por instalação para futura multiunidade
-- [ ] Sincronização multiunidade opt-in, versão/conflitos e deduplicação em rede — NÃO habilitada
+- [x] Consolidação multiunidade manual opt-in de resumos financeiros, com hash, revisão, idempotência e registro de conflitos
+- [x] Anonimização auditável de dados de delivery e proteção contra pedidos duplicados em retry
+- [ ] Sincronização operacional automática entre lojas e estoque compartilhado: não habilitada, demanda arquitetura própria
 - [ ] Gateway de pagamento externo: integração opcional e explícita, sem bloquear core
 - [ ] Validar implantação pública segura, privacidade e hardware físico
 
-Detalhes e limites: [P2_IMPLEMENTATION.md](P2_IMPLEMENTATION.md).
+Detalhes e limites: [P2_IMPLEMENTATION.md](P2_IMPLEMENTATION.md) e [P2_FINALIZATION.md](P2_FINALIZATION.md).
 
 ## Gates obrigatórios
 
