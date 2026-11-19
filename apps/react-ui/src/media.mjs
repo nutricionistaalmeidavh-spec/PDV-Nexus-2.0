@@ -10,5 +10,5 @@ export function foodAsset(product){
  const name=String(product.name||'').toLocaleLowerCase('pt-BR');
  const known=['xbacon','xburger','xsalada','batata','nuggets','pao','refrigerante','agua','cafe','leite','queijo'];
  const asset=known.includes(id)?id:nameToAsset.find(([term])=>name.includes(term))?.[1];
- return asset?`/assets/${asset}.png`:null;
+ return asset?`/ui/assets/${asset}.png`:null;
 }
