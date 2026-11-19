@@ -14,6 +14,9 @@
       <button data-view="cash" class="nav-item">Gestão do caixa</button>
       <button data-view="print" class="nav-item">Impressão</button><button data-view="devices" class="nav-item">Dispositivos</button>
       <button data-view="fiscal" class="nav-item">Exportar vendas</button>
+      <button data-view="stock" class="nav-item">Estoque &amp; fichas</button>
+      <button data-view="delivery" class="nav-item">Delivery</button>
+      <a class="nav-item" href="/menu.html" target="_blank" rel="noopener">Cardápio digital</a>
     </nav>
     <div class="sidebar-bottom">Operação local<br/><span>Sem assinaturas obrigatórias</span></div>
   </aside>
@@ -72,7 +75,41 @@
   <p class="note">O QR contém apenas o endereço HTTPS de salão/cozinha. O PIN de seis dígitos é digitado no dispositivo e expira após dois minutos.</p>
   <h3>Dispositivos pareados</h3><div id="paired-device-list" class="data-list"></div>
   </div></section>
-<section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
+
+    <section id="view-stock" class="view">
+      <div class="panel"><div class="section-head"><div><span class="eyebrow">INVENTÁRIO LOCAL</span><h2>Estoque por ingrediente</h2></div><button type="button" class="button secondary" id="stock-refresh">Atualizar</button></div>
+        <p class="note">Controle de saldo e custo médio, em gramas, mililitros ou unidades. Os valores monetários são armazenados em centavos. A venda fechada dá baixa automaticamente na ficha técnica.</p>
+        <p id="stock-summary" class="metric"></p><p id="stock-margin" class="note"></p>
+        <form id="stock-ingredient-form" class="form-row"><label>Ingrediente<input name="name" maxlength="100" placeholder="Farinha" required></label>
+          <label>Unidade<select name="unit"><option value="g">Gramas (g)</option><option value="ml">Mililitros (ml)</option><option value="unit">Unidades</option></select></label>
+          <label>Alerta abaixo de<input name="lowStock" type="number" min="0" step="0.001" value="0" required></label><button class="button primary">Cadastrar</button></form>
+        <div id="stock-ingredient-list" class="data-list"></div></div>
+      <div class="panel"><h2>Movimentações de estoque</h2>
+        <form id="stock-receive-form" class="form-row"><label>Ingrediente<select name="ingredientId" id="stock-receive-ingredient" required></select></label>
+          <label>Quantidade recebida<input type="number" name="quantity" min="0.001" step="0.001" required></label>
+          <label>Custo total (R$)<input type="number" name="cost" min="0" step="0.01" required></label><button class="button primary">Registrar entrada</button></form>
+        <form id="stock-adjust-form" class="form-row"><label>Ingrediente<select name="ingredientId" id="stock-adjust-ingredient" required></select></label>
+          <label>Ajuste (+ entrada / − saída)<input type="number" name="quantity" step="0.001" required></label>
+          <label>Custo (R$, se entrada)<input type="number" name="cost" step="0.01" min="0" value="0"></label>
+          <label>Motivo<input name="reason" maxlength="240" required placeholder="Perda, quebra, correção de inventário"></label>
+          <button class="button secondary">Registrar ajuste</button></form></div>
+      <div class="panel"><h2>Ficha técnica por produto</h2>
+        <p class="note">Informe a quantidade de cada ingrediente por unidade vendida. Combos consomem as fichas de seus componentes. A ficha de pedidos já lançados fica preservada.</p>
+        <div class="form-row"><label>Produto<select id="stock-recipe-product"></select></label>
+          <label>Ingrediente<select id="stock-recipe-ingredient"></select></label>
+          <label>Quantidade por produto<input type="number" id="stock-recipe-quantity" step="0.001" min="0.001" value="1"></label>
+          <button type="button" class="button secondary" id="stock-recipe-add">Incluir na ficha</button></div>
+        <div id="stock-recipe-lines" class="data-list"></div><button type="button" class="button primary" id="stock-recipe-save">Salvar ficha técnica</button>
+      </div></section>
+    <section id="view-delivery" class="view">
+      <div class="panel"><div class="section-head"><div><span class="eyebrow">RECEBIMENTO MANUAL</span><h2>Delivery e cardápio digital</h2></div><button type="button" class="button secondary" id="delivery-refresh">Atualizar</button></div>
+        <p class="note">O cardápio digital é gratuito, funciona no servidor local e fica desativado até você habilitá-lo. Para acesso de outros aparelhos é necessário configurar a rede local HTTPS. Solicitações não equivalem a vendas pagas.</p>
+        <form id="delivery-setting-form" class="form-row"><label><input type="checkbox" id="public-menu-enabled"> Aceitar solicitações pelo cardápio digital</label>
+          <button class="button primary">Salvar preferência</button><a class="button secondary" href="/menu.html" target="_blank" rel="noopener">Visualizar cardápio</a></form>
+      </div><div class="panel"><h2>Solicitações recebidas</h2><div id="delivery-request-list" class="data-list"></div></div>
+      <div class="panel"><h2>Entregas aceitas</h2><div id="delivery-order-list" class="data-list"></div></div>
+    </section>
+    <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
     <section id="view-cash" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2>Sessão do caixa</h2></div></div><div id="cash-summary" class="metric"></div>
       <form id="cash-open-form" class="form-row"><label>Valor inicial (R$)<input name="amount" type="number" min="0" step="0.01" value="0" required/></label><button class="button primary">Abrir caixa</button></form>
       <form id="cash-movement-form" class="form-row" hidden><label>Tipo<select name="kind"><option value="SUPPLY">Suprimento</option><option value="WITHDRAWAL">Sangria</option></select></label>
@@ -101,4 +138,4 @@
   <label><input id="split-enabled" type="checkbox"> Dividir pagamento entre duas formas</label>
   <div id="split-fields" hidden><label>Valor da primeira forma (R$)<input id="split-first-amount" type="number" step="0.01" min="0.01"/></label><label>Segunda forma<select id="split-second-method"><option value="pix">Pix confirmado</option><option value="credit">Crédito confirmado</option><option value="debit">Débito confirmado</option><option value="cash">Dinheiro</option></select></label></div>
   <p class="note">Pagamentos eletrônicos são registrados após confirmação manual. Não existe captura automática.</p><button class="button primary full" type="submit">Concluir venda</button></form></dialog>
-<script src="/auth.js" defer></script><script src="/app.js" defer></script></body></html>
+<script src="/auth.js" defer></script><script src="/app.js" defer></script><script src="/p2-admin.js" defer></script></body></html>

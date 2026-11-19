@@ -10,6 +10,9 @@ import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
 import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
+import {inventoryRead,inventoryWrite,snapshotLineRecipe,consumeStockForOrder} from './inventory.mjs';
+import {publicRead,createPublicRequests,deliveryRead,deliveryWrite} from './delivery.mjs';
+import {installationRead} from './install-identity.mjs';
 import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
@@ -123,14 +126,16 @@ async function readJson(req) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
   const operatorAuth=createOperatorAuth(db);
   const pairing=createDevicePairing(db);
-  let server, origin, closed=false;
+  const publicRequests=createPublicRequests(db);
+  const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
+  let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
   const kitchenListeners=new Set();
   function notifyKitchen() {
@@ -160,6 +165,17 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
+        if(route.startsWith('/api/public/')){
+          if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
+          const found=publicRead(db,method,route);
+          if(found)return response(res,found.status,found.body);
+          if(method==='POST'&&route==='/api/public/delivery/requests'){
+            const payload=await readJson(req);
+            const result=publicRequests.submit(payload,req.socket.remoteAddress);
+            return response(res,result.status,result.body);
+          }
+          return response(res,404,{code:'NOT_FOUND'});
+        }
         if(route.startsWith('/api/auth/')){
           if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
             throw new HttpError(403,'LOCAL_ONLY','Autenticacao de operador permitida apenas no host local');
@@ -209,6 +225,12 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        const identity=installationRead(db,method,route);
+        if(identity)return response(res,identity.status,identity.body);
+        const deliveryResult=deliveryRead(db,method,route);
+        if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
+        const stockResult=inventoryRead(db,method,route,url.searchParams,{missing,bad});
+        if(stockResult)return response(res,stockResult.status,stockResult.body);
         const cats=categoryRead(db,method,route);
         if(cats)return response(res,cats.status,cats.body);
         const comboResult=comboRead(db,method,route,{missing});
@@ -246,8 +268,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,stamp,cashSession,cashExpected};
-        const special=categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
+        const special=deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
@@ -313,6 +335,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
               const save=db.prepare('INSERT INTO order_line_combo_item(id,line_id,product_id,product_name_snapshot,quantity) VALUES(?,?,?,?,?)');
               for(const item of items)save.run(randomUUID(),line.id,item.productId,item.name,item.quantity);
             }
+            snapshotLineRecipe(db,line.id,product.id);
             for(const mod of modifiers)db.prepare('INSERT INTO order_line_modifier(id,line_id,modifier_id,name_snapshot,price_cents_snapshot) VALUES (?,?,?,?,?)').run(randomUUID(),line.id,mod.id,mod.name,mod.price_cents);
             writeOrder(db,next);
             if(next.status==='OPEN')dispatchKitchenTickets(db,id,stamp);
@@ -345,12 +368,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
               if(!safeCents(amount)||!safeCents(change))bad('Valor excedeu limite seguro');
             }
             let next;try{next=closeOrder(order,amount);}catch(e){bad(e.message);}
+            const stock=consumeStockForOrder(db,id,requestActor,conflict);
             for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id) VALUES(?,?,?,?,?,?,?)')
               .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id);
             writeOrder(db,next);
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
               .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
-            auditForRequest(db,id,'ORDER_CLOSED',{payments,changeCents:change});
+            auditForRequest(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents});
             return {order:databaseOrder(db,id),changeCents:change};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/cancel$/)) {
@@ -416,7 +440,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       }
       if(method!=='GET') return response(res,405,{code:'METHOD_NOT_ALLOWED'});
       const file=route==='/'?'index.html':route.slice(1);
-      if(!['index.html','app.js','styles.css','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
+      if(!['index.html','app.js','styles.css','menu.html','menu.js','menu.css','p2-admin.js','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
@@ -424,6 +448,37 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     } catch(e) {
       const status=e instanceof HttpError?e.status:400;
       return response(res,status,{code:e.code??'INVALID_OPERATION',message:e instanceof HttpError?e.message:e.message||'Erro interno'});
+    }
+  }
+
+  async function publicPortalHandler(req,res){
+    try{
+      const route=new URL(req.url,'http://localhost').pathname;
+      const method=req.method;
+      const rawOrigin=req.headers.origin;
+      if(rawOrigin){
+        let parsed;
+        try{parsed=new URL(rawOrigin);}catch{throw new HttpError(403,'CROSS_ORIGIN','Origem inválida');}
+        if(parsed.host!==req.headers.host||!['http:','https:'].includes(parsed.protocol))
+          throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
+      }
+      if(method==='GET'&&['/menu.html','/menu.js','/menu.css'].includes(route)){
+        const kind=route.endsWith('.html')?'text/html':route.endsWith('.js')?'text/javascript':'text/css';
+        res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',
+          'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
+        fs.createReadStream(path.join(publicDir,route.slice(1))).pipe(res);return;
+      }
+      if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio indisponível'});
+      const found=publicRead(db,method,route);
+      if(found)return response(res,found.status,found.body);
+      if(method==='POST'&&route==='/api/public/delivery/requests'){
+        const body=await readJson(req),result=publicRequests.submit(body,req.socket.remoteAddress);
+        return response(res,result.status,result.body);
+      }
+      return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
+    }catch(e){
+      const status=e instanceof HttpError?e.status:500;
+      return response(res,status,{code:e.code??'PUBLIC_PORTAL_ERROR',message:e instanceof HttpError?e.message:'Não foi possível concluir a solicitação'});
     }
   }
   server=lanConfig?https.createServer({cert:lanConfig.cert,key:lanConfig.key},handler):http.createServer(handler);
@@ -434,7 +489,29 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       if(lanConfig&&!['0.0.0.0','127.0.0.1'].includes(host))return reject(new Error('Host LAN não autorizado'));
       server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);resolve(origin);});
     });},
+    startPublicPortal({port=3435,host='127.0.0.1'}={}){
+      if(closed)return Promise.reject(new Error('Servidor encerrado'));
+      if(host!=='127.0.0.1')return Promise.reject(new Error('Portal público deve escutar somente no loopback 127.0.0.1'));
+      if(!Number.isSafeInteger(port)||port<0||port>65535)return Promise.reject(new Error('Porta pública inválida'));
+      if(portalServer)return Promise.reject(new Error('Portal público já iniciado'));
+      portalServer=http.createServer(publicPortalHandler);
+      return new Promise((resolve,reject)=>{
+        const onError=e=>{portalServer=null;reject(e);};
+        portalServer.once('error',onError);
+        portalServer.listen(port,'127.0.0.1',()=>{
+          portalServer.off('error',onError);
+          const actualPort=portalServer.address().port;
+          resolve('http://127.0.0.1:'+actualPort);
+        });
+      });
+    },
     backup(dest){return createBackup(db,dest);},
-    close(){return new Promise(resolve=>{if(closed)return resolve();closed=true;for(const client of kitchenListeners)client.end();kitchenListeners.clear();if(server.listening)server.close(()=>{db.close();resolve();});else{db.close();resolve();}});}
+    async close(){
+      if(closed)return;closed=true;
+      for(const client of kitchenListeners)client.end();kitchenListeners.clear();
+      if(portalServer?.listening)await new Promise(resolve=>portalServer.close(resolve));
+      if(server.listening)await new Promise(resolve=>server.close(resolve));
+      db.close();
+    }
   };
 }

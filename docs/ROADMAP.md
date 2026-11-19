@@ -6,7 +6,7 @@ Status em 18/11/2026. **CHECKED** significa código + teste automatizado impleme
 
 - [x] Domínio puro, SQLite migrations, idempotência e outbox
 - [x] Testes de domínio/estrutura e CI
-- [ ] Merge autorizado na main
+- [x] Integrado à `main` por autorização do proprietário
 
 ## P0 — Operação de balcão (PR #10 + complementos PR #11)
 
@@ -40,15 +40,23 @@ Status em 18/11/2026. **CHECKED** significa código + teste automatizado impleme
 - [x] Combos de preço fixo com snapshot de composição e divisão da comanda por convidado/quantidade
 - [ ] Pagamentos parciais independentes por pessoa, combos de escolhas dinâmicas e estoque de ingredientes
 
-## Plano de integração controlado
+## Integração P0/P1
 
-PRs **#1 → #10 → #11 → #12 → hardening** devem ser revisadas em ordem, com CI e sem diferenças perdidas. Somente fazer merge na `main` após autorização explícita; nunca publicar release automaticamente. Compilação unsigned no GitHub não comprova funcionamento de USB ou instalação em PCs reais.
+PRs #1, #10, #11, #12 e #13 integradas à `main` em 18/11/2026 com autorização explícita. Nenhuma release publicada. Compilação unsigned não comprova funcionamento de USB nem instalação em PCs reais.
 
-## P2 — Expansão
+## P2 — Estoque, delivery e expansão self-hosted
 
-- [ ] Fichas técnicas e estoque por ingrediente
-- [ ] Multiunidade e sincronização opt-in com protocolo de conflitos
-- [ ] Delivery/cardápio público, integrações comerciais opt-in
+- [x] Estoque por ingrediente, livro auditável de entradas/saídas e fichas técnicas com snapshot
+- [x] Baixa transacional no fechamento com idempotência e bloqueio por saldo insuficiente
+- [x] CMV, margem bruta estimada e alertas de estoque mínimo
+- [x] Cardápio público e delivery opt-in: pedidos pendentes exigem aprovação do operador
+- [x] Portal público separado no loopback para proxy HTTPS self-hosted sem expor admin
+- [x] Identificador persistente por instalação para futura multiunidade
+- [ ] Sincronização multiunidade opt-in, versão/conflitos e deduplicação em rede — NÃO habilitada
+- [ ] Gateway de pagamento externo: integração opcional e explícita, sem bloquear core
+- [ ] Validar implantação pública segura, privacidade e hardware físico
+
+Detalhes e limites: [P2_IMPLEMENTATION.md](P2_IMPLEMENTATION.md).
 
 ## Gates obrigatórios
 

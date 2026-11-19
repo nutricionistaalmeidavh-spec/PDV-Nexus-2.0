@@ -61,7 +61,23 @@ npm run desktop
 - **Exportador:** disponível em CSV/JSON na tela "Exportar vendas", com data inicial/final opcional. A emissão de documentos fiscais, quando necessária, é externa e não faz parte do escopo do PDV. A exportação não é XML fiscal autorizado.
 - Testes físicos de impressora térmica, USB, balança, gaveta e escopo de dispositivos por modelo.
 - Login local de operador implementado; faltam recuperação local assistida de acesso e validação do instalador em PCs reais.
-- Estoque por ficha técnica, combos de escolha dinâmica de componentes e sincronização entre unidades ficam para marcos posteriores.
+- Estoque por ingrediente, fichas técnicas e custo médio disponíveis no P2. Combos de escolha dinâmica, conciliação financeira avançada e sincronização entre unidades ainda não foram implementados.
 - Interface P0/P1 utiliza HTML/CSS/JS local, sem React/Vite; a possível migração deve ser uma decisão de produto explícita, não uma dependência oculta.
 
-Consulte o [checklist de QA](docs/QA_RUNBOOK.md), [status/roadmap](docs/ROADMAP.md), [P0](docs/P0_IMPLEMENTATION.md), [P1](docs/P1_IMPLEMENTATION.md), [arquitetura](docs/ARCHITECTURE.md). Branches de trabalho e PRs #1 → #10 → #11 → #12 → nova PR de hardening são empilhadas. **Não fazer merge ou release sem autorização.**
+Consulte o [checklist de QA](docs/QA_RUNBOOK.md), [status/roadmap](docs/ROADMAP.md), [P0](docs/P0_IMPLEMENTATION.md), [P1](docs/P1_IMPLEMENTATION.md), [P2](docs/P2_IMPLEMENTATION.md) e [arquitetura](docs/ARCHITECTURE.md). Fundação, P0 e P1 foram integrados à `main` com autorização. **Não publicar release sem autorização.**
+
+## P2 — Estoque e delivery (self-hosted)
+
+O painel inclui **Estoque & fichas** e **Delivery**. Ingredientes, receitas, entradas, quebras, custo médio e baixa transacional na venda usam o **mesmo banco SQLite**. Se faltar saldo de ingrediente previsto na ficha, o fechamento do pedido falha antes de gravar pagamento.
+
+O cardápio digital `/menu.html` fica **desativado por padrão**. O supervisor pode habilitar no painel e revisar solicitações; pedidos externos são apenas pré-pedidos pendentes, sem gateway ou pagamento automático.
+
+Para publicar **apenas** o portal de cardápio no próprio host:
+
+```bash
+PDV_PUBLIC_PORT=3435 npm start
+```
+
+A porta `3435` escuta somente `127.0.0.1`. Para acesso externo use um proxy reverso HTTPS gratuito e self-hosted e configure DNS/TLS separadamente. **Nunca exponha a porta administrativa 3434 à internet.** Ativar o cardápio exige ação explícita no painel ou variável de ambiente `PDV_PUBLIC_MENU_ENABLED=true`. Não compartilhe o banco SQLite entre servidores.
+
+O identificador de instalação é persistente para planejamento futuro, porém **não há sincronização multiloja**. Não requer nem integra serviços fiscais ou pagamentos pagos. Veja [escopo completo do P2](docs/P2_IMPLEMENTATION.md).
