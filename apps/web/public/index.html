@@ -15,7 +15,7 @@
       <button data-view="print" class="nav-item">Impressão</button><button data-view="devices" class="nav-item">Dispositivos</button>
       <button data-view="fiscal" class="nav-item">Exportar vendas</button>
       <button data-view="stock" class="nav-item">Estoque &amp; fichas</button>
-      <button data-view="delivery" class="nav-item">Delivery</button>
+      <button data-view="delivery" class="nav-item">Delivery</button><button data-view="units" class="nav-item">Unidades</button>
       <a class="nav-item" href="/menu.html" target="_blank" rel="noopener">Cardápio digital</a>
     </nav>
     <div class="sidebar-bottom">Operação local<br/><span>Sem assinaturas obrigatórias</span></div>
@@ -108,6 +108,26 @@
           <button class="button primary">Salvar preferência</button><a class="button secondary" href="/menu.html" target="_blank" rel="noopener">Visualizar cardápio</a></form>
       </div><div class="panel"><h2>Solicitações recebidas</h2><div id="delivery-request-list" class="data-list"></div></div>
       <div class="panel"><h2>Entregas aceitas</h2><div id="delivery-order-list" class="data-list"></div></div>
+      <div class="panel"><h2>Proteção de dados dos clientes</h2>
+      <p class="note">Anonimização sem excluir as vendas. Solicitações pendentes ou entregas não encerradas são preservadas. A limpeza por prazo exige confirmação do supervisor.</p>
+      <div class="form-row"><label>Retenção mínima (dias)<input type="number" min="30" max="3650" step="1" id="delivery-retention-days" value="90"></label>
+      <button class="button secondary" id="delivery-purge" type="button">Anonimizar concluídos antigos</button></div>
+      <p class="note" id="delivery-privacy-report"></p></div>
+    </section>
+    <section id="view-units" class="view">
+      <div class="panel">
+        <div class="section-head"><div><span class="eyebrow">SELF-HOSTED · SEM DADOS DE CLIENTES</span><h2>Consolidação multiunidade</h2></div>
+        <button class="button secondary" id="sync-refresh" type="button">Atualizar</button></div>
+        <p class="note">Sincronização manual por arquivos JSON versionados. Cada loja mantém seu próprio banco e estoque. A importação agrega indicadores financeiros, não copia pedidos nem movimentações.</p>
+        <div class="form-row">
+          <button class="button primary" id="sync-export" type="button">Exportar resumo da loja</button>
+          <label>Arquivo exportado de outra loja<input type="file" accept=".json,application/json" id="sync-import-file"></label>
+          <button class="button secondary" id="sync-import" type="button">Importar resumo</button>
+        </div>
+        <p class="note">Um resumo alterado sem uma nova revisão válida será recusado. Não substitui backup e não realiza transferências entre estoques.</p>
+        <p class="metric" id="sync-summary"></p><div id="sync-unit-list" class="data-list"></div>
+      </div>
+      <div class="panel"><h2>Conflitos de sincronização</h2><p class="note">Um conflito não sobrescreve dados. Localize o pacote correto antes de descartá-lo.</p><div id="sync-conflict-list" class="data-list"></div></div>
     </section>
     <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>
     <section id="view-cash" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2>Sessão do caixa</h2></div></div><div id="cash-summary" class="metric"></div>
