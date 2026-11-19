@@ -49,6 +49,10 @@ export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
 }
 export function deliveryRead(db,method,route){
   if(method!=='GET')return null;
+  if(route==='/api/delivery/settings'){
+    const setting=db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get();
+    return {status:200,body:{enabled:setting?.enabled===1}};
+  }
   if(route==='/api/delivery/requests'){
     const requests=db.prepare("SELECT id,customer_name AS customerName,phone,address,note,total_cents AS totalCents,status,accepted_order_id AS orderId,created_at AS createdAt,decided_at AS decidedAt FROM delivery_request WHERE restaurant_id='r-local' ORDER BY created_at DESC,id DESC LIMIT 100").all();
     return {status:200,body:{requests}};
@@ -68,6 +72,12 @@ export function deliveryRead(db,method,route){
 }
 export function deliveryWrite(db,method,route,body,h){
   if(method!=='POST')return null;
+  if(route==='/api/delivery/settings')return h.transact(db,route,body,()=>{
+    if(typeof body.enabled!=='boolean')h.bad('Informe enabled como verdadeiro ou falso');
+    db.prepare("UPDATE delivery_public_setting SET enabled=? WHERE id='local'").run(body.enabled?1:0);
+    h.audit(db,'r-local','PUBLIC_MENU_TOGGLED',{enabled:body.enabled});
+    return {enabled:body.enabled};
+  });
   const accept=route.match(/^\/api\/delivery\/requests\/([^/]+)\/accept$/);
   if(accept)return h.transact(db,route,body,()=>{
     const request=db.prepare('SELECT * FROM delivery_request WHERE id=?').get(accept[1]);

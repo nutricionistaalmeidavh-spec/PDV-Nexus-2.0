@@ -133,7 +133,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   const operatorAuth=createOperatorAuth(db);
   const pairing=createDevicePairing(db);
   const publicRequests=createPublicRequests(db);
-  const publicEnabled=publicMenuEnabled===true;
+  const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false;
   const sendingPrintJobs=new Set();
   const kitchenListeners=new Set();
@@ -165,7 +165,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
         if(route.startsWith('/api/public/')){
-          if(!publicEnabled)return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
+          if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
           const found=publicRead(db,method,route);
           if(found)return response(res,found.status,found.body);
           if(method==='POST'&&route==='/api/public/delivery/requests'){
