@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Cardápio digital | PDV Nexus 2.0</title><link rel="stylesheet" href="/menu.css"></head>
+<body>
+<header class="menu-header"><div class="menu-brand"><div class="brand-symbol">N</div><div><strong>Cardápio digital</strong><small>PDV Nexus 2.0 · sem pagamento online obrigatório</small></div></div><span class="menu-tag">Atendimento local</span></header>
+<main class="menu-container">
+<section class="intro"><span class="eyebrow">CARDÁPIO DO ESTABELECIMENTO</span><h1>Escolha seus produtos</h1><p>Envie uma solicitação para avaliação da loja. A solicitação não confirma a venda nem processa pagamentos.</p></section>
+<p id="menu-alert" class="menu-alert" role="status" aria-live="polite" hidden></p>
+<div class="menu-layout"><section><h2>Produtos disponíveis</h2><div id="menu-items" class="menu-items"><p>Carregando cardápio...</p></div></section>
+<section class="order-panel"><h2>Sua solicitação</h2><div id="menu-cart"><p class="muted">Adicione produtos para continuar.</p></div><div class="menu-total"><span>Total estimado dos itens</span><strong id="menu-total">R$ 0,00</strong></div>
+<form id="menu-checkout"><label>Nome para contato<input name="customerName" maxlength="100" minlength="2" autocomplete="name" required></label>
+<label>Telefone para retorno<input name="phone" type="tel" maxlength="20" autocomplete="tel" required></label>
+<label>Endereço de entrega<input name="address" maxlength="240" minlength="10" autocomplete="street-address" required></label>
+<label>Observações<textarea name="note" maxlength="240" rows="2" placeholder="Referências para o entregador (opcional)"></textarea></label>
+<p class="muted">Os dados são utilizados apenas para tratar a solicitação e ficam armazenados no servidor local da loja. A disponibilidade, frete e pagamento serão confirmados pelo estabelecimento.</p>
+<button id="send-request" class="primary" type="submit">Enviar solicitação</button></form></section></div>
+<footer>Cardápio digital não fiscal · Nenhuma transação é cobrada por este formulário.</footer>
+</main><script src="/menu.js" defer></script></body></html>
