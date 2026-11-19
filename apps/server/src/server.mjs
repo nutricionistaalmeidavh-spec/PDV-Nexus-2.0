@@ -20,6 +20,7 @@ import { refundWrite } from './refunds.mjs';
 import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
 
 const publicDir = fileURLToPath(new URL('../../web/public/', import.meta.url));
+const reactDistDir = fileURLToPath(new URL('../../react-ui/dist/', import.meta.url));
 const actorId = 'operator-local';
 const stamp = () => new Date().toISOString();
 
@@ -439,6 +440,26 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         return response(res,out.status,out.body);
       }
       if(method!=='GET') return response(res,405,{code:'METHOD_NOT_ALLOWED'});
+      // Nova UI do Electron: caminho próprio, sem mudar o legado/PWA/API.
+      // Apenas o output estático assinado pelo build local do Vite é servido.
+      if(route==='/ui'||route==='/ui/'||route.startsWith('/ui/assets/')){
+        const relative=route.startsWith('/ui/assets/')?route.slice('/ui/'.length):'index.html';
+        if(relative!=='index.html'&&!/^assets\/[a-zA-Z0-9][a-zA-Z0-9_.-]*\.(?:js|css|png|svg|webp|ico|woff2?)$/.test(relative))
+          return response(res,404,{code:'NOT_FOUND'});
+        const target=path.join(reactDistDir,relative);
+        let info;
+        try{info=fs.lstatSync(target);}
+        catch(e){return response(res,relative==='index.html'?503:404,{code:relative==='index.html'?'UI_BUILD_REQUIRED':'NOT_FOUND'});}
+        // Não seguir links simbólicos nem servir arquivos fora de dist.
+        if(!info.isFile()||info.isSymbolicLink())return response(res,404,{code:'NOT_FOUND'});
+        const ext=path.extname(target).toLowerCase();
+        const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml','.webp':'image/webp','.ico':'image/x-icon','.woff2':'font/woff2','.woff':'font/woff'};
+        const type=types[ext];
+        if(!type)return response(res,404,{code:'NOT_FOUND'});
+        res.writeHead(200,{'content-type':type,'x-content-type-options':'nosniff','cross-origin-resource-policy':'same-origin','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",'cache-control':'no-store'});
+        fs.createReadStream(target).pipe(res);
+        return;
+      }
       const file=route==='/'?'index.html':route.slice(1);
       if(!['index.html','app.js','styles.css','menu.html','menu.js','menu.css','p2-admin.js','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
