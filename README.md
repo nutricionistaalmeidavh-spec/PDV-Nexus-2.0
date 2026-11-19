@@ -80,4 +80,12 @@ PDV_PUBLIC_PORT=3435 npm start
 
 A porta `3435` escuta somente `127.0.0.1`. Para acesso externo use um proxy reverso HTTPS gratuito e self-hosted e configure DNS/TLS separadamente. **Nunca exponha a porta administrativa 3434 à internet.** Ativar o cardápio exige ação explícita no painel ou variável de ambiente `PDV_PUBLIC_MENU_ENABLED=true`. Não compartilhe o banco SQLite entre servidores.
 
-O identificador de instalação é persistente para planejamento futuro, porém **não há sincronização multiloja**. Não requer nem integra serviços fiscais ou pagamentos pagos. Veja [escopo completo do P2](docs/P2_IMPLEMENTATION.md).
+O identificador de instalação é persistente para planejamento futuro, porém **há consolidação manual de indicadores por pacotes JSON versionados**, sem replicação operacional de pedidos/estoque/caixa. Não requer nem integra serviços fiscais ou pagamentos pagos. Veja [escopo completo do P2](docs/P2_IMPLEMENTATION.md) e [protocolo multiunidade, privacidade e QA final](docs/P2_FINALIZATION.md).
+
+### P2 — Consolidação de unidades e privacidade
+
+A aba **Unidades** permite exportar e importar resumos financeiros sem compartilhar bancos SQLite ou dados pessoais: o pacote contém dias agregados, ID de instalação, revisão e hash. Reimportar o mesmo pacote não duplica valores; versões divergentes são bloqueadas para revisão manual. **Não há sincronização operacional automática entre lojas.** O caixa, estoque e pedidos continuam locais.
+
+Em **Delivery**, o supervisor pode anonimizar solicitações rejeitadas ou atendimentos encerrados, e executar limpeza manual de dados antigos com retenção mínima de 30 dias. Tentativas repetidas de envio de pedidos usam uma chave idempotente para evitar duplicações após quedas de rede.
+
+Nenhum gateway de pagamento, emissão NFC-e ou serviço pago é necessário para o núcleo. A implantação pública exige a configuração de proxy HTTPS e revisão de privacidade pelo estabelecimento.
