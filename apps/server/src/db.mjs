@@ -19,7 +19,7 @@ export function openDatabase(dataPath = defaultDataPath()) {
 function migrate(db) {
   const current = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()
     ? new Set(db.prepare('SELECT version FROM schema_migrations').all().map(r => r.version)) : new Set();
-  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql'],[3,'003_restaurant.sql'],[4,'004_refunds.sql'],[5,'005_order_notes.sql'],[6,'006_auth_categories.sql'],[7,'007_paired_devices.sql'],[8,'008_combos_splits.sql'],[9,'009_inventory_ledger.sql'],[10,'010_delivery_requests.sql'],[11,'011_delivery_settings.sql'],[12,'012_installation_identity.sql'],[13,'013_multiunit_summary.sql'],[14,'014_delivery_privacy.sql']]) {
+  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql'],[3,'003_restaurant.sql'],[4,'004_refunds.sql'],[5,'005_order_notes.sql'],[6,'006_auth_categories.sql'],[7,'007_paired_devices.sql'],[8,'008_combos_splits.sql'],[9,'009_inventory_ledger.sql'],[10,'010_delivery_requests.sql'],[11,'011_delivery_settings.sql'],[12,'012_installation_identity.sql'],[13,'013_multiunit_summary.sql'],[14,'014_delivery_privacy.sql'],[15,'015_delivery_request_idempotency.sql']]) {
     if (current.has(version)) continue;
     db.exec('BEGIN IMMEDIATE');
     try {
