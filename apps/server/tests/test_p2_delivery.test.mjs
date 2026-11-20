@@ -17,7 +17,7 @@ async function fixture(t,{enabled=false}={}){
  }
  t.after(async()=>{await app.close();fs.rmSync(folder,{recursive:true,force:true});});
  assert.equal((await request('POST','/api/auth/setup',{username:'admin',password:'senhaMuitoForte-2026'})).status,201);
- return {request,origin};
+ return {request,origin,app};
 }
 test('cardapio publico fica fechado por padrao, sem vazamento de endereco ou pedidos',async t=>{
  const {request}=await fixture(t);
@@ -124,4 +124,18 @@ test('reenvio de solicitação delivery com a mesma chave não cria duas encomen
  assert.equal((await request('GET','/api/delivery/requests')).body.requests.length,1);
  const changed=await request('POST','/api/public/delivery/requests',{...payload,items:[{productId:product.id,quantity:1}]},true);
  assert.equal(changed.status,409);
+});
+
+test('portal atrás de proxy local respeita X-Real-IP sobrescrito e limita abuso por cliente',async t=>{
+ const {app,request}=await fixture(t,{enabled:true});
+ const product=(await request('POST','/api/products',cmd('limit-product',{name:'Café entrega',priceCents:400}))).body.product;
+ const portal=await app.startPublicPortal({port:0});
+ const payload={customerName:'Cliente da entrega',phone:'16998765432',address:'Rua Central 123',items:[{productId:product.id,quantity:1}]};
+ const send=async ip=>{
+  const r=await fetch(portal+'/api/public/delivery/requests',{method:'POST',headers:{'content-type':'application/json','x-real-ip':ip},body:JSON.stringify(payload)});
+  return r.status;
+ };
+ for(let i=0;i<8;i++)assert.equal(await send('203.0.113.11'),202);
+ assert.equal(await send('203.0.113.11'),429,'IP que abusou é limitado');
+ assert.equal(await send('203.0.113.12'),202,'cliente diferente não é bloqueado pelo IP do proxy');
 });
