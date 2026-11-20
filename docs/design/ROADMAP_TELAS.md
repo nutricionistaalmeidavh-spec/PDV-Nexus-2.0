@@ -37,15 +37,15 @@ Base: restaurantes e lanchonetes; primeira operação = venda de balcão; mesma 
 | 17 | Relatórios / financeiro | Vendas, recebimentos, conciliação e desempenho |
 | 18 | Operadores e permissões | Acesso por papéis e trilha de auditoria |
 | 19 | Servidor LAN, pareamento e backups | Configurar rede, dispositivos, backup e restauração |
-| 20 | Configuração fiscal por UF | Homologação, emissão e tratamento de contingência conforme obrigação aplicável |
+| 20 | Exportação não fiscal | CSV/JSON para processo fiscal externo, sem NF-e/NFC-e integrada |
 
 ## Contratos e atenção
 
 - Tela de finalização deve respeitar o modelo `DRAFT -> OPEN -> CLOSED` ou `CANCELLED`, sem mudar estados por estética.
-- `payment` já tem estado `PENDING/CONFIRMED/REVERSED`, mas não há fluxo operacional de pagamento.
-- Adicionais, descontos, divisão de conta, caixa e tickets de cozinha ainda exigem contratos próprios.
+- `payment` tem estados `PENDING/CONFIRMED/REVERSED` e o host já implementa recebimento manual. Gateways permanecem opt-in.
+- Adicionais, divisão por convidado, caixa e tickets de cozinha já têm contratos implementados; descontos avançados e pagamento parcial independente exigem avaliação específica.
 - A API LAN e os módulos de restaurante só devem prometer estados realmente persistidos pelo host.
-- M0.2 e M1 da PR #1 continuam o marco técnico da primeira entrega; desenhar todas as telas não equivale a implementá-las.
+- Esta tabela é o planejamento histórico das telas de 17/11/2026, não o status atual. P0–P2 estão na `main`; acompanhe [ROADMAP](../ROADMAP.md) e [HOMOLOGACAO_SELFHOSTED](../HOMOLOGACAO_SELFHOSTED.md).
 - Emitir documento fiscal legalmente exigido não é substituído por comprovante não fiscal.
 
 ## Qualidade e governança

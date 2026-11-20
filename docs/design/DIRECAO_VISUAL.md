@@ -51,4 +51,4 @@
 
 ## Código e implementação
 
-Este documento pode ser revisado independentemente de código. No momento da inspeção, a `main` tem somente `README.md`; a PR #1 (`feat/m0-foundation-20261117`) contém domínio, schema, CI e arquitetura, **sem interface**. Não alterar ou fundir a PR #1 automaticamente.
+Este documento pode ser revisado independentemente de código. Atualização (20/11/2026): a `main` já contém backend P0–P2, React e Electron. Este documento preserva a **direção visual de referência**, não um diagnóstico atual da implementação. O PNG aprovado continua fora do Git até disponibilização autorizada.
