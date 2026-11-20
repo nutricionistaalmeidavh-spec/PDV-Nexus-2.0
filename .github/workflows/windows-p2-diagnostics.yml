@@ -1,0 +1,36 @@
+name: Windows P2 focused diagnostics (no release)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/p2-operational-mirror-hardening-20261120']
+jobs:
+  escpos-and-backup:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Execute only ESC/POS + SQLite backup integration tests
+        run: node --experimental-strip-types --test apps/server/tests/test_hardware_simulation.test.mjs
+  peer-mirror:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Execute only read-only multiunit sync tests
+        run: node --experimental-strip-types --test apps/server/tests/test_p2_operational_mirror.test.mjs
+  delivery-privacy:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Execute only delivery + privacy regression tests
+        run: node --experimental-strip-types --test apps/server/tests/test_p2_delivery.test.mjs apps/server/tests/test_p2_privacy.test.mjs
