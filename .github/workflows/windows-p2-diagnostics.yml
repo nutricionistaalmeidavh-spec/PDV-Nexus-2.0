@@ -4,16 +4,26 @@ on:
   push:
     branches: ['feat/p2-operational-mirror-hardening-20261120']
 jobs:
-  escpos-and-backup:
+  escpos-tcp:
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-      - name: Execute only ESC/POS + SQLite backup integration tests
-        run: node --experimental-strip-types --test apps/server/tests/test_hardware_simulation.test.mjs
+      - name: Execute only TCP ESC/POS integration test
+        run: node --experimental-strip-types --test --test-name-pattern="simulador TCP" apps/server/tests/test_hardware_simulation.test.mjs
+  sqlite-backup:
+    runs-on: windows-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Execute only SQLite Backup API restoration test
+        run: node --experimental-strip-types --test --test-name-pattern="backup consistente" apps/server/tests/test_hardware_simulation.test.mjs
   peer-mirror:
     runs-on: windows-latest
     timeout-minutes: 5

@@ -39,9 +39,9 @@ async function tcpPrinter(t){
   socket.on('end',()=>socket.destroy());
  });
  await new Promise(resolve=>printer.listen(0,'127.0.0.1',resolve));
- t.after(async()=>{
+ t.after(()=>{
   for(const socket of sockets)socket.destroy();
-  await new Promise(resolve=>printer.close(resolve));
+  printer.close();
  });
  return {port:printer.address().port,received:()=>Buffer.concat(chunks)};
 }
