@@ -21,12 +21,13 @@ async function fixture(t){
  return {app,api,folder,file};
 }
 async function closeSale(api,name){
- const prod=(await api('POST','/api/products',cmd('product-'+name,{name,priceCents:1450}))).body.product;
+ const key=name.replace(/[^a-zA-Z0-9_-]+/g,'-');
+ const prod=(await api('POST','/api/products',cmd('product-'+key,{name,priceCents:1450}))).body.product;
  assert.equal((await api('POST','/api/cash/open',cmd('cash',{openingCents:5000}))).status,201);
- const order=(await api('POST','/api/orders',cmd('order-'+name,{serviceMode:'counter'}))).body.order;
- assert.equal((await api('POST','/api/orders/'+order.id+'/lines',cmd('line-'+name,{productId:prod.id,quantity:2,expectedRevision:0}))).status,200);
- assert.equal((await api('POST','/api/orders/'+order.id+'/confirm',cmd('confirm-'+name,{expectedRevision:1}))).status,200);
- assert.equal((await api('POST','/api/orders/'+order.id+'/close',cmd('close-'+name,{expectedRevision:2,payments:[{method:'cash',amountCents:2900,tenderedCents:3000}]}))).status,200);
+ const order=(await api('POST','/api/orders',cmd('order-'+key,{serviceMode:'counter'}))).body.order;
+ assert.equal((await api('POST','/api/orders/'+order.id+'/lines',cmd('line-'+key,{productId:prod.id,quantity:2,expectedRevision:0}))).status,200);
+ assert.equal((await api('POST','/api/orders/'+order.id+'/confirm',cmd('confirm-'+key,{expectedRevision:1}))).status,200);
+ assert.equal((await api('POST','/api/orders/'+order.id+'/close',cmd('close-'+key,{expectedRevision:2,payments:[{method:'cash',amountCents:2900,tenderedCents:3000}]}))).status,200);
  return order.id;
 }
 async function tcpPrinter(t){
