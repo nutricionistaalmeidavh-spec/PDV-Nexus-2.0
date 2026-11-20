@@ -66,13 +66,20 @@ test('simulador TCP recebe bytes ESC/POS não fiscais e reenvio não duplica tra
  assert.equal((await api('GET','/api/print/jobs')).body.jobs[0].status,'DONE');
 });
 test('backup consistente restaura pedidos, histórico de pagamento e fila da impressão',async t=>{
+ console.log('BACKUP_STAGE fixture');
  const {api,app,folder}=await fixture(t);
+ console.log('BACKUP_STAGE sale');
  const orderId=await closeSale(api,'Backup QA');
  const target=path.join(folder,'restored.sqlite');
+ console.log('BACKUP_STAGE begin-copy');
  await app.backup(target);
+ console.log('BACKUP_STAGE end-copy');
  assert.ok(fs.statSync(target).size>0);
+ console.log('BACKUP_STAGE begin-restore');
  const restored=createApp({dataPath:target});
+ console.log('BACKUP_STAGE end-restore');
  const restoredOrigin=await restored.listen({port:0});
+ console.log('BACKUP_STAGE restored-listening');
  t.after(async()=>restored.close());
  const noSession=await fetch(restoredOrigin+'/api/orders');
  assert.equal(noSession.status,401);
@@ -87,4 +94,5 @@ test('backup consistente restaura pedidos, histórico de pagamento e fila da imp
  const saved=await req('/api/orders/'+orderId);
  assert.equal(saved.body.order.payments[0].state,'CONFIRMED');
  assert.equal(saved.body.order.totalCents,2900);
+ console.log('BACKUP_STAGE assertions-complete');
 });
