@@ -127,6 +127,14 @@
         <p class="note">Um resumo alterado sem uma nova revisão válida será recusado. Não substitui backup e não realiza transferências entre estoques.</p>
         <p class="metric" id="sync-summary"></p><div id="sync-unit-list" class="data-list"></div>
       </div>
+      <div class="panel"><h2>Espelhos automáticos — somente leitura</h2>
+        <p class="note">Opcional: o servidor consulta unidades autorizadas por HTTPS, mantendo uma cópia de consulta dos pedidos, produtos e saldos. Nada é lançado no caixa/estoque desta instalação. A configuração das unidades remotas fica fora do aplicativo, em variáveis do servidor.</p>
+        <div class="form-row"><button id="mirror-pull" class="button secondary" type="button">Consultar unidades agora</button>
+          <button id="mirror-refresh" class="button ghost" type="button">Atualizar espelhos</button></div>
+        <p id="mirror-status" class="note" aria-live="polite"></p>
+        <div id="mirror-source-list" class="data-list"></div>
+        <div id="mirror-peer-list" class="data-list"></div>
+      </div>
       <div class="panel"><h2>Conflitos de sincronização</h2><p class="note">Um conflito não sobrescreve dados. Localize o pacote correto antes de descartá-lo.</p><div id="sync-conflict-list" class="data-list"></div></div>
     </section>
     <section id="view-history" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Pedidos recentes</h2></div></div><div id="history-list" class="data-list"></div></div></section>

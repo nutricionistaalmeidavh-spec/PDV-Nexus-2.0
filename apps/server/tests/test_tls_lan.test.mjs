@@ -6,8 +6,9 @@ import path from 'node:path';
 import https from 'node:https';
 import {execFileSync} from 'node:child_process';
 import {createApp} from '../src/server.mjs';
+import {roleAllows} from '../src/lan-security.mjs';
 
-const token='a'.repeat(64), kitchenToken='b'.repeat(64);
+const token='a'.repeat(64), kitchenToken='b'.repeat(64), mirrorToken='c'.repeat(64);
 function lanIp(){
   return Object.values(os.networkInterfaces()).flat().find(x=>x?.family==='IPv4'&&!x.internal&&/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.address))?.address;
 }
@@ -30,7 +31,7 @@ test('HTTPS LAN exige credencial e restringe garçom/cozinha no host real',async
   let app;
   try{
     execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-subj','/CN=localhost','-days','1'],{stdio:'ignore'});
-    app=createApp({dataPath:path.join(folder,'db.sqlite'),lan:{certPath:cert,keyPath:key,tokens:{waiter:token,kitchen:kitchenToken}}});
+    app=createApp({dataPath:path.join(folder,'db.sqlite'),lan:{certPath:cert,keyPath:key,tokens:{waiter:token,kitchen:kitchenToken,mirror:mirrorToken}}});
     const origin=await app.listen({host:'0.0.0.0',port:0});
     const port=Number(new URL(origin).port);
     assert.equal((await request(ip,port,'/api/tables')).status,401);
@@ -39,7 +40,18 @@ test('HTTPS LAN exige credencial e restringe garçom/cozinha no host real',async
     assert.equal((await request(ip,port,'/api/kitchen/tickets',kitchenToken)).status,200);
     assert.equal((await request(ip,port,'/api/cash/current',token)).status,403);
     assert.equal((await request(ip,port,'/api/tables','x'.repeat(64))).status,401);
+    assert.equal((await request(ip,port,'/api/sync/operational/export',mirrorToken)).status,200);
+    assert.equal((await request(ip,port,'/api/orders',mirrorToken)).status,403);
+    assert.equal((await request(ip,port,'/api/sync/operational/peers',mirrorToken)).status,403);
   } finally {
     if(app)await app.close();fs.rmSync(folder,{recursive:true,force:true});
   }
+});
+
+test('papel LAN mirror é estritamente somente leitura do export de sua unidade',()=>{
+ assert.equal(roleAllows('mirror','GET','/api/sync/operational/export'),true);
+ for(const [method,route] of [['GET','/api/orders'],['GET','/api/sync/operational/peers'],
+   ['POST','/api/sync/operational/import'],['POST','/api/orders'],['GET','/api/exports/sales.json']]){
+  assert.equal(roleAllows('mirror',method,route),false,method+' '+route);
+ }
 });

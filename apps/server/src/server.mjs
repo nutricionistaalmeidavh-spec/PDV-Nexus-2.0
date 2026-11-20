@@ -14,6 +14,7 @@ import {inventoryRead,inventoryWrite,snapshotLineRecipe,consumeStockForOrder} fr
 import {publicRead,createPublicRequests,deliveryRead,deliveryWrite} from './delivery.mjs';
 import {installationRead} from './install-identity.mjs';
 import {syncRead,syncWrite} from './multiunit-sync.mjs';
+import {operationalRead,operationalWrite,createOperationalPoller} from './operational-mirror.mjs';
 import {privacyRead,privacyWrite} from './delivery-privacy.mjs';
 import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
@@ -129,13 +130,14 @@ async function readJson(req,maxLength=32768) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
   const operatorAuth=createOperatorAuth(db);
   const pairing=createDevicePairing(db);
+  const peerPoller=createOperationalPoller(db,operationalSync);
   const publicRequests=createPublicRequests(db);
   const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false,portalServer=null;
@@ -230,6 +232,9 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
+        if(method==='POST'&&route==='/api/sync/operational/pull')return response(res,200,await peerPoller.syncOnce());
+        const operationalResult=operationalRead(db,method,route,peerPoller);
+        if(operationalResult)return response(res,operationalResult.status,operationalResult.body);
         const syncResult=syncRead(db,method,route);
         if(syncResult)return response(res,syncResult.status,syncResult.body);
         const privacyResult=privacyRead(db,method,route);
@@ -265,7 +270,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         const restaurantResult=restaurantRead(db,method,route,{missing});
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
-        const body=await readJson(req,route==='/api/sync/import'?524288:32768);
+        const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
         if(method==='POST'&&route==='/api/pairing/start'){
           try{return response(res,201,pairing.start(body));}
           catch(e){return response(res,400,{code:'PAIRING_INVALID',message:e.message});}
@@ -276,7 +281,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         let out;
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
-        const special=syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const special=operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
@@ -478,6 +483,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     }
   }
 
+  function publicClientAddress(req){
+    const remote=req.socket.remoteAddress??'unknown';
+    // Caddy must overwrite X-Real-IP. Never trust a forwarded header from non-loopback peers.
+    const local=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote);
+    const forwarded=req.headers['x-real-ip'];
+    return local&&typeof forwarded==='string'&&net.isIP(forwarded.trim())>0?forwarded.trim():remote;
+  }
   async function publicPortalHandler(req,res){
     try{
       const route=new URL(req.url,'http://localhost').pathname;
@@ -491,7 +503,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       }
       if(method==='GET'&&['/menu.html','/menu.js','/menu.css'].includes(route)){
         const kind=route.endsWith('.html')?'text/html':route.endsWith('.js')?'text/javascript':'text/css';
-        res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',
+        res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','cross-origin-resource-policy':'same-origin',
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
         fs.createReadStream(path.join(publicDir,route.slice(1))).pipe(res);return;
       }
@@ -499,7 +511,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const found=publicRead(db,method,route);
       if(found)return response(res,found.status,found.body);
       if(method==='POST'&&route==='/api/public/delivery/requests'){
-        const body=await readJson(req),result=publicRequests.submit(body,req.socket.remoteAddress);
+        const body=await readJson(req),result=publicRequests.submit(body,publicClientAddress(req));
         return response(res,result.status,result.body);
       }
       return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
@@ -514,7 +526,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     listen({port=3434,host='127.0.0.1'}={}){return new Promise((resolve,reject)=>{
       if(!lanConfig&&host!=='127.0.0.1')return reject(new Error('A API LAN requer TLS e tokens por perfil'));
       if(lanConfig&&!['0.0.0.0','127.0.0.1'].includes(host))return reject(new Error('Host LAN não autorizado'));
-      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);resolve(origin);});
+      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();resolve(origin);});
     });},
     startPublicPortal({port=3435,host='127.0.0.1'}={}){
       if(closed)return Promise.reject(new Error('Servidor encerrado'));
@@ -532,9 +544,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         });
       });
     },
+    syncPeersOnce(){return peerPoller.syncOnce();},
     backup(dest){return createBackup(db,dest);},
     async close(){
       if(closed)return;closed=true;
+      await peerPoller.stop();
       for(const client of kitchenListeners)client.end();kitchenListeners.clear();
       if(portalServer?.listening)await new Promise(resolve=>portalServer.close(resolve));
       if(server.listening)await new Promise(resolve=>server.close(resolve));

@@ -17,7 +17,7 @@ async function fixture(t){
  await api('POST','/api/auth/setup',{username:'admin',password:'senhaSupervisora-2026'});
  const prod=(await api('POST','/api/products',cmd('prod',{name:'Lanche',priceCents:1000}))).body.product;
  async function create(){return api('POST','/api/public/delivery/requests',{customerName:'Cliente Teste',phone:'16998765432',address:'Rua dos Exemplos 123',note:'Apartamento 12',items:[{productId:prod.id,quantity:1}]},true)}
- return {api,create};
+ return {api,create,dbPath:path.join(dir,'db.sqlite'),productId:prod.id};
 }
 test('pedido pendente ou entrega não concluída não pode perder dados de contato',async t=>{
  const {api,create}=await fixture(t);
@@ -54,4 +54,26 @@ test('limpeza por prazo só remove dados de entregas concluídas/rejeitadas',asy
  assert.equal(report.status,200);
  assert.equal(report.body.pending,1);
  assert.equal(report.body.rejected,1);
+});
+
+test('anonimização remove hash de dados pessoais e mantém chave UUID como tombstone antirreenvio',async t=>{
+ const {api,dbPath,productId}=await fixture(t);
+ const data={clientRequestId:'358e22e1-7534-44d1-953d-0593fbf91cc8',
+  customerName:'Pessoa de Teste',phone:'16987654321',address:'Rua de Teste 123',note:'Apartamento 5',
+  items:[{productId,quantity:1}]};
+ const created=await api('POST','/api/public/delivery/requests',data,true);
+ assert.equal(created.status,202,JSON.stringify(created.body));
+ assert.equal((await api('POST','/api/delivery/requests/'+created.body.requestId+'/reject',cmd('reject-private',{reason:'Fora da área'}))).status,200);
+ const {DatabaseSync}=await import('node:sqlite');
+ const db=new DatabaseSync(dbPath);
+ try{
+  const before=db.prepare('SELECT request_fingerprint AS fingerprint FROM delivery_request WHERE id=?').get(created.body.requestId);
+  assert.match(before.fingerprint,/^[a-f0-9]{64}$/);
+  assert.equal((await api('POST','/api/delivery/requests/'+created.body.requestId+'/anonymize',cmd('anon-private'))).status,200);
+  const after=db.prepare('SELECT client_request_id AS clientId,request_fingerprint AS fingerprint FROM delivery_request WHERE id=?').get(created.body.requestId);
+  assert.equal(after.clientId,data.clientRequestId);
+  assert.equal(after.fingerprint,null);
+  assert.equal((await api('POST','/api/public/delivery/requests',data,true)).status,409);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM delivery_request').get().count,1);
+ }finally{db.close();}
 });

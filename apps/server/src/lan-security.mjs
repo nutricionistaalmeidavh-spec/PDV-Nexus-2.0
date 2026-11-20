@@ -2,7 +2,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 
-const ROLES=['waiter','kitchen','manager'];
+const ROLES=['waiter','kitchen','manager','mirror'];
 const sha=s=>createHash('sha256').update(s).digest();
 export function validateLanConfig(lan) {
   if(!lan) return null;
@@ -31,6 +31,7 @@ export function lanRole(req,config,dynamicRole=()=>null) {
 }
 export function roleAllows(role,method,route) {
   if(role==='local'||role==='manager')return true;
+  if(role==='mirror')return method==='GET'&&route==='/api/sync/operational/export';
   if(role==='kitchen') return (method==='GET'&&['/api/kitchen/tickets','/api/kitchen/events'].includes(route)) ||
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
