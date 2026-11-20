@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 const migrationDir = fileURLToPath(new URL('../migrations/', import.meta.url));
 export const defaultDataPath = () => path.join(os.homedir(), '.pdv-nexus-2', 'nexus.db');
@@ -43,13 +44,29 @@ function seed(db) {
 }
 
 export async function createBackup(db, destination) {
-  if (path.resolve(destination) === path.resolve(db.location())) throw new Error('Backup precisa ter outro nome');
-  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
-  await backup(db, destination);
-  const check = new DatabaseSync(destination);
-  try {
-    const integrity = check.prepare('PRAGMA integrity_check').get();
-    if (integrity.integrity_check !== 'ok') throw new Error('Backup inconsistente');
-  } finally { check.close(); }
-  return destination;
+  const target=path.resolve(destination);
+  if(target===path.resolve(db.location()))throw new Error('Backup precisa ter outro nome');
+  fs.mkdirSync(path.dirname(target),{recursive:true,mode:0o700});
+  // Nunca tocar no backup anterior até validar um novo arquivo SQLite completo.
+  const temp=path.join(path.dirname(target),'.nexus-backup-'+randomUUID()+'.sqlite');
+  try{
+    if(process.platform==='win32'){
+      // O backup assíncrono do node:sqlite pode não concluir no Windows com a conexão ativa.
+      // VACUUM INTO usa um snapshot transacional nativo do SQLite e evita worker pendente.
+      db.prepare('VACUUM INTO ?').run(temp);
+    }else{
+      await backup(db,temp);
+    }
+    const check=new DatabaseSync(temp);
+    try{
+      const integrity=check.prepare('PRAGMA integrity_check').get();
+      if(integrity.integrity_check!=='ok')throw new Error('Backup inconsistente');
+      const fk=check.prepare('PRAGMA foreign_key_check').all();
+      if(fk.length)throw new Error('Backup contém referências inválidas');
+    }finally{check.close();}
+    fs.renameSync(temp,target);
+    return target;
+  }finally{
+    fs.rmSync(temp,{force:true});
+  }
 }
