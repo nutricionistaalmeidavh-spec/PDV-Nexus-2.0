@@ -158,8 +158,9 @@ export function validatePeerOptions(options){
 export function createOperationalPoller(db,options){
  const config=validatePeerOptions(options);
  const state=config.peers.map(p=>({url:p.url,lastSuccess:null,lastError:null}));
- let timer=null,running=false;
+ let timer=null,running=false,stopped=false,stopResolver=null;
  async function syncOnce(){
+  if(stopped)return {stopped:true,ok:0,failed:0};
   if(running)return {busy:true,ok:0,failed:0};
   running=true;let ok=0,failed=0;
   try{
@@ -185,12 +186,12 @@ export function createOperationalPoller(db,options){
     }catch(e){failed++;state[i].lastError='Falha de conexão, validação ou revisão do peer';}
    }
    return {ok,failed};
-  }finally{running=false;}
+  }finally{running=false;if(stopResolver){stopResolver();stopResolver=null;}}
  }
  function start(){
   if(!timer&&config.peers.length){timer=setInterval(()=>void syncOnce(),config.intervalMs);timer.unref?.();}
  }
- function stop(){if(timer)clearInterval(timer);timer=null;}
+ async function stop(){stopped=true;if(timer)clearInterval(timer);timer=null;if(running)await new Promise(resolve=>{stopResolver=resolve});}
  function status(){return {enabled:config.peers.length>0,intervalMs:config.intervalMs,peers:state.map(s=>({...s})),mode:'HTTPS_READ_ONLY',operationalWrites:false};}
  return {start,stop,syncOnce,status};
 }
