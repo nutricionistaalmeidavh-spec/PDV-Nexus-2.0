@@ -3,7 +3,7 @@ import {createApp} from './server.mjs';
 const env=process.env;
 const lanHost=env.PDV_LAN_HOST;
 const tokens={};
-for(const role of ['waiter','kitchen','manager']) {
+for(const role of ['waiter','kitchen','manager','mirror']) {
   const variable=`PDV_LAN_${role.toUpperCase()}_TOKEN`;
   if(env[variable])tokens[role]=env[variable];
 }
