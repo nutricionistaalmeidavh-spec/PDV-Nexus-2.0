@@ -31,12 +31,18 @@ async function closeSale(api,name){
  return order.id;
 }
 async function tcpPrinter(t){
- let chunks=[];
+ const chunks=[],sockets=new Set();
  const printer=net.createServer(socket=>{
+  sockets.add(socket);
+  socket.once('close',()=>sockets.delete(socket));
   socket.on('data',part=>chunks.push(part));
+  socket.on('end',()=>socket.destroy());
  });
  await new Promise(resolve=>printer.listen(0,'127.0.0.1',resolve));
- t.after(()=>new Promise(resolve=>printer.close(resolve)));
+ t.after(async()=>{
+  for(const socket of sockets)socket.destroy();
+  await new Promise(resolve=>printer.close(resolve));
+ });
  return {port:printer.address().port,received:()=>Buffer.concat(chunks)};
 }
 test('simulador TCP recebe bytes ESC/POS não fiscais e reenvio não duplica trabalho impresso',async t=>{
