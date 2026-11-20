@@ -11,7 +11,7 @@ function eligible(db,id){
 }
 function anonymize(db,id){
  const stamp=now();
- db.prepare("UPDATE delivery_request SET customer_name='Cliente anonimizado',phone='00000000000',address='Endereço anonimizado',note='',decision_reason='',anonymized_at=? WHERE id=? AND anonymized_at IS NULL")
+ db.prepare("UPDATE delivery_request SET customer_name='Cliente anonimizado',phone='00000000000',address='Endereço anonimizado',note='',decision_reason='',request_fingerprint=NULL,anonymized_at=? WHERE id=? AND anonymized_at IS NULL")
    .run(stamp,id);
  // A rejected-delivery audit may contain an operator-entered reason; do not retain its free text.
  db.prepare("UPDATE audit_log SET payload_json='{\"redacted\":true}' WHERE aggregate_id=? AND action='DELIVERY_REJECTED'").run(id);

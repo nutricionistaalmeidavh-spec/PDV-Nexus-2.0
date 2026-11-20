@@ -483,6 +483,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     }
   }
 
+  function publicClientAddress(req){
+    const remote=req.socket.remoteAddress??'unknown';
+    // Caddy must overwrite X-Real-IP. Never trust a forwarded header from non-loopback peers.
+    const local=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote);
+    const forwarded=req.headers['x-real-ip'];
+    return local&&typeof forwarded==='string'&&net.isIP(forwarded.trim())>0?forwarded.trim():remote;
+  }
   async function publicPortalHandler(req,res){
     try{
       const route=new URL(req.url,'http://localhost').pathname;
@@ -496,7 +503,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       }
       if(method==='GET'&&['/menu.html','/menu.js','/menu.css'].includes(route)){
         const kind=route.endsWith('.html')?'text/html':route.endsWith('.js')?'text/javascript':'text/css';
-        res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',
+        res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','cross-origin-resource-policy':'same-origin',
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
         fs.createReadStream(path.join(publicDir,route.slice(1))).pipe(res);return;
       }
@@ -504,7 +511,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const found=publicRead(db,method,route);
       if(found)return response(res,found.status,found.body);
       if(method==='POST'&&route==='/api/public/delivery/requests'){
-        const body=await readJson(req),result=publicRequests.submit(body,req.socket.remoteAddress);
+        const body=await readJson(req),result=publicRequests.submit(body,publicClientAddress(req));
         return response(res,result.status,result.body);
       }
       return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
