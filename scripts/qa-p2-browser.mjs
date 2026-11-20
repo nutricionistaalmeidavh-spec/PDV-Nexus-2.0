@@ -81,6 +81,8 @@ try{
  await snap('13-p2-delivery-aceito');
  await page.locator('[data-view="units"]').click();
  await page.waitForFunction(()=>document.querySelector('#sync-summary')?.textContent.includes('Unidades:'));
+ await page.waitForFunction(()=>document.querySelector('#mirror-status')?.textContent.includes('Desativado'));
+ assert.equal(await page.locator('#mirror-pull').isDisabled(),true);
  const [unitFile]=await Promise.all([page.waitForEvent('download'),page.locator('#sync-export').click()]);
  const packet=JSON.parse(fs.readFileSync(await unitFile.path(),'utf8'));
  assert.equal(packet.documentType,'PDV_NEXUS_UNIT_SUMMARY');
