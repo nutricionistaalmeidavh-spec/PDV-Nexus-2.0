@@ -66,33 +66,31 @@ test('simulador TCP recebe bytes ESC/POS não fiscais e reenvio não duplica tra
  assert.equal((await api('GET','/api/print/jobs')).body.jobs[0].status,'DONE');
 });
 test('backup consistente restaura pedidos, histórico de pagamento e fila da impressão',async t=>{
- console.log('BACKUP_STAGE fixture');
  const {api,app,folder}=await fixture(t);
- console.log('BACKUP_STAGE sale');
  const orderId=await closeSale(api,'Backup QA');
  const target=path.join(folder,'restored.sqlite');
- console.log('BACKUP_STAGE begin-copy');
  await app.backup(target);
- console.log('BACKUP_STAGE end-copy');
  assert.ok(fs.statSync(target).size>0);
- console.log('BACKUP_STAGE begin-restore');
- const restored=createApp({dataPath:target});
- console.log('BACKUP_STAGE end-restore');
- const restoredOrigin=await restored.listen({port:0});
- console.log('BACKUP_STAGE restored-listening');
- t.after(async()=>restored.close());
- const noSession=await fetch(restoredOrigin+'/api/orders');
- assert.equal(noSession.status,401);
- const login=await fetch(restoredOrigin+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaSupervisora-2026'})});
- assert.equal(login.status,200);
- const cookie=login.headers.get('set-cookie').split(';')[0];
- const req=async route=>{const r=await fetch(restoredOrigin+route,{headers:{cookie}});return {status:r.status,body:await r.json()};};
- const orders=await req('/api/orders');
- assert.equal(orders.status,200);
- assert.ok(orders.body.orders.some(o=>o.id===orderId&&o.status==='CLOSED'));
- assert.equal((await req('/api/print/jobs')).body.jobs.length,1);
- const saved=await req('/api/orders/'+orderId);
- assert.equal(saved.body.order.payments[0].state,'CONFIRMED');
- assert.equal(saved.body.order.totalCents,2900);
- console.log('BACKUP_STAGE assertions-complete');
+ let restored;
+ try{
+   restored=createApp({dataPath:target});
+   const restoredOrigin=await restored.listen({port:0});
+   const noSession=await fetch(restoredOrigin+'/api/orders');
+   assert.equal(noSession.status,401);
+   const login=await fetch(restoredOrigin+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'senhaSupervisora-2026'})});
+   assert.equal(login.status,200);
+   const cookie=login.headers.get('set-cookie').split(';')[0];
+   const req=async route=>{const r=await fetch(restoredOrigin+route,{headers:{cookie}});return {status:r.status,body:await r.json()};};
+   const orders=await req('/api/orders');
+   assert.equal(orders.status,200);
+   assert.ok(orders.body.orders.some(o=>o.id===orderId&&o.status==='CLOSED'));
+   assert.equal((await req('/api/print/jobs')).body.jobs.length,1);
+   const saved=await req('/api/orders/'+orderId);
+   assert.equal(saved.body.order.payments[0].state,'CONFIRMED');
+   assert.equal(saved.body.order.totalCents,2900);
+ }finally{
+   // Windows keeps an open SQLite file locked. Close the restored host BEFORE
+   // the primary fixture's t.after hook removes the test directory.
+   if(restored)await restored.close();
+ }
 });
