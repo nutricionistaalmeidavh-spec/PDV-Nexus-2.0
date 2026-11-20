@@ -2,7 +2,7 @@ name: React UI — checks sem release
 on:
   pull_request:
   push:
-    branches: ['feat/react-ui-*', 'feat/react-electron-*']
+    branches: ['feat/react-ui-*', 'feat/react-electron-*', 'feat/p2-operational-mirror-*']
   workflow_dispatch:
 jobs:
   react-ui:

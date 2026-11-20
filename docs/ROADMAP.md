@@ -63,3 +63,13 @@ Detalhes e limites: [P2_IMPLEMENTATION.md](P2_IMPLEMENTATION.md) e [P2_FINALIZAT
 ## Gates obrigatórios
 
 **Sem merge, release, publicação nem licença de produção sem autorização.** Nenhuma chave/secret pode entrar no Git. `npm test` precisa passar. QA de hardware não pode ser inferido de testes simulados. A responsabilidade por documentos fiscais legalmente exigidos permanece no fluxo externo. O core permanece gratuito, open source na stack e self-hosted, sem serviços pagos obrigatórios.
+
+
+### Extensão de homologação — 20/11/2026
+
+- [x] Espelhos operacionais automáticos **somente leitura**, opt-in e HTTPS, com papéis e validação de revisão (não são operações distribuídas de escrita).
+- [x] Simulador de impressão TCP ESC/POS e backup/restauração de venda no CI.
+- [ ] Periféricos físicos, instalação real Windows, mobile real e publicação HTTPS validada em ambiente do estabelecimento.
+- [ ] Replicação bidirecional multiwriter de pedidos e estoque: **não implementada**, necessita arquitetura/escopo separado.
+
+Instruções: [Homologação self-hosted](HOMOLOGACAO_SELFHOSTED.md).

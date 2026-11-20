@@ -89,3 +89,7 @@ A aba **Unidades** permite exportar e importar resumos financeiros sem compartil
 Em **Delivery**, o supervisor pode anonimizar solicitações rejeitadas ou atendimentos encerrados, e executar limpeza manual de dados antigos com retenção mínima de 30 dias. Tentativas repetidas de envio de pedidos usam uma chave idempotente para evitar duplicações após quedas de rede.
 
 Nenhum gateway de pagamento, emissão NFC-e ou serviço pago é necessário para o núcleo. A implantação pública exige a configuração de proxy HTTPS e revisão de privacidade pelo estabelecimento.
+
+### Opcional: espelhos operacionais de outras unidades
+
+O supervisor pode habilitar consultas automáticas por HTTPS à LAN/VPN privada para visualizar pedidos, produtos e saldos de **outras** unidades. São espelhos de leitura, sem lançar vendas ou estoque no banco local e sem API paga. O recurso permanece desativado por padrão; use tokens específicos de leitura, certificados confiáveis e configure peers fora do Git. Veja [guia de homologação](docs/HOMOLOGACAO_SELFHOSTED.md).

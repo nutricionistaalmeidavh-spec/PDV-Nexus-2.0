@@ -37,3 +37,7 @@ CI verde não equivale a instalação homologada. Não liberar a versão a clien
 - [ ] Manual: informar política de retenção e testar HTTPS do proxy reverso, privacidade e carga de múltiplos clientes no ambiente final.
 
 O P2 disponibiliza consolidação por arquivos, não replicação distribuída de pedidos/estoques em tempo real. Não liberar portal público sem revisão de segurança e LGPD.
+
+## Hardware e implantação self-hosted — QA estendido
+
+Simulação TCP ESC/POS e recuperação de SQLite automatizadas não representam teste de impressoras USB, gavetas, balanças ou instalação física. Consulte [HOMOLOGACAO_SELFHOSTED.md](HOMOLOGACAO_SELFHOSTED.md) para critérios por equipamento, proxy HTTPS e painel de espelhos multiunidade. Não publicar release sem validar os itens necessários no estabelecimento.
