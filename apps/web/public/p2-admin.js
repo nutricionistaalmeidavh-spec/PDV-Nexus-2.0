@@ -66,7 +66,28 @@ async function renderDelivery(){
 }
 
 async function renderUnits(){
- const [summary,conflicts]=await Promise.all([api('GET','/api/sync/units'),api('GET','/api/sync/conflicts')]);
+ const [summary,conflicts,mirrorStatus,mirrorPeers]=await Promise.all([api('GET','/api/sync/units'),api('GET','/api/sync/conflicts'),api('GET','/api/sync/operational/status'),api('GET','/api/sync/operational/peers')]);
+ $('mirror-status').textContent=mirrorStatus.enabled?
+   'Ativado · consulta programada a cada '+Math.round(mirrorStatus.intervalMs/1000)+' s · espelho somente leitura':
+   'Desativado por padrão · configure unidades HTTPS no servidor para ativar';
+ $('mirror-pull').disabled=!mirrorStatus.enabled;
+ const sources=$('mirror-source-list');sources.replaceChildren();
+ for(const source of mirrorStatus.peers){
+   const item=node('div','data-row'),info=node('div');
+   info.append(node('strong','',source.url),node('small','',source.lastError||(
+     source.lastSuccess?'Última consulta: '+new Date(source.lastSuccess).toLocaleString('pt-BR'):'Nenhuma consulta concluída')));
+   item.append(info);sources.append(item);
+ }
+ const peers=$('mirror-peer-list');peers.replaceChildren();
+ if(!mirrorPeers.peers.length)peers.append(node('p','note','Nenhum espelho disponível. O estoque e os pedidos locais continuam independentes.'));
+ for(const peer of mirrorPeers.peers){
+   const card=node('div','data-row'),info=node('div');
+   const total=peer.orders.filter(o=>o.status==='CLOSED').reduce((sum,o)=>sum+o.totalCents,0);
+   info.append(node('strong','',peer.unitId+' · revisão '+peer.revision),
+     node('small','',peer.orders.length+' pedidos · '+peer.products.length+' produtos · '+peer.stock.length+' ingredientes · vendas fechadas '+money(total)),
+     node('small','','Recebido: '+new Date(peer.receivedAt).toLocaleString('pt-BR')+(peer.gapDetected?' · revisões intermediárias não recebidas':'')));
+   card.append(info);peers.append(card);
+ }
  $('sync-summary').textContent='Unidades: '+summary.units.length+' · Vendas brutas consolidadas: '+money(summary.totals.grossSalesCents)+' · CMV: '+money(summary.totals.cogsCents);
  const units=$('sync-unit-list');units.replaceChildren();
  for(const unit of summary.units){
@@ -91,6 +112,12 @@ async function renderUnits(){
 }
 function bindUnits(){
  $('sync-refresh').onclick=()=>void run(renderUnits);
+ $('mirror-refresh').onclick=()=>void run(renderUnits);
+ $('mirror-pull').onclick=()=>void run(async()=>{
+   const result=await api('POST','/api/sync/operational/pull');
+   await renderUnits();
+   toast(result.failed?'Consultas: '+result.ok+' concluídas, '+result.failed+' indisponíveis.':'Unidades consultadas: '+result.ok,result.failed>0);
+ });
  $('sync-export').onclick=()=>void run(async()=>{
   const packet=await api('GET','/api/sync/export'),payload=JSON.stringify(packet,null,2);
   const url=URL.createObjectURL(new Blob([payload],{type:'application/json'}));
