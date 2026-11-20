@@ -127,11 +127,12 @@ export function operationalWrite(db,method,route,body,h){
  if(method!=='POST'||route!=='/api/sync/operational/import')return null;
  validate(body.snapshot,h.bad);
  if(body.snapshot.unitId===unit(db))h.bad('Não importe o espelho da própria unidade');
- return h.transact(db,route,body,()=>{
-  const result=store(db,body.snapshot,h.conflict);
-  if(result.imported)h.audit(db,result.unitId,'OPERATIONAL_MIRROR_IMPORTED',{revision:result.revision,gapDetected:result.gapDetected});
-  return result;
+ const result=h.transact(db,route,body,()=>{
+  const applied=store(db,body.snapshot,h.conflict);
+  if(applied.imported)h.audit(db,applied.unitId,'OPERATIONAL_MIRROR_IMPORTED',{revision:applied.revision,gapDetected:applied.gapDetected});
+  return applied;
  },201);
+ return result.body.imported?result:{...result,status:200};
 }
 function isPrivateHost(hostname){
  if(/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(hostname))return true;
