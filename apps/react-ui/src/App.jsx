@@ -9,6 +9,7 @@ import {DeliveryPanel,UnitsPanel} from './OperationalPanels.jsx';
 import {AdvancedStockPanel} from './AdvancedStockPanel.jsx';
 import {CatalogToolsPanel,HardwareToolsPanel} from './CatalogToolsPanel.jsx';
 import {TableOrderPanel} from './TableOrderPanel.jsx';
+import {PairDevice} from './PairDevice.jsx';
 
 const links=[
  ['venda','▣','Nova venda','Operação'],['pedidos','≡','Pedidos','Operação'],['produtos','◇','Produtos e cardápio','Operação'],
@@ -138,18 +139,39 @@ function App(){
  const [view,setView]=useState('venda'),[products,setProducts]=useState(sampleProducts),[categories,setCategories]=useState(sampleCategories.slice(1)),[orders,setOrders]=useState(sampleOrders),[tables,setTables]=useState(sampleTables),[tickets,setTickets]=useState(sampleTickets);
  const [session,setSession]=useState(null),[order,setOrder]=useState(null),[selected,setSelected]=useState(null),[modal,setModal]=useState(null),[doneOrder,setDoneOrder]=useState(null),[jobs,setJobs]=useState([]);
  const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);const working=useRef(false);
- const token=sessionStorage.getItem('pdv-nexus-token')||'';
+ const [token,setToken]=useState(()=>sessionStorage.getItem('pdv-nexus-token')||'');
+ const [pairedRole,setPairedRole]=useState(()=>sessionStorage.getItem('pdv-nexus-role')||'');
  const api=useMemo(()=>authFor(token),[token]);
- const boot=useCallback(async()=>{setMode('boot');try{const data=await request('/api/auth/status');if(data.authenticated){setUser(data.user);setMode('live');}else{setNeedsSetup(!!data.needsSetup);setMode('auth');}}catch{setMode(embedded?'offline':'demo');setError(embedded?'Host local indisponível. As vendas estão bloqueadas; reconecte o PDV.':'Host local indisponível. Interface em modo demonstrativo, sem persistência.');}},[]);
+ const deviceParam=new URLSearchParams(window.location.search).get('device');
+ const deviceRole=deviceParam==='kitchen'?'kitchen':'waiter';
+ const remote=!['localhost','127.0.0.1'].includes(window.location.hostname);
+ const boot=useCallback(async()=>{
+   setMode('boot');setError('');
+   if(remote||['waiter','kitchen'].includes(deviceParam)){
+     const existing=sessionStorage.getItem('pdv-nexus-token')||'';
+     const role=sessionStorage.getItem('pdv-nexus-role')||deviceRole;
+     if(existing&&['waiter','kitchen'].includes(role)){
+       try{await request('/api/health',{token:existing});
+         setToken(existing);setPairedRole(role);setUser({role});setMode('paired');
+         setView(role==='kitchen'?'kds':'garcom');return;
+       }catch{sessionStorage.removeItem('pdv-nexus-token');sessionStorage.removeItem('pdv-nexus-role');}
+     }
+     setMode('pairing');return;
+   }
+   try{const data=await request('/api/auth/status');
+      if(data.authenticated){setUser(data.user);setMode('live');}
+      else{setNeedsSetup(!!data.needsSetup);setMode('auth');}
+   }catch{setMode(embedded?'offline':'demo');setError(embedded?'Host local indisponível. As vendas estão bloqueadas; reconecte o PDV.':'Host local indisponível. Interface em modo demonstrativo, sem persistência.');}
+ },[deviceParam,deviceRole,remote]);
  useEffect(()=>{void boot()},[boot]);
- const refresh=useCallback(async()=>{if(mode!=='live')return;const requests=[['products','/api/products'],['categories','/api/categories'],['orders','/api/orders'],['cash','/api/cash/current'],['tables','/api/tables'],['tickets','/api/kitchen/tickets'],['print','/api/print/jobs']];const result=await Promise.allSettled(requests.map(async ([key,path])=>({key,data:await api(path)})));let failed=[];for(let i=0;i<result.length;i++){const state=result[i];if(state.status!=='fulfilled'){failed.push(requests[i][0]);continue;}const {key,data}=state.value;if(key==='products')setProducts(data.products||[]);if(key==='categories')setCategories(data.categories||[]);if(key==='orders')setOrders(data.orders||[]);if(key==='cash')setSession(data.session||null);if(key==='tables')setTables(data.tables||[]);if(key==='tickets')setTickets(data.tickets||[]);if(key==='print')setJobs(data.jobs||[]);}if(failed.length)setError(`Alguns módulos não puderam ser atualizados: ${failed.join(', ')}. Verifique permissões e conexão.`);},[api,mode]);
- useEffect(()=>{if(mode==='live')void refresh().catch(e=>setError(toStringError(e)))},[mode,refresh]);
- useEffect(()=>{if(mode!=='live'||view!=='kds')return;const timer=setInterval(()=>void api('/api/kitchen/tickets').then(d=>setTickets(d.tickets||[])).catch(e=>setError(toStringError(e))),8000);return()=>clearInterval(timer)},[mode,view,api]);
+ const refresh=useCallback(async()=>{if(mode!=='live'&&mode!=='paired')return;const requests=mode==='paired'?(pairedRole==='kitchen'?[['tickets','/api/kitchen/tickets']]:[['products','/api/products'],['orders','/api/orders'],['tables','/api/tables']]):[['products','/api/products'],['categories','/api/categories'],['orders','/api/orders'],['cash','/api/cash/current'],['tables','/api/tables'],['tickets','/api/kitchen/tickets'],['print','/api/print/jobs']];const result=await Promise.allSettled(requests.map(async ([key,path])=>({key,data:await api(path)})));let failed=[];for(let i=0;i<result.length;i++){const state=result[i];if(state.status!=='fulfilled'){failed.push(requests[i][0]);continue;}const {key,data}=state.value;if(key==='products')setProducts(data.products||[]);if(key==='categories')setCategories(data.categories||[]);if(key==='orders')setOrders(data.orders||[]);if(key==='cash')setSession(data.session||null);if(key==='tables')setTables(data.tables||[]);if(key==='tickets')setTickets(data.tickets||[]);if(key==='print')setJobs(data.jobs||[]);}if(failed.length)setError(`Alguns módulos não puderam ser atualizados: ${failed.join(', ')}. Verifique permissões e conexão.`);},[api,mode,pairedRole]);
+ useEffect(()=>{if(mode==='live'||mode==='paired')void refresh().catch(e=>setError(toStringError(e)))},[mode,refresh]);
+ useEffect(()=>{if((mode!=='live'&&mode!=='paired')||view!=='kds')return;const timer=setInterval(()=>void api('/api/kitchen/tickets').then(d=>setTickets(d.tickets||[])).catch(e=>setError(toStringError(e))),8000);return()=>clearInterval(timer)},[mode,view,api]);
  const run=useCallback(async(task)=>{if(working.current)return Promise.reject(new Error('Operação em andamento'));working.current=true;setBusy(true);setNotice('');setError('');try{return await task();}catch(e){setError(toStringError(e));throw e;}finally{working.current=false;setBusy(false);}},[]);
  const isDemo=mode==='demo';
  const navigate=id=>{setView(id);setNotice('');setError('');};
  const login=async(username,password)=>{await run(async()=>{const data=await request(needsSetup?'/api/auth/setup':'/api/auth/login',{method:'POST',body:{username,password}});setUser(data.user);setMode('live');setLoginError('');}).catch(e=>setLoginError(toStringError(e)));};
- const logout=()=>void run(async()=>{await request('/api/auth/logout',{method:'POST',body:{}});setUser(null);setMode('auth');setOrder(null);}).catch(()=>{});
+ const logout=()=>{if(mode==='paired'){sessionStorage.removeItem('pdv-nexus-token');sessionStorage.removeItem('pdv-nexus-role');setToken('');setPairedRole('');setUser(null);setOrder(null);setMode('pairing');return;}void run(async()=>{await request('/api/auth/logout',{method:'POST',body:{}});setUser(null);setMode('auth');setOrder(null);}).catch(()=>{});};
  const chooseProduct=p=>{if(order?.status==='OPEN'){setError('Pedido confirmado. Use a comanda para adicionar itens ou inicie uma nova venda.');return;}setModal({type:'product',product:p});};
  const addProduct=async(options)=>run(async()=>{
   if(isDemo){const before=!order||['CLOSED','CANCELLED'].includes(order.status)?demoOrder():order;setOrder(appendDemoLine(before,options.product,options.quantity,options));setModal(null);setNotice('Item adicionado à prévia, não salvo no banco.');return;}
@@ -175,8 +197,9 @@ function App(){
  if(mode==='boot')return <div className="loading">Conectando ao PDV Nexus local…</div>;
  if(mode==='offline')return <main className="authpage"><section className="authcard" role="alert"><h1>Caixa indisponível</h1><p>O host SQLite local não respondeu. Nenhuma venda foi registrada. O aplicativo não entra em modo demonstrativo no Electron.</p><Button kind="primary" onClick={boot}>Tentar novamente</Button></section></main>;
  if(mode==='auth')return <Login setup={needsSetup} onSubmit={login} busy={busy} error={loginError}/>;
+ if(mode==='pairing')return <PairDevice role={deviceRole} onPaired={(nextToken,role)=>{setToken(nextToken);setPairedRole(role);setUser({role});setView(role==='kitchen'?'kds':'garcom');setMode('paired');}}/>;
  const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','usuarios','integracoes','dispositivos','impressao','sistema','exportacao','primeiro-acesso']);
- const canEdit=isAdmin(user);const allowedLinks=links.filter(([id])=>!restricted.has(id)||canEdit);
+ const canEdit=mode!=='paired'&&isAdmin(user);const allowedLinks=mode==='paired'?links.filter(([id])=>pairedRole==='kitchen'?id==='kds':['garcom','divisao'].includes(id)):links.filter(([id])=>!restricted.has(id)||canEdit);
  const page=()=>{switch(view){
  case 'venda':return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>{if(!session&&!isDemo){setError('Abra o caixa antes de receber pagamento');setView('caixa');}else setModal({type:'payment'})}} onNew={()=>{setOrder(null);setView('venda')}} busy={busy} mode={mode}/>;
  case 'concluida':return <Success order={doneOrder} onNew={()=>{setOrder(null);setView('venda')}}/>;
@@ -186,7 +209,7 @@ function App(){
  case 'mesas':return <Tables tables={tables} selected={selected} onSelect={openTable} onNew={createTable} busy={busy}/>;
  case 'kds':return <Kitchen tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
  case 'garcom':return <Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/>;
- case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView('mesas');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session}/>;
+ case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':'mesas');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
  case 'geral':return <Dashboard orders={orders} session={session} tables={tables} onGo={navigate}/>;
  case 'estoque':return <div className="stack"><StockBusiness mode={mode} api={api}/><AdvancedStockPanel mode={mode} api={api}/></div>;
