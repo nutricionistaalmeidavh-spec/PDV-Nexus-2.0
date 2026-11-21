@@ -39,6 +39,14 @@ export function lineWrite(db,method,route,body,h){
       h.conflict('A produção já começou: correção exige supervisor ou gerente','KITCHEN_SUPERVISOR_REQUIRED');
     if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(orderId))
       h.conflict('Pedido já possui pagamento','ORDER_HAS_PAYMENT');
+    // Pesagem registra massa e preço congelados; edição genérica permitiria vender
+    // quantidades/preços sem atualizar medição e baixa de ingredientes.
+    if(action==='edit'&&db.prepare('SELECT 1 FROM order_line_weight WHERE line_id=?').get(lineId))
+      h.conflict('Item por peso é imutável. Cancele e pese novamente','WEIGHT_LINE_IMMUTABLE');
+    // Pizza: preservar a precificação especial; alteração de adicionais genéricos
+    // tornaria preço e snapshots de sabores/bordas inconsistentes.
+    if(action==='edit'&&db.prepare('SELECT 1 FROM order_line_pizza WHERE line_id=?').get(lineId)&&body.modifierIds!==undefined)
+      h.conflict('Pizza utiliza sabores e bordas próprios; cancele e recrie para mudar composição','PIZZA_CONFIG_LOCKED');
     let after,reason=null,message;
     if(action==='cancel'){
       reason=h.requireString(body.reason,'Motivo do cancelamento',240);
