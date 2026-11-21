@@ -38,7 +38,7 @@ export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
     for(const item of body.items){
       if(typeof item?.productId!=='string'||!Number.isSafeInteger(item.quantity)||item.quantity<1||item.quantity>20)
         return {status:400,body:{code:'INVALID_ITEMS',message:'Itens inválidos, repetidos ou quantidade excessiva'}};
-      const product=db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents FROM menu_product p JOIN menu_category c ON c.id=p.category_id WHERE p.id=? AND p.active=1 AND c.active=1 AND p.sale_unit='unit' AND NOT EXISTS(SELECT 1 FROM pizza_product z WHERE z.product_id=p.id)').get(item.productId);
+      const product=db.prepare("SELECT p.id,p.name,p.price_cents AS priceCents FROM menu_product p JOIN menu_category c ON c.id=p.category_id WHERE p.id=? AND p.active=1 AND c.active=1 AND p.sale_unit='unit' AND NOT EXISTS(SELECT 1 FROM pizza_product z WHERE z.product_id=p.id)").get(item.productId);
       if(!product)return {status:400,body:{code:'PRODUCT_UNAVAILABLE',message:'Produto indisponível'}};
       const lineTotal=product.priceCents*item.quantity;
       if(!canPay(lineTotal)||!canPay(totalCents+lineTotal))return {status:400,body:{code:'AMOUNT_TOO_LARGE',message:'Total inválido'}};
