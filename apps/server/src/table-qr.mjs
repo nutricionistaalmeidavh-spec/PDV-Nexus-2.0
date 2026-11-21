@@ -103,7 +103,7 @@ export function tableQrWrite(db,method,route,body,h){
     if(!['https:',...(isLocal?['http:']:[])].includes(base.protocol)||base.username||base.password||base.search||base.hash||base.pathname!=='/')
       h.bad('Use a origem HTTPS do portal público (HTTP apenas para localhost)');
     if(body.autoAccept!==undefined&&typeof body.autoAccept!=='boolean')h.bad('Modo de aprovação inválido');
-    if(body.autoAccept===true&&!h.supervisor)h.conflict('Autoaprovação exige supervisor','SUPERVISOR_REQUIRED');
+    if(body.autoAccept===true&&!h.supervisor)h.forbidden('Autoaprovação exige supervisor','SUPERVISOR_REQUIRED');
     const raw=randomBytes(32).toString('hex'),id=randomUUID(),now=h.stamp();
     const expiresAt=new Date(Date.now()+12*3600*1000).toISOString();
     db.prepare('UPDATE table_qr_session SET revoked_at=? WHERE order_id=? AND revoked_at IS NULL').run(now,table.orderId);
@@ -132,7 +132,9 @@ export function tableQrWrite(db,method,route,body,h){
       h.audit(db,request.order_id,'TABLE_QR_REQUEST_REJECTED',{requestId:request.id,reason});
       return {requestId:request.id,statusText:'REJECTED'};
     }
-    const order=acceptedOrder(db,request,h);
+    let order;
+    try{order=acceptedOrder(db,request,h)}
+    catch(e){if(e instanceof GuestError)h.conflict(e.message,e.code);throw e;}
     return {requestId:request.id,statusText:'ACCEPTED',order};
   });
 }
