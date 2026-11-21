@@ -26,6 +26,12 @@ import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
+import {partialPaymentRead,partialPaymentWrite} from './partial-payments.mjs';
+import {itemRefundRead,itemRefundWrite} from './item-refunds.mjs';
+import {kitchenOperationsRead,kitchenOperationsWrite} from './kitchen-operations.mjs';
+import {pizzaRead,pizzaWrite} from './pizzeria.mjs';
+import {retailAdvancedRead,retailAdvancedWrite} from './retail-advanced.mjs';
+import {captureStableScale} from './scale-capture.mjs';
 import {lineHistory,lineWrite} from './order-line-edits.mjs';
 import {tableQrRead,tableQrWrite,publicTableRead,publicTableSubmit} from './table-qr.mjs';
 import { cashWrite } from './cash-service.mjs';
@@ -53,13 +59,18 @@ function databaseOrder(db, id) {
   const row=db.prepare('SELECT * FROM sales_order WHERE id=?').get(id);
   if (!row) missing('Pedido');
   const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? AND cancelled_at IS NULL ORDER BY rowid').all(id);
-  const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
+  const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,guest,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
   for(const line of lines){
     line.modifiers=db.prepare('SELECT modifier_id AS id,name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
     line.comboComponents=db.prepare('SELECT product_id AS productId,product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid').all(line.id);
   }
   const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
-  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,lines,payments,refunded,totalCents:0};
+  for(const line of lines){
+    const frozen=db.prepare('SELECT size_name_snapshot AS sizeName,flavors_json AS flavorsJson,border_json AS borderJson,pricing_rule_snapshot AS pricingRule FROM order_line_pizza WHERE line_id=?').get(line.id);
+    if(frozen)line.pizza={sizeName:frozen.sizeName,flavors:JSON.parse(frozen.flavorsJson),border:frozen.borderJson?JSON.parse(frozen.borderJson):null,pricingRule:frozen.pricingRule};
+    line.weight=db.prepare('SELECT weight_grams AS weightGrams,price_per_kg_cents AS pricePerKgCents,source FROM order_line_weight WHERE line_id=?').get(line.id)??null;
+  }
+  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,suspended:!!row.suspended_at,lines,payments,refunded,totalCents:0};
   order.totalCents=orderTotalCents(order);
   return order;
 }
@@ -140,6 +151,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   const pairing=createDevicePairing(db);
   const peerPoller=createOperationalPoller(db,operationalSync);
   const publicRequests=createPublicRequests(db);
+  const scaleReadings=new Map();
   const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
@@ -250,7 +262,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             .sort((a,b)=>b.modifiedAt.localeCompare(a.modifiedAt)).slice(0,100):[];
           return response(res,200,{backups});
         }
-        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,p.sale_unit AS saleUnit,p.kitchen_station_id AS stationId,(SELECT 1 FROM pizza_product z WHERE z.product_id=p.id) AS isPizza,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
         if(method==='POST'&&route==='/api/sync/operational/pull')return response(res,200,await peerPoller.syncOnce());
@@ -293,7 +305,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
-        if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind='PRINT_RECEIPT' ORDER BY created_at DESC LIMIT 100").all()});
+        if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,kind,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind LIKE 'PRINT_%' ORDER BY created_at DESC LIMIT 100").all()});
         if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled,transport,device_path AS devicePath,baud_rate AS baudRate FROM printer_profile WHERE id='default'").get()??null});
         if(method==='GET'&&route==='/api/exports/status') return response(res,200,{emissionAvailable:false,exportAvailable:true,emissionScope:'external-only',mode:operationMode,warning:'Comprovantes nao fiscais. Exporte as vendas para processamento fiscal externo.'});
         if(method==='GET'&&/^\/api\/exports\/sales\.(?:csv|json)$/.test(route)){
@@ -311,12 +323,29 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         const restaurantResult=restaurantRead(db,method,route,{missing});
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
+        const extraReaders=[
+          partialPaymentRead(db,method,route,{databaseOrder}),
+          itemRefundRead(db,method,route,{databaseOrder}),
+          kitchenOperationsRead(db,method,route),
+          pizzaRead(db,method,route,{missing}),
+          retailAdvancedRead(db,method,route,{missing})
+        ];
+        const advancedRead=extraReaders.find(Boolean);
+        if(advancedRead)return response(res,advancedRead.status,advancedRead.body);
         const editedHistory=lineHistory(db,method,route,{missing});
         if(editedHistory)return response(res,editedHistory.status,editedHistory.body);
         const qrQueue=tableQrRead(db,method,route,{missing});
         if(qrQueue)return response(res,qrQueue.status,qrQueue.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
+        if(method==='POST'&&route==='/api/hardware/scale/capture'){
+          const reading=await captureStableScale({devicePath:body.devicePath,baudRate:body.baudRate??9600,brand:body.brand??'generic'});
+          for(const [id,row] of scaleReadings)if(row.expiresAt<Date.now())scaleReadings.delete(id);
+          if(scaleReadings.size>100)conflict('Muitas leituras pendentes; tente novamente');
+          const measurementId=randomUUID(),expiresAt=Date.now()+60000;
+          scaleReadings.set(measurementId,{...reading,expiresAt});
+          return response(res,200,{measurementId,weightGrams:reading.weightGrams,stable:true,expiresAt:new Date(expiresAt).toISOString(),brand:reading.brand});
+        }
         if(method==='POST'&&route==='/api/system/config'){
           const out=transactWithEvents(db,route,body,()=>{
             const displayName=requireString(body.displayName,'Nome do estabelecimento',120);
@@ -357,8 +386,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,supervisor:requestRole==='admin'||role==='manager'};
-        const special=lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,supervisor:requestRole==='admin'||role==='manager'};
+        const special=partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
         if(special){
           out=special;
           if(method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route)&&out.body?.url){
@@ -410,7 +439,12 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(order.suspended)conflict('Retome a venda suspensa','ORDER_SUSPENDED');
+            if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))
+              conflict('Comanda com pagamentos parciais não aceita novos itens','ORDER_HAS_PAYMENT');
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
+            if(product.sale_unit==='kg'||db.prepare('SELECT 1 FROM pizza_product WHERE product_id=?').get(product.id))
+              bad('Use o fluxo de peso ou de pizzaria para este produto');
             const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
             if(note===null||note.length>240)bad('Observação inválida');
             const ids=body.modifierIds??[];
@@ -445,12 +479,15 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(order.suspended)conflict('Retome a venda suspensa','ORDER_SUSPENDED');
             const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);auditForRequest(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))
+              conflict('Comanda já tem pagamento parcial; conclua pelo fluxo de convidados','PARTIAL_PAYMENTS_EXIST');
             try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
             const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
             const payments=body.payments;if(!Array.isArray(payments)||payments.length===0||payments.length>10)bad('Pagamentos inválidos');
@@ -510,14 +547,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           });
         } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
           const id=route.split('/')[4];
-          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind='PRINT_RECEIPT'").get(id);if(!job)missing('Impressão');
+          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);if(!job)missing('Impressão');
           if(job.status==='DONE'||sendingPrintJobs.has(id)) conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
-          const printer=db.prepare("SELECT * FROM printer_profile WHERE id='default' AND enabled=1").get();
+          const jobPayload=JSON.parse(job.payload_json);
+          const profileId=jobPayload.profileId??'default';
+          const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(profileId);
           if(!printer)conflict('Impressora não configurada');
           // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
           sendingPrintJobs.add(id);
           try {
-            const bytes=receiptBytes(JSON.parse(job.payload_json));
+            const bytes=receiptBytes(jobPayload);
             if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
             else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
             else await transmit(printer.host,printer.port,bytes);
