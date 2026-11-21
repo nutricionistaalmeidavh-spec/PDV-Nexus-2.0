@@ -141,8 +141,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             return response(res,route==='/api/license/trial/request'?202:200,result);
           }catch(e){throw new HttpError(e.status>=400&&e.status<600?e.status:400,'LICENSE_ERROR',e.message)}
         }
-        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!(await licenseControl.status()).active)
+        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!(await licenseControl.status()).active){
+          // Rejeitar a operação sem manter um POST parcialmente lido em keep-alive.
+          req.resume();res.shouldKeepAlive=false;
           throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
+        }
         if(route.startsWith('/api/public/')){
           if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
           const found=publicRead(db,method,route);
@@ -458,8 +461,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
         fs.createReadStream(path.join(publicDir,route.slice(1))).pipe(res);return;
       }
-      if(licenseControl.required&&method!=='GET'&&!(await licenseControl.status()).active)
+      if(licenseControl.required&&method!=='GET'&&!(await licenseControl.status()).active){
+        req.resume();res.shouldKeepAlive=false;
         throw new HttpError(402,'LICENSE_REQUIRED','Avaliação comercial encerrada: novos pedidos estão indisponíveis. Consulte os dados existentes no host.');
+      }
       if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio indisponível'});
       const found=publicRead(db,method,route);
       if(found)return response(res,found.status,found.body);
