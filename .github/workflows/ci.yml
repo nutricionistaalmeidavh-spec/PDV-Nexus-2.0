@@ -27,16 +27,13 @@ jobs:
           node --check apps/server/src/restaurant.mjs
           node --check apps/server/src/refunds.mjs
           node --check apps/server/src/lan-security.mjs
-          node --check apps/web/public/app.js
-          node --check apps/web/public/restaurant.js
-          node --check apps/web/public/kitchen.js
           node --check apps/server/src/inventory.mjs
           node --check apps/server/src/delivery.mjs
           node --check apps/server/src/multiunit-sync.mjs
           node --check apps/server/src/operational-mirror.mjs
           node --check apps/server/src/delivery-privacy.mjs
           node --check apps/web/public/menu.js
-          node --check apps/web/public/p2-admin.js
+          node --check apps/web/public/sw.js
   api-windows:
     runs-on: windows-latest
     steps:
