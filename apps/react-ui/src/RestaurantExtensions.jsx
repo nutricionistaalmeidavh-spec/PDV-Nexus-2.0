@@ -45,7 +45,7 @@ export function GuestPayments({order,api,onAction,busy,session,mode}){
     <option value="credit">Crédito (manual)</option><option value="debit">Débito (manual)</option><option value="other">Outro</option>
    </select></label>
    {method==='cash'&&<label className="field">Dinheiro entregue (R$)<input inputMode="decimal" value={tendered} onChange={e=>setTendered(e.target.value)} placeholder="Igual ao valor devido"/></label>}
-   <button type="submit" className="btn primary" disabled={busy||!session||!current||!available||mode==='demo'}>Confirmar recebimento parcial</button>
+   <button type="submit" className="btn primary" disabled={busy||!session||!current||!available||mode==='demo'}>Registrar pagamento do convidado</button>
   </form>}
   {order.status==='CLOSED'&&<p className="notice">Conta integralmente recebida e encerrada.</p>}
   {!session&&order.status==='OPEN'&&<p className="help">Abra o caixa antes de receber.</p>}
