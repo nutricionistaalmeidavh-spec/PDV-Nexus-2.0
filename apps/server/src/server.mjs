@@ -26,6 +26,8 @@ import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
+import { cashWrite } from './cash-service.mjs';
+import { receiptBytes } from './non-fiscal-service.mjs';
 import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
 
 const publicDir = fileURLToPath(new URL('../../web/public/', import.meta.url));
@@ -107,15 +109,6 @@ function isPrivateIPv4(ip) {
   if(net.isIP(ip)!==4) return false;
   const v=ip.split('.').map(Number);
   return v[0]===10 || v[0]===127 || v[0]===192&&v[1]===168 || v[0]===172&&v[1]>=16&&v[1]<=31;
-}
-function receiptBytes(payload) {
-  // ESC/POS básico, sem dependência: permitir apenas ASCII até parametrizar página de código.
-  const clean=x=>String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'?');
-  const width=38;
-  const lines=['PDV NEXUS 2.0','RECIBO DE PEDIDO - NAO FISCAL','',`Pedido ${payload.id.slice(0,8)}`, '-'.repeat(width),
-    ...payload.lines.map(l=>`${l.quantity}x ${clean(l.productName).slice(0,24)}  ${(l.unitPriceCents*l.quantity/100).toFixed(2)}`),
-    '-'.repeat(width),`TOTAL R$ ${(payload.totalCents/100).toFixed(2)}`,'','NAO SUBSTITUI DOCUMENTO FISCAL',''];
-  return Buffer.concat([Buffer.from([0x1b,0x40]),Buffer.from(lines.join('\n')+'\n\n\n','ascii'),Buffer.from([0x1d,0x56,0x01])]);
 }
 async function transmit(host,port,buffer) {
   return new Promise((resolve,reject)=>{
@@ -358,8 +351,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
-        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe};
+        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
@@ -486,31 +479,6 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const next=cancelOrder(order);writeOrder(db,next);
             db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status NOT IN ('SERVED','CANCELLED')").run(stamp(),id);
             auditForRequest(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
-          });
-        } else if(method==='POST'&&route==='/api/cash/open') {
-          out=transactWithEvents(db,route,body,()=>{
-            requireCents(body.openingCents,'Abertura');if(cashSession(db)) conflict('Já existe caixa aberto');
-            const id=randomUUID();db.prepare('INSERT INTO cash_session(id,terminal_id,opened_at,opening_amount_cents,status) VALUES(?,?,?,?,?)')
-              .run(id,'t-local',stamp(),body.openingCents,'OPEN');auditForRequest(db,id,'CASH_OPENED',{openingCents:body.openingCents});return {session:visibleCash(db)};
-          },201);
-        } else if(method==='POST'&&route==='/api/cash/movements') {
-          out=transactWithEvents(db,route,body,()=>{
-            const session=cashSession(db);if(!session)conflict('Caixa fechado');
-            if(!['SUPPLY','WITHDRAWAL'].includes(body.kind))bad('Tipo de movimentação inválido');
-            requireCents(body.amountCents,'Valor',false);
-            if(body.kind==='WITHDRAWAL'&&body.amountCents>cashExpected(db,session))bad('Sangria superior ao saldo');
-            const id=randomUUID();db.prepare('INSERT INTO cash_movement(id,session_id,kind,amount_cents,actor_id,created_at) VALUES(?,?,?,?,?,?)')
-              .run(id,session.id,body.kind,body.amountCents,requestActor,stamp());
-            auditForRequest(db,session.id,'CASH_MOVEMENT',{kind:body.kind,amountCents:body.amountCents});return {session:visibleCash(db)};
-          },201);
-        } else if(method==='POST'&&route==='/api/cash/close') {
-          out=transactWithEvents(db,route,body,()=>{
-            const session=cashSession(db);if(!session)conflict('Caixa fechado');
-            requireCents(body.countedCents,'Dinheiro contado');const expected=cashExpected(db,session);
-            db.prepare("UPDATE cash_session SET status='CLOSED',counted_amount_cents=?,expected_amount_cents=?,closed_at=? WHERE id=?")
-              .run(body.countedCents,expected,stamp(),session.id);
-            auditForRequest(db,session.id,'CASH_CLOSED',{expected,counted:body.countedCents});
-            return {id:session.id,expectedCents:expected,countedCents:body.countedCents,differenceCents:body.countedCents-expected};
           });
         } else if(method==='POST'&&route==='/api/printer') {
           out=transactWithEvents(db,route,body,()=>{
