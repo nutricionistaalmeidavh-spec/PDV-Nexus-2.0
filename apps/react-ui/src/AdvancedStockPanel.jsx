@@ -84,10 +84,10 @@ export function AdvancedStockPanel({mode,api,onChanged,reloadKey}){
     </form>
   </Section>
   <Section title="Ficha técnica por produto">
-   <label className="field">Produto<select value={productId} onChange={e=>setProductId(e.target.value)}><option value="">Selecionar produto</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+   <label className="field">Produto<select aria-label="Produto" value={productId} onChange={e=>setProductId(e.target.value)}><option value="">Selecionar produto</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
    {recipe.map(item=><Item key={item.ingredientId}><span>{ingredients.find(i=>i.id===item.ingredientId)?.name||item.ingredientId} · {milli(item.quantityMilli)}</span><button className="btn secondary" onClick={()=>setRecipe(prev=>prev.filter(x=>x.ingredientId!==item.ingredientId))}>Remover</button></Item>)}
    <div className="row wrap compact">
-     <label className="field">Ingrediente<select value={ingredientId} onChange={e=>setIngredientId(e.target.value)}><option value="">Selecionar</option>{ingredients.filter(i=>i.active).map(i=><option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}</select></label>
+     <label className="field">Ingrediente<select aria-label="Ingrediente" value={ingredientId} onChange={e=>setIngredientId(e.target.value)}><option value="">Selecionar</option>{ingredients.filter(i=>i.active).map(i=><option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}</select></label>
      <label className="field">Quantidade por produto<input type="number" step="0.001" min="0.001" value={qty} onChange={e=>setQty(e.target.value)}/></label>
      <button className="btn secondary" type="button" disabled={!ingredientId||!productId} onClick={()=>{try{const quantityMilli=numeric(qty,1000);setRecipe(prev=>[...prev.filter(i=>i.ingredientId!==ingredientId),{ingredientId,quantityMilli}]);}catch(e){setError(e.message)}}}>Adicionar à ficha</button>
      <button className="btn primary" disabled={busy||!productId} onClick={()=>void call('/api/stock/recipes/'+encodeURIComponent(productId),{items:recipe})}>Salvar ficha técnica</button>
