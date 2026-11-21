@@ -5,9 +5,9 @@ import {modifierRead,modifierWrite} from './modifier-service.mjs';
 import {kitchenRead,kitchenWrite} from './kitchen-service.mjs';
 export {dispatchKitchenTickets} from './kitchen-service.mjs';
 
-export function restaurantRead(db,method,route,h){
+export function restaurantRead(db,method,route,h,params=new URLSearchParams()){
  if(method!=='GET')return null;
- const handled=tableRead(db,method,route,h)??modifierRead(db,method,route,h)??kitchenRead(db,method,route,h);
+ const handled=tableRead(db,method,route,h)??modifierRead(db,method,route,h)??kitchenRead(db,method,route,h,params);
  if(handled)return handled;
  if(route==='/api/restaurant/summary') {
     const activeOrders=db.prepare("SELECT COUNT(*) AS n FROM sales_order WHERE status IN ('DRAFT','OPEN')").get().n;

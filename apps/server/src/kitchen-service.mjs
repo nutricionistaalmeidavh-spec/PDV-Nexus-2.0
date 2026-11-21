@@ -2,26 +2,28 @@
 import {randomUUID} from 'node:crypto';
 export function dispatchKitchenTickets(db,orderId,stamp) {
   // Uma linha de pedido gera um ticket, inclusive quando adicionada após confirmação.
-  const lines=db.prepare('SELECT id FROM order_line WHERE order_id=?').all(orderId);
-  const insert=db.prepare("INSERT OR IGNORE INTO kitchen_ticket(id,order_id,line_id,status,revision,created_at,updated_at) VALUES(?,?,?,'PENDING',0,?,?)");
+  const lines=db.prepare(`SELECT ol.id,p.kitchen_station_id AS stationId FROM order_line ol
+    JOIN menu_product p ON p.id=ol.product_id WHERE ol.order_id=? AND ol.cancelled_at IS NULL`).all(orderId);
+  const insert=db.prepare("INSERT OR IGNORE INTO kitchen_ticket(id,order_id,line_id,status,revision,created_at,updated_at,kitchen_station_id) VALUES(?,?,?,'PENDING',0,?,?,?)");
   for(const line of lines) {
     const now=stamp();
-    insert.run(randomUUID(),orderId,line.id,now,now);
+    insert.run(randomUUID(),orderId,line.id,now,now,line.stationId??null);
   }
 }
 const transitions=Object.freeze({PENDING:['PREPARING','CANCELLED'],PREPARING:['READY','CANCELLED'],READY:['SERVED','CANCELLED'],SERVED:[],CANCELLED:[]});
 export function kitchenTransitionAllowed(from,to){return Array.isArray(transitions[from])&&transitions[from].includes(to);}
-export function kitchenRead(db,method,route){
+export function kitchenRead(db,method,route,h,params=new URLSearchParams()){
  if(method!=='GET')return null;
  if(route==='/api/kitchen/tickets') {
     const tickets=db.prepare(`SELECT kt.id,kt.order_id AS orderId,kt.line_id AS lineId,kt.status,kt.revision,
-      kt.created_at AS createdAt,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
+      kt.created_at AS createdAt,kt.change_note AS changeNote,kt.kitchen_station_id AS stationId,ks.name AS stationName,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
       (SELECT group_concat(name_snapshot, ', ') FROM order_line_modifier WHERE line_id=kt.line_id) AS modifiers,
       (SELECT group_concat(quantity||'x '||product_name_snapshot, ', ') FROM order_line_combo_item WHERE line_id=kt.line_id) AS comboDetails,
       so.service_mode AS serviceMode,st.label AS tableLabel
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
-      JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id
-      WHERE kt.status IN ('PENDING','PREPARING','READY') ORDER BY kt.created_at ASC LIMIT 200`).all();
+      JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id LEFT JOIN kitchen_station ks ON ks.id=kt.kitchen_station_id
+      WHERE (kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.change_note IS NOT NULL AND kt.updated_at>=?))
+        AND (? IS NULL OR kt.kitchen_station_id=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString(),params.get('stationId'),params.get('stationId'));
     return {status:200,body:{tickets}};
   }
  return null;
