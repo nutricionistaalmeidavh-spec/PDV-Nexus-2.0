@@ -34,7 +34,7 @@ export function LicenseOnboarding({license,onActivated,onReadOnly}){
       <form onSubmit={submit} className="stack">
         <label className="field">E-mail da empresa
           <input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)}
-            maxLength={254} required disabled={busy||step==='code'}/>
+            maxLength={254} required disabled={busy||(step==='code'&&!manual)}/>
         </label>
         {step==='code'&&<label className="field">Código de seis dígitos
           <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6}
