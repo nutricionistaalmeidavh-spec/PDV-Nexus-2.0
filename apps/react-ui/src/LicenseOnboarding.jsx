@@ -4,8 +4,9 @@ import React,{useState} from 'react';
 export function LicenseOnboarding({license,onActivated,onReadOnly}){
   const [email,setEmail]=useState(license?.email||'');
   const [code,setCode]=useState('');
-  const [step,setStep]=useState('email');
-  const [manual,setManual]=useState(false);
+  const expired=['EXPIRED','SUSPENDED'].includes(license?.reason);
+  const [step,setStep]=useState(expired?'code':'email');
+  const [manual,setManual]=useState(expired);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
@@ -25,8 +26,8 @@ export function LicenseOnboarding({license,onActivated,onReadOnly}){
   return <main className="authpage">
     <section className="authcard">
       <span className="authbrand">▣ PDV Nexus <b>2.0</b></span>
-      <h1>{license?.reason==='EXPIRED'?'Avaliação encerrada':'Ative sua avaliação de 3 dias'}</h1>
-      <p className="subtext">{license?.reason==='EXPIRED'?
+      <h1>{expired?'Avaliação encerrada ou suspensa':'Ative sua avaliação de 3 dias'}</h1>
+      <p className="subtext">{expired?
         'Seu período de avaliação terminou. Os dados locais foram preservados. Informe um código comercial para continuar operando.':
         'Confirme seu e-mail para liberar 72 horas de uso da edição comercial. Nenhum cartão é necessário.'}</p>
       {license?.expiresAt&&<p className="notice" role="status">Validade da licença anterior: {new Date(license.expiresAt).toLocaleString('pt-BR')}</p>}
@@ -44,13 +45,13 @@ export function LicenseOnboarding({license,onActivated,onReadOnly}){
         <button className="btn primary block" type="submit" disabled={busy}>
           {busy?'Aguarde…':step==='email'?'Enviar código de confirmação':manual?'Ativar licença comercial':'Confirmar e ativar 3 dias'}
         </button>
-        {step==='code'&&<button type="button" className="btn secondary block" disabled={busy} onClick={()=>{setStep('email');setCode('');setNotice('');setError('')}}>Corrigir e-mail ou reenviar código</button>}
+        {step==='code'&&!expired&&<button type="button" className="btn secondary block" disabled={busy} onClick={()=>{setStep('email');setCode('');setNotice('');setError('')}}>Corrigir e-mail ou reenviar código</button>}
       </form>
       <div className="stack" style={{marginTop:16}}>
-        <button type="button" className="btn secondary block" onClick={()=>{setManual(x=>!x);setStep(manual?'email':'code');setCode('');setError('');setNotice('')}} disabled={busy}>
+        {!expired&&<button type="button" className="btn secondary block" onClick={()=>{setManual(x=>!x);setStep(manual?'email':'code');setCode('');setError('');setNotice('')}} disabled={busy}>
           {manual?'Voltar para avaliação gratuita':'Já tenho um código de licença comercial'}
-        </button>
-        {license?.reason==='EXPIRED'&&<button type="button" className="btn secondary block" onClick={onReadOnly}>
+        </button>}
+        {expired&&<button type="button" className="btn secondary block" onClick={onReadOnly}>
           Consultar meus dados e fazer backup
         </button>}
       </div>
