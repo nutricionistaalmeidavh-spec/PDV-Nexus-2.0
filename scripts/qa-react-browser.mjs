@@ -121,6 +121,10 @@ try {
  await page.setViewportSize({width:390,height:844});
  await page.goto(origin+'/ui/?embedded=1');await page.getByRole('heading',{name:'Nova venda'}).waitFor();
  await snap('react-10-mobile');
+ await page.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
+ await page.locator('.sidebar .nav-item').filter({hasText:'Mesas e comandas'}).click();
+ await page.getByRole('heading',{name:'Mapa do salão'}).waitFor();
+ await page.getByRole('button',{name:'Abrir ou fechar o menu'}).waitFor();
  // Com o host indisponível, Electron bloqueia prévia e recebimentos.
  const offline=await browser.newContext({viewport:{width:1200,height:800}});
  const offPage=await offline.newPage();
