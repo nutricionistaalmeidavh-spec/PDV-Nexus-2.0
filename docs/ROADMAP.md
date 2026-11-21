@@ -92,8 +92,10 @@ Guia de recuperação: [RESTAURACAO_E_ATUALIZACAO.md](RESTAURACAO_E_ATUALIZACAO.
 
 - [x] **P0 — Proteção/contratos:** inventário de superfícies HTTP, snapshots de pedidos, KDS, caixa, comprovante e idempotência, testes de banco e trilha de auditoria. Documento: [API_CONTRACT_BASELINE_P0.md](API_CONTRACT_BASELINE_P0.md).
 - [x] **P1 — Backend:** extração de pedidos, linhas, projeção SQLite, validações, autorização gerencial, idempotência e auditoria para serviços dedicados, preservando rotas e schema SQLite. Documento: [REFACTOR_P0_P1_20261121.md](REFACTOR_P0_P1_20261121.md).
-- [ ] **P2 — Restaurante:** isolar progressivamente demais operações de mesa/KDS com testes de concorrência (fora da PR #26).
-- [ ] **P3 — React:** extrair estado e roteamento do componente principal sem introduzir estados canônicos paralelos.
-- [ ] **P4 — Homologação:** QA físico, relatórios e aprovação de integração em ambientes reais.
+- [x] **P2 — Restaurante:** separação de mesas, adicionais e KDS em serviços transacionais e testes concorrentes (PR #29).
+- [x] **P3 — React:** telas extraídas, navegação por papel e hooks de host/KDS isolados (PR #29), sem segundo ledger.
+- [x] **P4 — Homologação automatizada:** CI, Playwright para todas as abas desktop/mobile, vídeos, prints e manifesto (PR #29). **Homologação física real permanece pendente**, sem simulá-la.
 
 Checklists [x] indicam alteração em código/teste da branch, **não** homologação física. A PR permanece separada da main até autorização de merge; workflow verde do commit final é obrigatório.
+
+Detalhes de P2–P4: [REFACTOR_P2_P3_P4_20261121.md](REFACTOR_P2_P3_P4_20261121.md). As marcações [x] são entregas de branch, sujeitas à validação da PR final; não representam merge nem release.

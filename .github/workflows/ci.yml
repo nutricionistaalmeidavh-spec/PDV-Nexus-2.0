@@ -32,6 +32,9 @@ jobs:
           node --check apps/server/src/order-lifecycle.mjs
           node --check apps/server/src/order-router.mjs
           node --check apps/server/src/restaurant.mjs
+          node --check apps/server/src/table-service.mjs
+          node --check apps/server/src/modifier-service.mjs
+          node --check apps/server/src/kitchen-service.mjs
           node --check apps/server/src/refunds.mjs
           node --check apps/server/src/lan-security.mjs
           node --check apps/server/src/inventory.mjs
