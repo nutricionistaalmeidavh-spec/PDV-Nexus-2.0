@@ -12,7 +12,7 @@ test('P2: salão, KDS, garçom e divisão usam Mantine com ações canônicas',(
   assert.ok(source.includes(label),'Faltou: '+label);
  for(const selector of ['table-card','kds-ticket','phone-preview','tables-grid','phone-products'])
   assert.ok(source.includes(selector),'Seletor legado requerido para QA: '+selector);
- assert.match(source,/onUpdate\(ticket,next\)/);
+ assert.match(source,/onUpdate\(ticket,group.next\)/);
  assert.match(source,/onOpenTable\(target\)/);
  assert.match(app,/RestaurantTables as Tables/);
  assert.match(app,/RestaurantKitchen as Kitchen/);
