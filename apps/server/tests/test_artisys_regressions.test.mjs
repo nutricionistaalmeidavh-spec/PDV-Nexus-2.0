@@ -134,7 +134,7 @@ test('P1: devolução e movimentos do caixa registram usuário real e não alter
  const db2=openDatabase(f.dataPath);
  try{
   const previous=db2.prepare('SELECT status,expected_amount_cents,counted_amount_cents FROM cash_session WHERE id=?').get(opened.id);
-  assert.deepEqual(previous,{status:'CLOSED',expected_amount_cents:10300,counted_amount_cents:10200});
+  assert.deepEqual({...previous},{status:'CLOSED',expected_amount_cents:10300,counted_amount_cents:10200});
  }finally{db2.close();}
 });
 
