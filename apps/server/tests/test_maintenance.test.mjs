@@ -38,6 +38,11 @@ test('backup sob demanda é validado e restauração offline mantém os dados',a
  assert.equal(created.status,201,JSON.stringify(created.body));
  assert.ok(fs.existsSync(created.body.path));
  assert.equal((await api('POST','/api/system/backup',body)).body.created,false);
+ const same={commandId:'concurrent-backup-safe'};
+ const parallel=await Promise.all([api('POST','/api/system/backup',same),api('POST','/api/system/backup',same)]);
+ assert.deepEqual(parallel.map(r=>r.status).sort(),[200,201]);
+ assert.equal(parallel.filter(r=>r.body.created).length,1);
+ assert.equal(parallel[0].body.filename,parallel[1].body.filename);
  const report=inspectBackup(created.body.path);
  assert.equal(report.compatible,true);
  assert.equal(report.schemaVersion,18);
