@@ -112,7 +112,7 @@ export function inventoryRead(db,method,route,params,h){
     let grossSalesCents=0,refundedCents=0,cogsCents=0;
     for(const order of orders){
       grossSalesCents=safeAdd(grossSalesCents,lines.get(order.id).gross);
-      refundedCents=safeAdd(refundedCents,order.refundCents??0);
+      refundedCents=safeAdd(refundedCents,(order.refundCents??0)+db.prepare('SELECT COALESCE(SUM(amount_cents),0) AS amount FROM order_line_refund WHERE order_id=?').get(order.id).amount);
       cogsCents=safeAdd(cogsCents,cogs.get(order.id).cost);
     }
     return {status:200,body:{period:{from:start,to:end},orders:orders.length,grossSalesCents,refundedCents,netSalesCents:grossSalesCents-refundedCents,cogsCents,grossMarginCents:grossSalesCents-refundedCents-cogsCents}};
