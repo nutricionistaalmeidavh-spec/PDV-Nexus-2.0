@@ -25,6 +25,9 @@ jobs:
             git diff --name-only --diff-filter=U
             echo 'MERGE_STATUS'
             git status --short
+            echo 'CONFLICT_MARKERS_BEGIN'
+            grep -n -C 18 -E '^(<<<<<<< |=======|>>>>>>> )' apps/react-ui/src/App.jsx apps/react-ui/src/TableOrderPanel.jsx | head -700 || true
+            echo 'CONFLICT_MARKERS_END'
             exit 1
           fi
       - name: Remove ephemeral integration workflow from resulting tree
