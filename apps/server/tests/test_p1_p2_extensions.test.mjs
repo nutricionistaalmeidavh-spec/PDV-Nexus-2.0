@@ -115,3 +115,17 @@ test('P2: suspender/retomar venda, ajustar preço com auditoria e juntar mesas s
  const merged=(await ok('POST',`/api/orders/${one.id}/merge`,cmd({expectedRevision:one.revision,sourceOrderId:two.id,expectedSourceRevision:two.revision}))).order;
  assert.equal(merged.lines.length,2);assert.equal(merged.totalCents,1850);
 });
+
+test('P2: produto marcado como kg nao pode ser vendido como unidade; cadastro preserva unidade canonica',async t=>{
+ const {api,ok}=await setup(t);
+ const kg=(await ok('POST','/api/products',cmd({name:'Castanhas a granel',priceCents:3990,saleUnit:'kg'}),201)).product;
+ const unit=(await ok('POST','/api/products',cmd({name:'Água sem gás',priceCents:500}),201)).product;
+ assert.equal(kg.saleUnit,'kg');assert.equal(unit.saleUnit,'unit');
+ const listed=await ok('GET','/api/products');
+ assert.equal(listed.products.find(p=>p.id===kg.id).saleUnit,'kg');
+ let order=(await ok('POST','/api/orders',cmd({serviceMode:'counter'}),201)).order;
+ const invalid=await api('POST',`/api/orders/${order.id}/lines`,cmd({expectedRevision:order.revision,productId:kg.id,quantity:1}));
+ assert.equal(invalid.status,404);
+ order=(await ok('POST',`/api/orders/${order.id}/lines`,cmd({expectedRevision:order.revision,productId:unit.id,quantity:1}))).order;
+ assert.equal(order.totalCents,500);
+});
