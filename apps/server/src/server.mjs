@@ -55,7 +55,7 @@ function databaseOrder(db, id) {
   const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? AND cancelled_at IS NULL ORDER BY rowid').all(id);
   const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
   for(const line of lines){
-    line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
+    line.modifiers=db.prepare('SELECT modifier_id AS id,name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
     line.comboComponents=db.prepare('SELECT product_id AS productId,product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid').all(line.id);
   }
   const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
