@@ -22,7 +22,7 @@
     "prebuild:win": "npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build",
     "prebuild:linux": "npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "main": "apps/desktop/main.cjs",
   "devDependencies": {
     "electron": "45.3.4",
