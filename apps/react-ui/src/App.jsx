@@ -231,7 +231,7 @@ function App(){
      <Burger className="nexus-mobile-burger" opened={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)} size="sm" aria-label="Abrir ou fechar o menu"/>
    </div>
  </AppShell.Header>
- <AppShell.Navbar className="sidebar"><nav aria-label="Navegação principal">
+ <AppShell.Navbar className={"sidebar "+(sidebarOpen?"nexus-sidebar-open":"nexus-sidebar-closed")}><nav aria-label="Navegação principal">
   {allowedLinks.map(([id,_icon,label,group],i)=>{const Icon=navIcons[id]||Package;return <React.Fragment key={id}>
     {(i===0||allowedLinks[i-1]?.[3]!==group)&&<div className="nav-group">{group}</div>}
     <NavLink component="button" type="button" active={view===id} variant="light"
