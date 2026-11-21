@@ -23,6 +23,7 @@ function LineEditDialog({line,api,onClose,onSave,onCancel,busy}){
  const [note,setNote]=useState(line.note||'');
  const [chosen,setChosen]=useState((line.modifiers||[]).map(m=>m.id).filter(Boolean));
  const [mods,setMods]=useState([]),[reason,setReason]=useState(''),[error,setError]=useState('');
+ const special=!!line.pizza||!!line.weight;
  useEffect(()=>{
   let live=true;
   api('/api/products/'+encodeURIComponent(line.productId)+'/modifiers').then(data=>{
@@ -46,16 +47,16 @@ function LineEditDialog({line,api,onClose,onSave,onCancel,busy}){
    <header className="modal-head"><h2>Editar item da comanda</h2><button type="button" className="btn icon" onClick={onClose} aria-label="Fechar">×</button></header>
    <div className="modal-content stack">
     <strong>{line.productName}</strong>
-    <p className="help">A cozinha recebe a correção com histórico. Alterações após início do preparo exigem supervisor.</p>
-    <label className="field">Quantidade<input type="number" min="1" max="100" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label>
-    <label className="field">Observações<textarea maxLength={240} value={note} onChange={e=>setNote(e.target.value)}/></label>
-    <div className="stack"><strong>Adicionais</strong>{mods.map(m=><label className="option-row" key={m.id}>
+    <p className="help">{special?'Produto com composição ou pesagem congelada: cancele este item e adicione novamente para alterar.':'A cozinha recebe a correção com histórico. Alterações após início do preparo exigem supervisor.'}</p>
+    {!special&&<label className="field">Quantidade<input type="number" min="1" max="100" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label>}
+    {!special&&<label className="field">Observações<textarea maxLength={240} value={note} onChange={e=>setNote(e.target.value)}/></label>}
+    {!special&&<div className="stack"><strong>Adicionais</strong>{mods.map(m=><label className="option-row" key={m.id}>
      <input type="checkbox" disabled={!m.active} checked={chosen.includes(m.id)} onChange={e=>setChosen(s=>e.target.checked?[...s,m.id]:s.filter(id=>id!==m.id))}/>
      <span>{m.name}{!m.active?' (indisponível)':''}</span><strong>+ {money(m.priceCents)}</strong>
-    </label>)}</div>
+    </label>)}</div>}
     {error&&<p className="errorbox" role="alert">{error}</p>}
     <div className="row wrap end"><button className="btn secondary" type="button" onClick={onClose}>Voltar</button>
-     <button className="btn primary" disabled={busy} onClick={()=>void save()}>Salvar correção</button></div>
+     {!special&&<button className="btn primary" disabled={busy} onClick={()=>void save()}>Salvar correção</button>}</div>
     <div className="stack" style={{borderTop:'1px solid #eee',paddingTop:12}}>
      <label className="field">Cancelar apenas este item — motivo obrigatório<input maxLength={240} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Ex.: cliente desistiu"/></label>
      <button className="btn secondary" disabled={busy||!reason.trim()} onClick={()=>void cancel()}>Cancelar item da comanda</button>
