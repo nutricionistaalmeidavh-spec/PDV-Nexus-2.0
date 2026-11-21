@@ -92,7 +92,7 @@ export function ScaleSalePanel({order,api,products,run,busy,mode}){
  return <Panel title="Venda por peso · balança local">
   <p className="help">O host lê duas medições estáveis iguais pela porta serial. A leitura vale por 30 segundos e só pode ser usada uma vez.</p>
   {error&&<p className="errorbox" role="alert">{error}</p>}
-  <Label title="Produto vendido por kg"><select value={product} onChange={e=>setProduct(e.target.value)}><option value="">Selecione</option>{products.filter(p=>p.active).map(p=><option key={p.id} value={p.id}>{p.name} · {money(p.priceCents)} / kg</option>)}</select></Label>
+  <Label title="Produto vendido por kg"><select value={product} onChange={e=>setProduct(e.target.value)}><option value="">Selecione</option>{products.filter(p=>p.active&&p.saleUnit==='kg').map(p=><option key={p.id} value={p.id}>{p.name} · {money(p.priceCents)} / kg</option>)}</select></Label>
   <button type="button" className="btn secondary" onClick={()=>void capture()} disabled={captureBusy||busy||!['live','paired'].includes(mode)}>{captureBusy?'Lendo equipamento…':'Capturar peso da balança'}</button>
   {reading&&<><p className="notice">Peso estável: {(reading.weightGrams/1000).toFixed(3)} kg · expira às {new Date(reading.expiresAt).toLocaleTimeString('pt-BR')}</p>
    <button className="btn primary" disabled={busy||!product} onClick={()=>void run('/api/orders/'+encodeURIComponent(order.id)+'/weighted-lines',{productId:product,readingId:reading.readingId}).then(x=>{if(x)setReading(null)})}>Adicionar item pesado</button></>}
