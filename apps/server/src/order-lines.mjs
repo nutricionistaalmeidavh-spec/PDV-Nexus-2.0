@@ -2,7 +2,7 @@
 import {randomUUID} from 'node:crypto';
 import {addOrderLine} from '../../../packages/core/src/order.ts';
 import {databaseOrder,writeOrder} from './order-read.mjs';
-import {bad,missing,safeCents,assertRevision} from './request-validation.mjs';
+import {bad,conflict,missing,safeCents,assertRevision} from './request-validation.mjs';
 import {snapshotLineRecipe} from './inventory.mjs';
 import {dispatchKitchenTickets} from './restaurant.mjs';
 const stamp=()=>new Date().toISOString();
