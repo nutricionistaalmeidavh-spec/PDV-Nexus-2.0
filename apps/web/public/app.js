@@ -200,7 +200,7 @@
   $('cash-movement-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/cash/movements',{commandId:uid(),kind:f.get('kind'),amountCents:toCents(f.get('amount'))});show('Movimento registrado');await refresh();});});
   $('cash-close-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const result=await api('POST','/api/cash/close',{commandId:uid(),countedCents:toCents(new FormData(e.currentTarget).get('amount'))});show(`Caixa fechado · Diferença: ${money(result.differenceCents)}`);await refresh();});});
   $('printer-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);const transport=f.get('transport');
-    await api('POST','/api/printer',{commandId:uid(),transport,...(transport==='serial'?{devicePath:f.get('devicePath'),baudRate:Number(f.get('baudRate'))}:{host:f.get('host'),port:Number(f.get('port'))})});show('Impressora configurada');await renderPrint();});});
+    await api('POST','/api/printer',{commandId:uid(),transport,...(transport==='serial'?{devicePath:f.get('devicePath'),baudRate:Number(f.get('baudRate'))}:transport==='windows'?{devicePath:f.get('devicePath')}:{host:f.get('host'),port:Number(f.get('port'))})});show('Impressora configurada');await renderPrint();});});
   window.pdvAuth.ready().then(user=>{
     const isAdmin=user?.role==='admin';
     for(const view of ['products','print','fiscal','devices','finance-report']){
