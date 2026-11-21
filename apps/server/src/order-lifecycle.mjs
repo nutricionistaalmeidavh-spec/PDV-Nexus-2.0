@@ -27,13 +27,16 @@ export function orderLifecycleWrite(db,method,route,body,h){
           const id=route.split('/')[3];
           return transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);audit(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
+            if(order.suspended)conflict('Venda suspensa: retome antes de confirmar','ORDER_SUSPENDED');
+             const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);audit(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
           const id=route.split('/')[3];
           return transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
+            if(order.suspended)conflict('Retome a venda antes de finalizar','ORDER_SUSPENDED');
+             if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Finalize pagamentos por convidado no fluxo de recebimentos parciais','PARTIAL_PAYMENT_EXISTS');
+             try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
             const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
             const payments=body.payments;if(!Array.isArray(payments)||payments.length===0||payments.length>10)bad('Pagamentos inválidos');
             let amount=0,change=0;

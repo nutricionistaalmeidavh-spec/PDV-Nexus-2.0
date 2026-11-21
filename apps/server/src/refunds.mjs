@@ -8,6 +8,7 @@ export function refundWrite(db,method,route,body,h) {
     const order=databaseOrder(db,m[1]);
     if(order.status!=='CLOSED')conflict('Apenas vendas encerradas podem ser devolvidas');
     if(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(order.id))conflict('Venda já devolvida','ALREADY_REFUNDED');
+    if(db.prepare('SELECT 1 FROM order_line_refund WHERE order_id=? LIMIT 1').get(order.id))conflict('Já existem devoluções parciais; conclua por item','PARTIAL_REFUNDS_EXIST');
     const reason=requireString(body.reason,'Motivo da devolução',240);
     const payments=db.prepare("SELECT method,amount_cents FROM payment WHERE order_id=? AND state='CONFIRMED'").all(order.id);
     const cashCents=payments.filter(x=>x.method==='cash').reduce((s,x)=>s+x.amount_cents,0);

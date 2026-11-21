@@ -25,3 +25,14 @@
  .modal-head{padding:10px 16px}
  .modal-foot{padding:10px 16px}
 }
+
+/* P0-P2 mobile overflow guard: contain grids and wrap long stock data, without clipping forms. */
+@media (max-width:770px){
+  .main-area{max-width:100vw;overflow-x:clip}
+  .main-area .page,.main-area .stack,.main-area .panel,.main-area .pageheading{min-width:0;max-width:100%}
+  .main-area .panel,.main-area .metric-card{overflow-wrap:anywhere}
+  .main-area .list-row{flex-wrap:wrap}
+  .main-area .row,.main-area .form-grid,.main-area .tablewrap{max-width:100%;min-width:0}
+  .main-area input,.main-area select,.main-area textarea{max-width:100%}
+  .main-area .tablewrap{overflow-x:auto}
+}

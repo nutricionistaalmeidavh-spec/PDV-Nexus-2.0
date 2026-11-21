@@ -30,6 +30,14 @@ import {privacyRead,privacyWrite} from './delivery-privacy.mjs';
 import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite } from './restaurant.mjs';
+import {partialPaymentRead,partialPaymentWrite} from './partial-payments.mjs';
+import {itemRefundRead,itemRefundWrite} from './item-refunds.mjs';
+import {kitchenOperationsRead,kitchenOperationsWrite} from './kitchen-operations.mjs';
+import {pizzaRead,pizzaWrite} from './pizzeria.mjs';
+import {retailAdvancedRead,retailAdvancedWrite} from './retail-advanced.mjs';
+import {captureStableScale} from './scale-capture.mjs';
+import {lineHistory,lineWrite} from './order-line-edits.mjs';
+import {tableQrRead,tableQrWrite,publicTableRead,publicTableSubmit} from './table-qr.mjs';
 import { refundWrite } from './refunds.mjs';
 import { cashWrite } from './cash-service.mjs';
 import { receiptBytes } from './non-fiscal-service.mjs';
@@ -96,6 +104,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
   const backupJobs=new Map();
+  const scaleReadings=new Map();
   const kitchenListeners=new Set();
   function notifyKitchen() {
     const message='event: changed\ndata: {"changed":true}\n\n';
@@ -147,6 +156,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
         }
         if(route.startsWith('/api/public/')){
+          const qrPage=publicTableRead(db,method,route);
+          if(qrPage)return response(res,qrPage.status,qrPage.body);
+          if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
+            const payload=await readJson(req);
+            const out=publicTableSubmit(db,route,payload,{stamp,databaseOrder,snapshotLineRecipe,
+              audit:(db,id,kind,details)=>audit(db,id,kind,details,'qr-guest'),notifyKitchen});
+            return response(res,out.status,out.body);
+          }
           if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
           const found=publicRead(db,method,route);
           if(found)return response(res,found.status,found.body);
@@ -224,7 +241,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             .sort((a,b)=>b.modifiedAt.localeCompare(a.modifiedAt)).slice(0,100):[];
           return response(res,200,{backups});
         }
-        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,p.sale_unit AS saleUnit,p.kitchen_station_id AS stationId,(SELECT 1 FROM pizza_product z WHERE z.product_id=p.id) AS isPizza,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
         if(method==='POST'&&route==='/api/sync/operational/pull')return response(res,200,await peerPoller.syncOnce());
@@ -263,11 +280,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(cats)return response(res,cats.status,cats.body);
         const comboResult=comboRead(db,method,route,{missing});
         if(comboResult)return response(res,comboResult.status,comboResult.body);
-        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
+        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,suspended_at AS suspendedAt,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
-        if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind='PRINT_RECEIPT' ORDER BY created_at DESC LIMIT 100").all()});
+        if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,kind,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind LIKE 'PRINT_%' ORDER BY created_at DESC LIMIT 100").all()});
         if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled,transport,device_path AS devicePath,baud_rate AS baudRate FROM printer_profile WHERE id='default'").get()??null});
         if(method==='GET'&&route==='/api/exports/status') return response(res,200,{emissionAvailable:false,exportAvailable:true,emissionScope:'external-only',mode:operationMode,warning:'Comprovantes nao fiscais. Exporte as vendas para processamento fiscal externo.'});
         if(method==='GET'&&/^\/api\/exports\/sales\.(?:csv|json)$/.test(route)){
@@ -283,10 +300,30 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           res.end(isCsv?salesToCsv(document):JSON.stringify(document));
           return;
         }
-        const restaurantResult=restaurantRead(db,method,route,{missing});
+        const restaurantResult=restaurantRead(db,method,route,{missing},url.searchParams);
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
+        const extraReaders=[
+          partialPaymentRead(db,method,route,{databaseOrder}),
+          itemRefundRead(db,method,route,{databaseOrder}),
+          kitchenOperationsRead(db,method,route),
+          pizzaRead(db,method,route,{missing}),
+          retailAdvancedRead(db,method,route,{missing}),
+          lineHistory(db,method,route,{missing}),
+          tableQrRead(db,method,route,{missing})
+        ];
+        for(const advancedRead of extraReaders)if(advancedRead)return response(res,advancedRead.status,advancedRead.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
+        if(method==='POST'&&route==='/api/hardware/scale/capture'){
+          const operator=operatorAuth.user(req);
+          if(role!=='local'||operator?.role!=='admin')throw new HttpError(403,'SUPERVISOR_REQUIRED','Captura de balança exige supervisor local');
+          const reading=await captureStableScale({devicePath:body.devicePath,baudRate:body.baudRate??9600,brand:body.brand??'generic'});
+          for(const [id,row] of scaleReadings)if(row.expiresAt<Date.now())scaleReadings.delete(id);
+          if(scaleReadings.size>=100)conflict('Muitas leituras pendentes','SCALE_QUEUE_FULL');
+          const measurementId=randomUUID(),expiresAt=Date.now()+60000;
+          scaleReadings.set(measurementId,{...reading,expiresAt});
+          return response(res,200,{measurementId,weightGrams:reading.weightGrams,stable:true,expiresAt:new Date(expiresAt).toISOString(),brand:reading.brand});
+        }
         if(method==='POST'&&route==='/api/system/config'){
           const out=transactWithEvents(db,route,body,()=>{
             const displayName=requireString(body.displayName,'Nome do estabelecimento',120);
@@ -327,9 +364,17 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe};
-        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
-        if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,
+          forbidden:(message,code='FORBIDDEN')=>{throw new HttpError(403,code,message);},
+          supervisor:requestRole==='admin'||role==='manager'};
+        const special=partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
+        if(special){
+          out=special;
+          if(method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route)&&out.body?.url){
+            const qrModule=await import('qr');
+            out={...out,body:{...out.body,qrSvg:qrModule.default(out.body.url,'svg',{ecc:'medium',border:3,scale:7})}};
+          }
+        } else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
@@ -375,14 +420,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           });
         } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
           const id=route.split('/')[4];
-          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind='PRINT_RECEIPT'").get(id);if(!job)missing('Impressão');
+          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);if(!job)missing('Impressão');
           if(job.status==='DONE'||sendingPrintJobs.has(id)) conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
-          const printer=db.prepare("SELECT * FROM printer_profile WHERE id='default' AND enabled=1").get();
+          const jobPayload=JSON.parse(job.payload_json);
+          const profileId=jobPayload.profileId??'default';
+          const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(profileId);
           if(!printer)conflict('Impressora não configurada');
           // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
           sendingPrintJobs.add(id);
           try {
-            const bytes=receiptBytes(JSON.parse(job.payload_json));
+            const bytes=receiptBytes(jobPayload);
             if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
             else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
             else await transmit(printer.host,printer.port,bytes);
@@ -425,7 +472,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       // Somente portal público do cliente e recursos de atualização dos PWAs antigos.
       // As páginas operacionais clássicas e scripts administrativos não são mais servidos.
       const file=route.slice(1);
-      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
+      if(!['menu.html','menu.js','menu.css','table.html','table.js','table.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
         return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
@@ -455,7 +502,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(parsed.host!==req.headers.host||!['http:','https:'].includes(parsed.protocol))
           throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       }
-      if(method==='GET'&&['/menu.html','/menu.js','/menu.css'].includes(route)){
+      if(method==='GET'&&['/menu.html','/menu.js','/menu.css','/table.html','/table.js','/table.css'].includes(route)){
         const kind=route.endsWith('.html')?'text/html':route.endsWith('.js')?'text/javascript':'text/css';
         res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','cross-origin-resource-policy':'same-origin',
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
@@ -464,6 +511,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       if(licenseControl.required&&method!=='GET'&&!(await licenseControl.status()).active){
         req.resume();res.shouldKeepAlive=false;
         throw new HttpError(402,'LICENSE_REQUIRED','Avaliação comercial encerrada: novos pedidos estão indisponíveis. Consulte os dados existentes no host.');
+      }
+      const tablePage=publicTableRead(db,method,route);
+      if(tablePage)return response(res,tablePage.status,tablePage.body);
+      if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
+        const payload=await readJson(req);
+        const out=publicTableSubmit(db,route,payload,{stamp,databaseOrder,snapshotLineRecipe,
+          audit:(db,id,kind,details)=>audit(db,id,kind,details,'qr-guest'),notifyKitchen});
+        return response(res,out.status,out.body);
       }
       if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio indisponível'});
       const found=publicRead(db,method,route);
