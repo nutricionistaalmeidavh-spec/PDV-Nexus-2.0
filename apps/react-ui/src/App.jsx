@@ -14,11 +14,11 @@ import {PairedDevicesPanel} from './PairedDevicesPanel.jsx';
 
 const links=[
  ['venda','▣','Nova venda','Operação'],['pedidos','≡','Pedidos','Operação'],['produtos','◇','Produtos e cardápio','Operação'],
- ['mesas','▦','Mesas e comandas','Restaurante'],['kds','♨','Cozinha (KDS)','Restaurante'],['garcom','♙','Garçom mobile','Restaurante'],['divisao','⊞','Fechamento de mesa','Restaurante'],
+ ['mesas','▦','Mesas e comandas','Restaurante'],['delivery','▤','Delivery','Restaurante'],['kds','♨','Cozinha (KDS)','Restaurante'],['garcom','♙','Garçom mobile','Restaurante'],['divisao','⊞','Fechamento de mesa','Restaurante'],
  ['caixa','▤','Controle de caixa','Gestão'],['geral','▥','Gestão geral','Gestão'],['estoque','⬡','Estoque','Gestão'],
  ['financeiro','▥','Financeiro','Gestão'],['relatorios','▤','Relatórios','Gestão'],['unidades','⇄','Unidades','Gestão'],['privacidade','◇','Privacidade delivery','Gestão'],['usuarios','♙','Usuários','Configuração'],
  ['integracoes','⇄','Integrações','Configuração'],['dispositivos','▦','Dispositivos LAN','Configuração'],
- ['impressao','▣','Impressão','Configuração'],['delivery','▤','Delivery','Restaurante'],['sistema','⚙','Backup e atualizações','Configuração'],['exportacao','⇩','Exportar vendas','Configuração'],['primeiro-acesso','⚙','Primeiro acesso','Configuração']
+ ['impressao','▣','Impressão','Configuração'],['sistema','⚙','Backup e atualizações','Configuração'],['exportacao','⇩','Exportar vendas','Configuração'],['primeiro-acesso','⚙','Primeiro acesso','Configuração']
 ];
 const titleOf=id=>links.find(x=>x[0]===id)?.[2]||'Nova venda';
 const demoOrder=()=>({...DEMO_ORDER,lines:[]});
@@ -219,7 +219,7 @@ function App(){
  if(mode==='offline')return <main className="authpage"><section className="authcard" role="alert"><h1>Caixa indisponível</h1><p>O host SQLite local não respondeu. Nenhuma venda foi registrada. O aplicativo não entra em modo demonstrativo no Electron.</p><Button kind="primary" onClick={boot}>Tentar novamente</Button></section></main>;
  if(mode==='auth')return <Login setup={needsSetup} onSubmit={login} busy={busy} error={loginError}/>;
  if(mode==='pairing')return <PairDevice role={deviceRole} onPaired={(nextToken,role)=>{setToken(nextToken);setPairedRole(role);setUser({role});setView(role==='kitchen'?'kds':'garcom');setMode('paired');}}/>;
- const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','usuarios','integracoes','dispositivos','impressao','sistema','exportacao','primeiro-acesso']);
+ const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','delivery','usuarios','integracoes','dispositivos','impressao','sistema','exportacao','primeiro-acesso']);
  const canEdit=mode!=='paired'&&isAdmin(user);const allowedLinks=mode==='paired'?links.filter(([id])=>pairedRole==='kitchen'?id==='kds':['garcom','divisao'].includes(id)):links.filter(([id])=>!restricted.has(id)||canEdit);
  const page=()=>{switch(view){
  case 'venda':return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>{if(!session&&!isDemo){setError('Abra o caixa antes de receber pagamento');setView('caixa');}else setModal({type:'payment'})}} onNew={()=>{setOrder(null);setView('venda')}} busy={busy} mode={mode}/>;
