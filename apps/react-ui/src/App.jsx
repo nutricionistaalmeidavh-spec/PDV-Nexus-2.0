@@ -138,7 +138,7 @@ function App(){
  const [mode,setMode]=useState('boot'),[user,setUser]=useState(null),[needsSetup,setNeedsSetup]=useState(false),[loginError,setLoginError]=useState('');
  const [view,setView]=useState('venda'),[products,setProducts]=useState(sampleProducts),[categories,setCategories]=useState(sampleCategories.slice(1)),[orders,setOrders]=useState(sampleOrders),[tables,setTables]=useState(sampleTables),[tickets,setTickets]=useState(sampleTickets);
  const [session,setSession]=useState(null),[order,setOrder]=useState(null),[selected,setSelected]=useState(null),[modal,setModal]=useState(null),[doneOrder,setDoneOrder]=useState(null),[jobs,setJobs]=useState([]);
- const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);const working=useRef(false);
+ const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[stockRevision,setStockRevision]=useState(0);const working=useRef(false);
  const [token,setToken]=useState(()=>sessionStorage.getItem('pdv-nexus-token')||'');
  const [pairedRole,setPairedRole]=useState(()=>sessionStorage.getItem('pdv-nexus-role')||'');
  const api=useMemo(()=>authFor(token),[token]);
@@ -212,7 +212,7 @@ function App(){
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':'mesas');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
  case 'geral':return <Dashboard orders={orders} session={session} tables={tables} onGo={navigate}/>;
- case 'estoque':return <div className="stack"><StockBusiness mode={mode} api={api}/><AdvancedStockPanel mode={mode} api={api}/></div>;
+ case 'estoque':return <div className="stack"><StockBusiness mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/><AdvancedStockPanel mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/></div>;
  case 'financeiro':return <FinanceBusiness mode={mode} api={api}/>;
  case 'relatorios':return <FinanceBusiness mode={mode} api={api} section="relatorios"/>;
  case 'delivery':return <DeliveryPanel mode={mode} api={api}/>;
