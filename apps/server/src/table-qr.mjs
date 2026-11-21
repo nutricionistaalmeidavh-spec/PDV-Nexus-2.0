@@ -25,7 +25,7 @@ function sessionFor(db,token){
 function catalog(db){
   const products=db.prepare(`SELECT p.id,p.name,p.price_cents AS priceCents,c.name AS categoryName
     FROM menu_product p JOIN menu_category c ON c.id=p.category_id
-    WHERE p.active=1 AND c.active=1 ORDER BY c.sort_order,c.name,p.name LIMIT 250`).all();
+    WHERE p.active=1 AND c.active=1 AND p.sale_unit='unit' ORDER BY c.sort_order,c.name,p.name LIMIT 250`).all();
   const mod=db.prepare('SELECT id,name,price_cents AS priceCents FROM product_modifier WHERE product_id=? AND active=1 ORDER BY name');
   return products.map(p=>({...p,modifiers:mod.all(p.id)}));
 }
