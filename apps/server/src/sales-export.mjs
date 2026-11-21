@@ -37,7 +37,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
     "ORDER BY o.closed_at,o.id LIMIT ?"
   ).all(from,from,to,to,MAX_ORDERS+1);
   if(orders.length>MAX_ORDERS)throw new Error('Muitas vendas para exportar. Selecione um periodo menor.');
-  const lineQuery=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? ORDER BY rowid');
+  const lineQuery=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? AND cancelled_at IS NULL ORDER BY rowid');
   const modifierQuery=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=? ORDER BY rowid');
   const paymentQuery=db.prepare("SELECT method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? AND state='CONFIRMED' ORDER BY rowid");
   const comboQuery=db.prepare('SELECT product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid');
