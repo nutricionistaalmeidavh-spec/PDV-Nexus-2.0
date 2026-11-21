@@ -1,5 +1,6 @@
 -- P2: pizza selections, weighed-sale captures and advanced counter without a second ledger.
 ALTER TABLE sales_order ADD COLUMN suspended_at TEXT;
+ALTER TABLE menu_product ADD COLUMN sale_unit TEXT NOT NULL DEFAULT 'unit' CHECK(sale_unit IN ('unit','kg'));
 ALTER TABLE order_line ADD COLUMN original_unit_price_cents INTEGER;
 CREATE TABLE order_price_change (
  id TEXT PRIMARY KEY,
