@@ -1,6 +1,6 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {AppShell,Badge,Burger,Button as MantineButton,NavLink} from '@mantine/core';
-import {ShoppingCart,ClipboardList,Package,UtensilsCrossed,Truck,ChefHat,Smartphone,Wallet,LayoutDashboard,Boxes,ChartBar,Store,Shield,Printer,Settings,Download,Monitor,Users,BookOpen,Cable} from 'lucide-react';
+import {ShoppingCart,ClipboardList,Package,UtensilsCrossed,Truck,ChefHat,Smartphone,Wallet,LayoutDashboard,Boxes,ChartBar,Store,Shield,Printer,Settings,Download,Monitor,Users as UsersIcon,BookOpen,Cable} from 'lucide-react';
 import {PosSale as Sale,PosPaymentModal as PaymentModal,PosProductModal as ProductModal} from './PosExperience.jsx';
 import {request,authFor,commandId} from './api.mjs';
 import {formatMoney,parseMoney,paymentDraft,splitEvenly,appendDemoLine,DEMO_ORDER,sumOrder,formatTime} from './model.mjs';
@@ -125,7 +125,7 @@ function Printing({mode,onSave,busy,jobs}){
  </Frame>;
 }
 function Exports({mode}){return <Frame eyebrow="CONTABILIDADE / EXPORTAÇÃO" title="Exportar vendas" description="Dados operacionais CSV/JSON para emissão fiscal externa quando aplicável."><Panel><Pill tone="orange">Não emite NFC-e ou NF-e</Pill><p className="subtext gap-top">Exportação disponível somente no host local autenticado. Arquivos não substituem documento fiscal.</p><div className="row wrap">{mode==='live'?<><a className="btn primary" href="/api/exports/sales.csv">Baixar CSV</a><a className="btn secondary" href="/api/exports/sales.json">Baixar JSON</a></>:<Empty>Conecte o host para exportar dados reais.</Empty>}</div></Panel></Frame>}
-const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,divisao:Users,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,unidades:Store,privacidade:Shield,usuarios:Users,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
+const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,divisao:UsersIcon,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,unidades:Store,privacidade:Shield,usuarios:UsersIcon,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
 function App(){
  const [mode,setMode]=useState('boot'),[user,setUser]=useState(null),[needsSetup,setNeedsSetup]=useState(false),[loginError,setLoginError]=useState('');
  const [view,setView]=useState('venda'),[products,setProducts]=useState(sampleProducts),[categories,setCategories]=useState(sampleCategories.slice(1)),[orders,setOrders]=useState(sampleOrders),[tables,setTables]=useState(sampleTables),[tickets,setTickets]=useState(sampleTickets);
