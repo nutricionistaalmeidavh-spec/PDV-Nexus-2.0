@@ -10,7 +10,7 @@ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-react-parity-'));
 const output=path.resolve('artifacts/qa');
 fs.mkdirSync(path.join(output,'videos'),{recursive:true});
 const app=createApp({dataPath:path.join(tmp,'parity.sqlite')});
-let browser,context,page,origin;
+let browser,context,page,origin,mobileContext,mobilePage;
 const errors=[];
 const clickNav=async label=>page.locator('.sidebar .nav-item').filter({hasText:label}).first().click();
 const shot=async name=>page.screenshot({path:path.join(output,'parity-'+name+'.png'),fullPage:true,animations:'disabled'});
@@ -121,12 +121,53 @@ try{
  await page.getByRole('heading',{name:'Diagnósticos de periféricos'}).waitFor();
  await shot('07-hardware');
 
+ // P4: capture every visible screen, not only the happy-path sample.
+ const manifest={commit:process.env.GITHUB_SHA||'local',ui:'/ui/?embedded=1',desktop:[],mobile:[],errors:[]};
+ const desktopTabs=await page.locator('.sidebar .nav-item').allTextContents();
+ assert.ok(desktopTabs.length>=20,'A interface operacional deve expor todos os módulos previstos');
+ for(let i=0;i<desktopTabs.length;i++){
+   const title=desktopTabs[i].trim();
+   await page.locator('.sidebar .nav-item').nth(i).click();
+   await page.waitForFunction(index=>document.querySelectorAll('.sidebar .nav-item')[index]?.classList.contains('active'),i);
+   const name='all-desktop-'+String(i+1).padStart(2,'0');
+   await shot(name);
+   manifest.desktop.push({index:i+1,view:title,file:'parity-'+name+'.png'});
+ }
+ // Gravação mobile independente, usando somente o cookie HTTP-only da sessão de teste.
+ mobileContext=await browser.newContext({
+   storageState:await context.storageState(),
+   viewport:{width:390,height:844},locale:'pt-BR',
+   recordVideo:{dir:path.join(tmp,'recorded-mobile'),size:{width:390,height:844}}
+ });
+ mobilePage=await mobileContext.newPage();
+ mobilePage.on('pageerror',e=>errors.push('mobile: '+e.message));
+ await mobilePage.goto(origin+'/ui/?embedded=1');
+ await mobilePage.locator('.sidebar .nav-item').first().waitFor();
+ const mobileTabs=await mobilePage.locator('.sidebar .nav-item').allTextContents();
+ assert.deepEqual(mobileTabs,desktopTabs,'Paridade de módulos desktop/mobile');
+ for(let i=0;i<mobileTabs.length;i++){
+   await mobilePage.locator('.sidebar .nav-item').nth(i).click();
+   await mobilePage.waitForFunction(index=>document.querySelectorAll('.sidebar .nav-item')[index]?.classList.contains('active'),i);
+   const metrics=await mobilePage.evaluate(()=>({
+     viewport:document.documentElement.clientWidth,
+     documentWidth:document.documentElement.scrollWidth
+   }));
+   assert.ok(metrics.documentWidth<=metrics.viewport+4,
+     'Rolagem horizontal indevida em '+mobileTabs[i]+' '+JSON.stringify(metrics));
+   const name='all-mobile-'+String(i+1).padStart(2,'0');
+   await mobilePage.screenshot({path:path.join(output,'parity-'+name+'.png'),fullPage:true,animations:'disabled'});
+   manifest.mobile.push({index:i+1,view:mobileTabs[i].trim(),file:'parity-'+name+'.png',metrics});
+ }
+ manifest.errors=errors.slice();
+ fs.writeFileSync(path.join(output,'journey-manifest.json'),JSON.stringify(manifest,null,2)+'\\n');
  assert.deepEqual(errors,[]);
+ console.log('P4 VISUAL INVENTORY PASS:',manifest.desktop.length,'desktop screens;',manifest.mobile.length,'mobile screens');
  console.log('REACT PARITY E2E PASS: catalog, modifiers, stock, recipe, cash, table, split, payment, KDS, delivery, units, hardware, redirects.');
 }catch(error){
  console.error('REACT PARITY E2E FAIL',error);process.exitCode=1;
  if(page&&!page.isClosed())await shot('ERROR').catch(()=>{});
 }finally{
+ if(mobileContext){const mobileVideo=mobilePage?.video();await mobileContext.close();if(mobileVideo)await mobileVideo.saveAs(path.join(output,'videos','mobile-all-screens.webm')).catch(()=>{});}
  if(context){const recording=page?.video();await context.close();if(recording)await recording.saveAs(path.join(output,'videos','parity-journey.webm')).catch(()=>{});}
  if(browser)await browser.close();
  await app.close();
