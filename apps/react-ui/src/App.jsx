@@ -15,6 +15,7 @@ import {AdvancedStockPanel} from './AdvancedStockPanel.jsx';
 import {CatalogToolsPanel,HardwareToolsPanel} from './CatalogToolsPanel.jsx';
 import {TableOrderPanel} from './TableOrderPanel.jsx';
 import {PairDevice} from './PairDevice.jsx';
+import {LicenseOnboarding} from './LicenseOnboarding.jsx';
 import {PairedDevicesPanel} from './PairedDevicesPanel.jsx';
 
 const demoOrder=()=>({...DEMO_ORDER,lines:[]});
@@ -26,6 +27,7 @@ const initials=s=>(s||'Nexus').split(' ').slice(0,2).map(x=>x[0]).join('').toUpp
 
 function App(){
  const [mode,setMode]=useState('boot'),[user,setUser]=useState(null),[needsSetup,setNeedsSetup]=useState(false),[loginError,setLoginError]=useState('');
+ const [licenseInfo,setLicenseInfo]=useState(null);
  const [view,setView]=useState('venda'),[products,setProducts]=useState(sampleProducts),[categories,setCategories]=useState(sampleCategories.slice(1)),[orders,setOrders]=useState(sampleOrders),[tables,setTables]=useState(sampleTables),[tickets,setTickets]=useState(sampleTickets);
  const [session,setSession]=useState(null),[order,setOrder]=useState(null),[selected,setSelected]=useState(null),[modal,setModal]=useState(null),[doneOrder,setDoneOrder]=useState(null),[jobs,setJobs]=useState([]);
  const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[stockRevision,setStockRevision]=useState(0);
@@ -48,7 +50,9 @@ function App(){
      }
      setMode('pairing');return;
    }
-   try{const data=await request('/api/auth/status');
+   try{const license=await request('/api/license/status');setLicenseInfo(license);
+      if(license.required&&!license.active){setMode('license');return;}
+      const data=await request('/api/auth/status');
       if(data.authenticated){setUser(data.user);setMode('live');}
       else{setNeedsSetup(!!data.needsSetup);setMode('auth');}
    }catch{setMode(embedded?'offline':'demo');setError(embedded?'Host local indisponível. As vendas estão bloqueadas; reconecte o PDV.':'Host local indisponível. Interface em modo demonstrativo, sem persistência.');}
@@ -56,6 +60,7 @@ function App(){
  useEffect(()=>{void boot()},[boot]);
  const refresh=useHostRefresh({api,mode,pairedRole,setProducts,setCategories,setOrders,setSession,setTables,setTickets,setJobs,setError});
  useEffect(()=>{if(mode==='live'||mode==='paired')void refresh().catch(e=>setError(toStringError(e)))},[mode,refresh]);
+ useEffect(()=>{if(mode!=='live'||!licenseInfo?.required)return;const timer=setInterval(()=>{void request('/api/license/status').then(setLicenseInfo).catch(()=>{})},60000);return()=>clearInterval(timer)},[mode,licenseInfo?.required]);
  useKitchenPolling({api,mode,view,setTickets,setError});
  const run=useBusyCommand({setBusy,setNotice,setError});
  const isDemo=mode==='demo';
@@ -98,10 +103,11 @@ function App(){
  useEffect(()=>{const onKey=e=>{if(e.key==='F3'){e.preventDefault();document.querySelector('.searchfield input')?.focus();}if(e.key==='F10'&&view==='venda'&&order?.status==='OPEN'){e.preventDefault();setModal({type:'payment'});}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[view,order]);
  if(mode==='boot')return <div className="loading">Conectando ao PDV Nexus local…</div>;
  if(mode==='offline')return <main className="authpage"><section className="authcard" role="alert"><h1>Caixa indisponível</h1><p>O host SQLite local não respondeu. Nenhuma venda foi registrada. O aplicativo não entra em modo demonstrativo no Electron.</p><Button kind="primary" onClick={boot}>Tentar novamente</Button></section></main>;
+ if(mode==='license')return <LicenseOnboarding license={licenseInfo} onActivated={()=>void boot()} onReadOnly={()=>void request('/api/auth/status').then(data=>{setNeedsSetup(!!data.needsSetup);setMode('auth')}).catch(e=>setLoginError(toStringError(e)))}/>;
  if(mode==='auth')return <Login setup={needsSetup} onSubmit={login} busy={busy} error={loginError}/>;
  if(mode==='pairing')return <PairDevice role={deviceRole} onPaired={(nextToken,role)=>{setToken(nextToken);setPairedRole(role);setUser({role});setView(role==='kitchen'?'kds':'garcom');setMode('paired');}}/>;
  /* Navigation visibility lives in navigation.mjs; server independently enforces RBAC. */
- const canEdit=mode!=='paired'&&isAdmin(user);const allowedLinks=availableNavLinks(mode,pairedRole,user);
+ const canEdit=mode!=='paired'&&isAdmin(user)&&!(licenseInfo?.required&&!licenseInfo.active);const allowedLinks=availableNavLinks(mode,pairedRole,user);
  const page=()=>{switch(view){
  case 'venda':return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>{if(!session&&!isDemo){setError('Abra o caixa antes de receber pagamento');setView('caixa');}else setModal({type:'payment'})}} onNew={()=>{setOrder(null);setView('venda')}} busy={busy} mode={mode}/>;
  case 'concluida':return <Success order={doneOrder} onNew={()=>{setOrder(null);setView('venda')}}/>;
@@ -128,6 +134,6 @@ function App(){
  case 'exportacao':return <Exports mode={mode}/>;
  default:return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>setModal({type:'payment'})} onNew={()=>setOrder(null)} busy={busy} mode={mode}/>;
  }};
- return <div className="app"><header className="topbar"><div className="brand"><span className="brand-icon">▣</span><strong>PDV Nexus <em>2.0</em></strong></div><div className="top-title">PDV — {titleOf(view)}</div><div className="top-right"><span className="top-status"><span className="dot"/>Caixa 01 · {mode==='live'?'Host conectado':'Demonstração'}</span>{mode==='demo'?<Button kind="top" onClick={boot}>Conectar host</Button>:<Button kind="top" onClick={logout}>{initials(user?.username)} · Sair</Button>}</div></header><div className="layout"><aside className="sidebar"><nav aria-label="Navegação principal">{allowedLinks.map(([id,icon,label,group],i)=><React.Fragment key={id}>{(i===0||allowedLinks[i-1]?.[3]!==group)&&<div className="nav-group">{group}</div>}<button className={'nav-item '+(view===id?'active':'')} type="button" onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span>{label}</button></React.Fragment>)}</nav><p className="sidebar-foot">PDV Nexus 2.0 · Interface unificada<br/><span>R$ 0 · self-hosted</span></p></aside><main className="main-area">{mode==='demo'&&<div className="demo-banner" role="status">Prévia visual: sem conexão com host. Nenhum dado ou pagamento desta tela é persistido.</div>}{error&&<div className="errorbox" role="alert"><span>{error}</span><Button kind="icon" onClick={()=>setError('')} aria-label="Dispensar erro">×</Button></div>}{notice&&<div className="notice" role="status"><span>{notice}</span><Button kind="icon" onClick={()=>setNotice('')} aria-label="Dispensar aviso">×</Button></div>}{page()}</main></div>{modal?.type==='product'&&<ProductModal product={modal.product} requester={api} demo={isDemo} busy={busy} onClose={()=>setModal(null)} onSubmit={addProduct}/>} {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy}/>}</div>
+ return <div className="app"><header className="topbar"><div className="brand"><span className="brand-icon">▣</span><strong>PDV Nexus <em>2.0</em></strong></div><div className="top-title">PDV — {titleOf(view)}</div><div className="top-right"><span className="top-status"><span className="dot"/>Caixa 01 · {mode==='live'?'Host conectado':'Demonstração'}</span>{mode==='demo'?<Button kind="top" onClick={boot}>Conectar host</Button>:<Button kind="top" onClick={logout}>{initials(user?.username)} · Sair</Button>}</div></header><div className="layout"><aside className="sidebar"><nav aria-label="Navegação principal">{allowedLinks.map(([id,icon,label,group],i)=><React.Fragment key={id}>{(i===0||allowedLinks[i-1]?.[3]!==group)&&<div className="nav-group">{group}</div>}<button className={'nav-item '+(view===id?'active':'')} type="button" onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span>{label}</button></React.Fragment>)}</nav><p className="sidebar-foot">PDV Nexus 2.0 · Interface unificada<br/><span>R$ 0 · self-hosted</span></p></aside><main className="main-area">{licenseInfo?.required&&<div className="notice" role="status">{licenseInfo.active?(licenseInfo.kind==='TRIAL'?'Avaliação de 3 dias':'Licença comercial')+' · '+(licenseInfo.expiresAt?'Válida até '+new Date(licenseInfo.expiresAt).toLocaleString('pt-BR'):'Sem vencimento'):'Acesso somente leitura. Avaliação encerrada.'}{licenseInfo.active&&licenseInfo.kind==='TRIAL'&&licenseInfo.expiresAt&&Date.parse(licenseInfo.expiresAt)-Date.now()<=86400000?' · Seu teste termina em menos de 24 horas.':null}</div>}{mode==='demo'&&<div className="demo-banner" role="status">Prévia visual: sem conexão com host. Nenhum dado ou pagamento desta tela é persistido.</div>}{error&&<div className="errorbox" role="alert"><span>{error}</span><Button kind="icon" onClick={()=>setError('')} aria-label="Dispensar erro">×</Button></div>}{notice&&<div className="notice" role="status"><span>{notice}</span><Button kind="icon" onClick={()=>setNotice('')} aria-label="Dispensar aviso">×</Button></div>}{page()}</main></div>{modal?.type==='product'&&<ProductModal product={modal.product} requester={api} demo={isDemo} busy={busy} onClose={()=>setModal(null)} onSubmit={addProduct}/>} {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy}/>}</div>
 }
 export default App;
