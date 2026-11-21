@@ -1,11 +1,17 @@
-import React,{useCallback,useEffect,useMemo,useState} from 'react';
+import React,{useCallback,useEffect,useMemo,useState,lazy,Suspense} from 'react';
+import {AppShell,Burger,NavLink} from '@mantine/core';
+import {ShoppingCart,ClipboardList,Package,UtensilsCrossed,Truck,ChefHat,Smartphone,Wallet,LayoutDashboard,Boxes,ChartBar,Store,Shield,Printer,Settings,Download,Monitor,Users as UsersIcon,BookOpen,Cable} from 'lucide-react';
+import {PosSale as Sale,PosPaymentModal as PaymentModal,PosProductModal as ProductModal} from './PosExperience.jsx';
 import {request,authFor,commandId} from './api.mjs';
 import {formatMoney,parseMoney,appendDemoLine,DEMO_ORDER} from './model.mjs';
 import {sampleCategories,sampleProducts,sampleOrders,sampleTables,sampleTickets} from './demo.mjs';
 import {Button} from './UIPrimitives.jsx';
-import {Login,ProductModal,PaymentModal,Sale,Success,Orders,Products} from './CommerceScreens.jsx';
-import {Cash,Tables,Kitchen,Waiter} from './RestaurantScreens.jsx';
-import {Onboarding,Dashboard,Users,Printing,Exports} from './AdminScreens.jsx';
+import {Login,Success,Orders,Products} from './CommerceScreens.jsx';
+import {Cash} from './RestaurantScreens.jsx';
+import {RestaurantTables as Tables,RestaurantKitchen as Kitchen,RestaurantWaiter as Waiter} from './RestaurantTangerine.jsx';
+import {Onboarding,Users,Printing,Exports} from './AdminScreens.jsx';
+const Dashboard=lazy(()=>import('./ManagementTangerine.jsx').then(module=>({default:module.ManagementOverview})));
+
 import {availableNavLinks,titleOf} from './navigation.mjs';
 import {useHostRefresh,useKitchenPolling,useBusyCommand} from './useOperations.jsx';
 import {StockBusiness,FinanceBusiness} from './BusinessPanels.jsx';
@@ -27,12 +33,14 @@ const embedded=new URLSearchParams(window.location.search).has('embedded');
 const centsLabel=c=>formatMoney(Number.isSafeInteger(c)?c:0);
 const initials=s=>(s||'Nexus').split(' ').slice(0,2).map(x=>x[0]).join('').toUpperCase();
 
+const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,divisao:UsersIcon,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,unidades:Store,privacidade:Shield,usuarios:UsersIcon,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
 function App(){
  const [mode,setMode]=useState('boot'),[user,setUser]=useState(null),[needsSetup,setNeedsSetup]=useState(false),[loginError,setLoginError]=useState('');
  const [licenseInfo,setLicenseInfo]=useState(null);
  const [view,setView]=useState('venda'),[products,setProducts]=useState(sampleProducts),[categories,setCategories]=useState(sampleCategories.slice(1)),[orders,setOrders]=useState(sampleOrders),[tables,setTables]=useState(sampleTables),[tickets,setTickets]=useState(sampleTickets);
  const [session,setSession]=useState(null),[order,setOrder]=useState(null),[selected,setSelected]=useState(null),[modal,setModal]=useState(null),[doneOrder,setDoneOrder]=useState(null),[jobs,setJobs]=useState([]);
  const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[stockRevision,setStockRevision]=useState(0);
+ const [sidebarOpen,setSidebarOpen]=useState(false);
  const [token,setToken]=useState(()=>sessionStorage.getItem('pdv-nexus-token')||'');
  const [pairedRole,setPairedRole]=useState(()=>sessionStorage.getItem('pdv-nexus-role')||'');
  const api=useMemo(()=>authFor(token),[token]);
@@ -122,7 +130,7 @@ function App(){
  case 'restaurante-config':return <div className="stack"><PizzeriaSettings api={api} products={products} onRefresh={refresh} mode={mode}/><KitchenStationsManager api={api} products={products} onChanged={refresh} mode={mode}/></div>;
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':order?.serviceMode==='table'?'mesas':'venda');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session} canManage={canEdit}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
- case 'geral':return <Dashboard orders={orders} session={session} tables={tables} onGo={navigate}/>;
+ case 'geral':return <Suspense fallback={<p className="subtext">Carregando gestão local...</p>}><Dashboard orders={orders} session={session} tables={tables} onGo={navigate} api={api} mode={mode}/></Suspense>;
  case 'estoque':return <div className="stack"><StockBusiness mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/><AdvancedStockPanel mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/></div>;
  case 'financeiro':return <FinanceBusiness mode={mode} api={api}/>;
  case 'relatorios':return <FinanceBusiness mode={mode} api={api} section="relatorios"/>;
@@ -137,6 +145,35 @@ function App(){
  case 'exportacao':return <Exports mode={mode}/>;
  default:return <Sale products={products} categories={categories} order={order} onManage={()=>setView('divisao')} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>setModal({type:'payment'})} onNew={()=>setOrder(null)} busy={busy} mode={mode}/>;
  }};
- return <div className="app"><header className="topbar"><div className="brand"><span className="brand-icon">▣</span><strong>PDV Nexus <em>2.0</em></strong></div><div className="top-title">PDV — {titleOf(view)}</div><div className="top-right"><span className="top-status"><span className="dot"/>Caixa 01 · {mode==='live'?'Host conectado':'Demonstração'}</span>{mode==='demo'?<Button kind="top" onClick={boot}>Conectar host</Button>:<Button kind="top" onClick={logout}>{initials(user?.username)} · Sair</Button>}</div></header><div className="layout"><aside className="sidebar"><nav aria-label="Navegação principal">{allowedLinks.map(([id,icon,label,group],i)=><React.Fragment key={id}>{(i===0||allowedLinks[i-1]?.[3]!==group)&&<div className="nav-group">{group}</div>}<button className={'nav-item '+(view===id?'active':'')} type="button" onClick={()=>navigate(id)}><span aria-hidden="true">{icon}</span>{label}</button></React.Fragment>)}</nav><p className="sidebar-foot">PDV Nexus 2.0 · Interface unificada<br/><span>R$ 0 · self-hosted</span></p></aside><main className="main-area">{licenseInfo?.required&&<div className="notice" role="status">{licenseInfo.active?(licenseInfo.kind==='TRIAL'?'Avaliação de 3 dias':'Licença comercial')+' · '+(licenseInfo.expiresAt?'Válida até '+new Date(licenseInfo.expiresAt).toLocaleString('pt-BR'):'Sem vencimento'):'Acesso somente leitura. Avaliação encerrada.'}{licenseInfo.active&&licenseInfo.kind==='TRIAL'&&licenseInfo.expiresAt&&Date.parse(licenseInfo.expiresAt)-Date.now()<=86400000?' · Seu teste termina em menos de 24 horas.':null}</div>}{mode==='demo'&&<div className="demo-banner" role="status">Prévia visual: sem conexão com host. Nenhum dado ou pagamento desta tela é persistido.</div>}{error&&<div className="errorbox" role="alert"><span>{error}</span><Button kind="icon" onClick={()=>setError('')} aria-label="Dispensar erro">×</Button></div>}{notice&&<div className="notice" role="status"><span>{notice}</span><Button kind="icon" onClick={()=>setNotice('')} aria-label="Dispensar aviso">×</Button></div>}{page()}</main></div>{modal?.type==='product'&&<ProductModal product={modal.product} requester={api} demo={isDemo} busy={busy} onClose={()=>setModal(null)} onSubmit={addProduct}/>} {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy}/>} {modal?.type==='refund-items'&&<PartialRefundDialog orderId={modal.orderId} api={api} onClose={()=>setModal(null)} onDone={()=>{setModal(null);void refresh();}}/>}</div>
+ return <AppShell header={{height:72}} navbar={{width:232,breakpoint:'sm',collapsed:{mobile:!sidebarOpen}}} padding={0} className="app nexus-app-shell">
+ <AppShell.Header className="topbar">
+  <div className="brand"><span className="brand-icon"><ShoppingCart size={22}/></span><strong>PDV Nexus <em>2.0</em></strong></div>
+  <div className="top-title">PDV — {titleOf(view)}</div>
+  <div className="top-right">
+    <span className="top-status"><span className="dot"/>{mode==='paired'?'Dispositivo pareado':mode==='live'?'Caixa 01 · Host conectado':'Demonstração'}</span>
+    {mode==='demo'?<Button kind="top" onClick={boot}>Conectar host</Button>:<Button kind="top" onClick={logout}>{initials(user?.username)} · Sair</Button>}
+    <Burger className="nexus-mobile-burger" opened={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)} size="sm" aria-label="Abrir ou fechar o menu"/>
+  </div>
+ </AppShell.Header>
+ <AppShell.Navbar className={"sidebar "+(sidebarOpen?"nexus-sidebar-open":"nexus-sidebar-closed")}><nav aria-label="Navegação principal">
+  {allowedLinks.map(([id,_icon,label,group],i)=>{const Icon=navIcons[id]||Package;return <React.Fragment key={id}>
+    {(i===0||allowedLinks[i-1]?.[3]!==group)&&<div className="nav-group">{group}</div>}
+    <NavLink component="button" type="button" active={view===id} variant="light"
+      className={'nav-item '+(view===id?'active':'')} leftSection={<Icon size={18} strokeWidth={1.8}/>}
+      label={label} onClick={()=>{navigate(id);setSidebarOpen(false);}}
+      aria-current={view===id?'page':undefined}/>
+  </React.Fragment>})}
+ </nav><p className="sidebar-foot">PDV Nexus 2.0 · Interface unificada<br/><span>R$ 0 · self-hosted</span></p></AppShell.Navbar>
+ <AppShell.Main className="main-area">
+  {licenseInfo?.required&&<div className="notice" role="status">{licenseInfo.active?(licenseInfo.kind==='TRIAL'?'Avaliação de 3 dias':'Licença comercial')+' · '+(licenseInfo.expiresAt?'Válida até '+new Date(licenseInfo.expiresAt).toLocaleString('pt-BR'):'Sem vencimento'):'Acesso somente leitura. Avaliação encerrada.'}{licenseInfo.active&&licenseInfo.kind==='TRIAL'&&licenseInfo.expiresAt&&Date.parse(licenseInfo.expiresAt)-Date.now()<=86400000?' · Seu teste termina em menos de 24 horas.':null}</div>}
+  {mode==='demo'&&<div className="demo-banner" role="status">Prévia visual: sem conexão com host. Nenhum dado ou pagamento desta tela é persistido.</div>}
+  {error&&<div className="errorbox" role="alert"><span>{error}</span><Button kind="icon" onClick={()=>setError('')} aria-label="Dispensar erro">×</Button></div>}
+  {notice&&<div className="notice" role="status"><span>{notice}</span><Button kind="icon" onClick={()=>setNotice('')} aria-label="Dispensar aviso">×</Button></div>}
+  {page()}
+ </AppShell.Main>
+ {modal?.type==='product'&&<ProductModal product={modal.product} requester={api} demo={isDemo} busy={busy} onClose={()=>setModal(null)} onSubmit={addProduct}/>}
+ {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy}/>}
+ {modal?.type==='refund-items'&&<PartialRefundDialog orderId={modal.orderId} api={api} onClose={()=>setModal(null)} onDone={()=>{setModal(null);void refresh();}}/>}
+ </AppShell>
 }
 export default App;

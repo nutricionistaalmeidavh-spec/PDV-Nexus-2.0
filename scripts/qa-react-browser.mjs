@@ -50,14 +50,26 @@ try {
  await page.getByText('Caixa aberto',{exact:true}).waitFor();
  await snap('react-02-caixa');
  await clickNav('Nova venda');
- await page.locator('.product-card').filter({hasText:'X-QA-React'}).click();
+ await page.getByRole('heading',{name:'Nova venda'}).waitFor();
+ await page.getByRole('button',{name:'Todos'}).first().waitFor();
+ const searchWidth=await page.locator('.nexus-pos .searchfield input').evaluate(el=>el.getBoundingClientRect().width);
+ assert.ok(searchWidth>=300,'Busca precisa ocupar largura adequada no caixa desktop: '+searchWidth);
+ const firstProduct=page.locator('.product-card').filter({hasText:'X-QA-React'});
+ const productLeft=await firstProduct.evaluate(el=>el.getBoundingClientRect().left);
+ assert.ok(productLeft>=230,'Catálogo não pode ficar coberto pela sidebar AppShell: x='+productLeft);
+ await snap('react-tangerine-00-caixa-catalogo');
+ await firstProduct.click();
  await page.getByRole('dialog',{name:'Personalizar produto'}).waitFor();
+ await snap('react-tangerine-01-personalizacao');
  await page.getByRole('button',{name:/Adicionar ao pedido/}).click();
  await page.locator('.order-lines').getByText('X-QA-React').waitFor();
  await page.getByRole('button',{name:'Confirmar pedido'}).click();
  await page.getByRole('button',{name:/Finalizar venda/}).waitFor();
  await page.getByRole('button',{name:/Finalizar venda/}).click();
  await page.getByRole('dialog',{name:'Finalizar venda'}).waitFor();
+ const primaryBackground=await page.getByRole('button',{name:'Confirmar recebimento'}).evaluate(el=>getComputedStyle(el).backgroundColor);
+ assert.equal(primaryBackground,'rgb(194, 65, 12)','Botão primário do checkout deve ter contraste AA com texto branco');
+ await snap('react-tangerine-02-pagamento');
  // ArtiSys #178: em três alturas/larguras, o botão permanece visível sem rolar a página.
  for(const [width,height] of [[1366,768],[1024,600],[390,844]]){
    await page.setViewportSize({width,height});
@@ -67,6 +79,18 @@ try {
    assert.ok(action.y>=0&&action.y+action.height<=height,
      'Botão de pagamento fora da tela '+width+'x'+height+': '+JSON.stringify(action));
    assert.ok(action.x>=0&&action.x+action.width<=width,'Pagamento cortado horizontalmente: '+width+'x'+height);
+   const confirmVisible=await page.getByRole('button',{name:'Confirmar recebimento'}).evaluate(el=>{
+     const bounds=el.getBoundingClientRect();
+     const cx=bounds.left+bounds.width/2,cy=bounds.top+bounds.height/2;
+     const top=document.elementFromPoint(cx,cy);
+     return Boolean(top&&(top===el||el.contains(top)));
+   });
+   assert.ok(confirmVisible,'Botão de confirmação está oculto/recortado pelo modal: '+width+'x'+height);
+   const readable=await page.getByRole('button',{name:'Confirmar recebimento'}).evaluate(el=>{
+     const text=el.querySelector('.mantine-Button-label');
+     return Boolean(text&&text.scrollWidth<=text.clientWidth+1);
+   });
+   assert.ok(readable,'Texto de Confirmar recebimento truncado: '+width+'x'+height);
    await snap('react-checkout-'+width+'x'+height);
  }
  await page.setViewportSize({width:1440,height:940});
@@ -106,6 +130,10 @@ try {
  await page.setViewportSize({width:390,height:844});
  await page.goto(origin+'/ui/?embedded=1');await page.getByRole('heading',{name:'Nova venda'}).waitFor();
  await snap('react-10-mobile');
+ await page.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
+ await page.locator('.sidebar .nav-item').filter({hasText:'Mesas e comandas'}).click();
+ await page.getByRole('heading',{name:'Mapa do salão'}).waitFor();
+ await page.getByRole('button',{name:'Abrir ou fechar o menu'}).waitFor();
  // Com o host indisponível, Electron bloqueia prévia e recebimentos.
  const offline=await browser.newContext({viewport:{width:1200,height:800}});
  const offPage=await offline.newPage();

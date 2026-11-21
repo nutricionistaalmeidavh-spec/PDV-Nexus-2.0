@@ -1,0 +1,311 @@
+/* PDV Nexus 2.0 · P0/P1
+   Layout with Mantine AppShell, components and native theme; no extra token framework.
+   Light and accessible orange/graphite direction inspired by restaurant POS references.
+*/
+html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
+:where(button,input,textarea,select,a):focus-visible{outline:3px solid #B45309;outline-offset:2px}
+.mantine-AppShell-root{background:#FFF9F4;min-height:100vh}
+.mantine-AppShell-header.topbar{
+ height:72px;display:flex;align-items:center;gap:22px;padding:0 24px;
+ background:#fff;color:#1F2937;border-bottom:1px solid #E9DDCF;box-shadow:0 2px 9px rgba(41,37,36,.04);
+ z-index:120;position:fixed;
+}
+.brand strong{font-size:21px;color:#1F2937;letter-spacing:-.045em}
+.brand strong em{background:#FFEDD5;color:#7C2D12;border-radius:9px;font-size:14px}
+.brand-icon{display:grid;place-items:center;color:white;background:#C2410C;border-radius:12px;box-shadow:none}
+.top-title{font-size:15px;color:#57534E;border-left:1px solid #E9DDCF;font-weight:700}
+.top-status{color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:999px;padding:9px 13px;white-space:nowrap}
+.dot{background:#16A34A;box-shadow:0 0 0 3px #16A34A20}
+.btn.top{color:#1F2937;background:white;border:1px solid #E9DDCF}
+.btn.top:hover{background:#FFF7ED}
+.nexus-mobile-burger{display:none}
+.mantine-AppShell-navbar.sidebar{
+ background:#FFFFFF;padding:14px 10px 18px;border-right:1px solid #E9DDCF;display:flex;flex-direction:column;
+ overflow-x:hidden;overflow-y:auto;min-height:0
+}
+.sidebar nav{display:flex;flex-direction:column;gap:2px}
+.sidebar .nav-group{color:#78716C;font-weight:800;letter-spacing:1.3px;margin:18px 12px 8px;font-size:10px}
+.sidebar .mantine-NavLink-root.nav-item{
+ border-left:3px solid transparent;border-radius:11px;display:flex;align-items:center;
+ min-height:42px;color:#57534E;background:transparent;padding:10px 12px;font-size:13px;font-weight:650;
+ width:100%;text-align:left
+}
+.sidebar .mantine-NavLink-root.nav-item .mantine-NavLink-label{font-size:13px;font-weight:650;color:#57534E}
+.sidebar .mantine-NavLink-root.nav-item .mantine-NavLink-section{color:#78716C}
+.sidebar .mantine-NavLink-root.nav-item:hover{background:#FFF7ED;color:#9A3412}
+.sidebar .mantine-NavLink-root.nav-item.active{
+ background:#FFF1E6;color:#9A3412;border-left:3px solid #C2410C;padding-left:12px
+}
+.sidebar .mantine-NavLink-root.nav-item.active .mantine-NavLink-label,
+.sidebar .mantine-NavLink-root.nav-item.active .mantine-NavLink-section{color:#9A3412}
+.sidebar-foot{margin-top:auto;color:#78716C;border-top:1px solid #F3E7DE;padding-top:14px}
+.sidebar-foot span{color:#9A3412}
+.mantine-AppShell-main.main-area{
+ background:#FFF9F4;min-height:100dvh;padding:calc(72px + 24px) 26px 38px;
+ padding-inline-start:258px!important; /* 232px navbar + 26px content gutter */
+ min-width:0;overflow-x:hidden
+}
+.page{max-width:1540px}
+.pageheading h1{font-size:30px;font-weight:850;letter-spacing:-.035em;color:#292524}
+.eyebrow,.overline{color:#9A3412;font-size:11px}
+.subtext,.help{color:#57534E}
+.panel{background:#fff;border:1px solid #E9DDCF;box-shadow:0 3px 14px rgba(64,39,24,.045);border-radius:18px}
+.btn{border-radius:11px;min-height:42px;box-shadow:none}
+.btn.primary,.btn.primary:hover{background:#C2410C;border-color:#C2410C;color:white;box-shadow:none}
+.btn.primary:hover:not(:disabled){background:#9A3412}
+.btn.soft{background:#FFEDD5;color:#7C2D12}
+.btn.secondary,.btn.ghost{border-color:#E9DDCF;color:#292524;background:white}
+.btn:focus-visible,.mantine-NavLink-root:focus-visible{outline:3px solid #B45309;outline-offset:2px}
+.pill{background:#FFF1E6;color:#7C2D12}
+.pill.green{background:#DCFCE7;color:#166534}
+.pill.red{background:#FEE2E2;color:#B91C1C}
+.pill.orange{background:#FFEDD5;color:#92400E}
+.mantine-Input-input{border-color:#E7D8C9;background:#fff;color:#292524}
+.mantine-Input-input:focus{border-color:#C2410C}
+.mantine-Modal-overlay{background:rgba(41,37,36,.55)}
+.mantine-Modal-content{box-shadow:0 22px 60px rgba(41,37,36,.17)}
+.mantine-Modal-header{border-bottom:1px solid #F3E7DE}
+.mantine-Modal-body{padding:20px}
+.notice{border-color:#BBF7D0;background:#F0FDF4;color:#166534}
+.errorbox{border-color:#FECACA;background:#FEF2F2;color:#991B1B}
+.demo-banner{border-color:#FED7AA;background:#FFF7ED;color:#92400E}
+
+/* P1 — sale with horizontally scrollable category rail and fixed order summary */
+.nexus-pos .pageheading{margin-bottom:19px}
+.nexus-pos .sale-layout{
+ display:grid;grid-template-columns:minmax(0,1.75fr) minmax(324px,.85fr);gap:18px;align-items:start
+}
+.nexus-pos .catalog-pane{
+ padding:20px;min-height:620px;border:1px solid #E9DDCF;box-shadow:0 3px 16px rgba(64,39,24,.045);
+ background:#fff;border-radius:19px
+}
+.nexus-pos .sale-toolbar{margin-bottom:14px}
+.nexus-pos .searchfield{padding:0;border:0;box-shadow:none;background:transparent;min-width:0}
+.nexus-pos .searchfield .mantine-Input-wrapper{width:100%}
+.nexus-pos .searchfield .mantine-Input-input{
+ border:1px solid #E9DDCF;height:46px;min-height:46px;background:#FFFDFB;
+ box-shadow:none;font-size:14px
+}
+.nexus-pos .searchfield:focus-within{box-shadow:none}
+.nexus-category-scroller{margin:4px 0 17px;border-bottom:1px solid #F3E7DE;padding-bottom:17px}
+.nexus-pos .categories{
+ display:flex!important;grid-template-columns:none!important;margin:0!important;
+ gap:8px;min-width:max-content;padding:1px 2px 4px
+}
+.nexus-pos .category{
+ min-height:40px;min-width:unset;height:40px;display:inline-flex;flex-direction:row;padding:8px 15px;
+ color:#57534E;background:#FFF7ED;border:1px solid #F3E2D2;border-radius:11px;
+ font-size:13px;font-weight:700;white-space:nowrap;gap:0;
+ transition:background 150ms ease,border-color 150ms ease
+}
+.nexus-pos .category:hover{border-color:#EA580C;background:#FFF1E6}
+.nexus-pos .category.selected{
+ background:#C2410C!important;color:#fff!important;border-color:#C2410C!important;
+ box-shadow:0 3px 9px rgba(194,65,12,.14)!important
+}
+.nexus-catalog-meta{margin-bottom:13px}
+.nexus-pos .product-grid{gap:13px}
+.nexus-pos .product-card{
+ border:1px solid #E9DDCF;border-radius:15px;padding:10px;background:#fff;
+ display:flex;flex-direction:column;text-align:left;gap:0;min-height:196px;
+ box-shadow:none;cursor:pointer;transition:border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease
+}
+.nexus-pos .product-card:hover:not(:disabled),.nexus-pos .product-card:focus-visible{
+ border-color:#C2410C;box-shadow:0 7px 20px rgba(194,65,12,.12);transform:translateY(-1px)
+}
+.nexus-pos .product-card:disabled{opacity:.56;cursor:not-allowed}
+.nexus-food-illustration{
+ width:100%;background:#FFF7ED;border-radius:12px;display:flex;align-items:center;justify-content:center;
+ color:#C2410C;overflow:hidden
+}
+.nexus-food-illustration img{object-fit:contain;max-height:100%;max-width:100%}
+.nexus-product-info{padding:9px 3px 1px;width:100%;flex:1;display:flex;flex-direction:column}
+.nexus-product-name{line-height:1.3;font-size:14px;color:#292524}
+.nexus-product-price{font-size:16px;color:#9A3412;margin-top:auto;padding-top:7px}
+.nexus-pos .nexus-product-list{grid-template-columns:1fr!important}
+.nexus-pos .nexus-product-list .product-card{min-height:94px;flex-direction:row;align-items:center;gap:12px}
+.nexus-pos .nexus-product-list .nexus-food-illustration{width:95px;height:74px!important;flex:0 0 95px}
+.nexus-pos .nexus-product-list .nexus-product-info{padding:0}
+.nexus-pos .order-pane{
+ border:1px solid #E9DDCF;padding:20px 18px 17px;display:flex;flex-direction:column;
+ min-height:620px;position:sticky;top:96px;max-height:calc(100dvh - 114px);
+ background:#fff;border-radius:19px;box-shadow:0 4px 18px rgba(64,39,24,.06)
+}
+.nexus-pos .sale-summary-head{padding-bottom:15px;border-bottom:1px solid #F3E7DE;flex-shrink:0}
+.nexus-cart-counter{padding:13px 0;color:#78716C}
+.nexus-pos .order-lines{flex:1;min-height:180px;overflow:hidden}
+.nexus-pos .order-line{
+ display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:flex-start;
+ border-bottom:1px solid #F3E7DE;padding:12px 2px
+}
+.nexus-pos .order-line .quantity{
+ display:flex;align-items:center;justify-content:center;border-radius:9px;
+ width:31px;height:31px;color:#9A3412;background:#FFF1E6
+}
+.nexus-line-info{min-width:0;overflow-wrap:anywhere}
+.nexus-empty-order{
+ min-height:160px;padding:25px 20px;margin:0;text-align:center;justify-content:center;
+ color:#78716C;background:#FFFCF9;border:1px dashed #E9DDCF;border-radius:14px
+}
+.nexus-pos .order-foot{padding-top:16px;border-top:1px solid #F3E7DE;flex-shrink:0;gap:10px}
+.nexus-pos .total-hero{
+ display:flex;align-items:center;justify-content:space-between;margin:0 0 2px;
+ border-radius:12px;background:#FFF1E6;color:#7C2D12;padding:16px 13px
+}
+.nexus-pos .total-hero .mantine-Text-root{color:#7C2D12}
+.nexus-payment-total{background:#FFF1E6;color:#7C2D12;text-align:center}
+.nexus-payment-total .hero-number{font-size:34px;line-height:1.2;padding:4px 0;color:#7C2D12}
+.nexus-payment-method{border-color:#E9DDCF;min-height:52px;display:flex;align-items:center;padding:8px!important}
+.nexus-payment-method.is-selected{background:#FFF7ED;border-color:#C2410C}
+.nexus-change-row{border-radius:12px;padding:12px;background:#F8FAFC}
+.nexus-modal-actions{background:#fff;border-top:1px solid #F3E7DE;padding-top:13px}
+.nexus-checkout-modal .nexus-modal-body{max-height:calc(100dvh - 100px);overflow:hidden;display:flex;flex-direction:column}
+.nexus-payment-container{display:flex;flex-direction:column;max-height:calc(100dvh - 132px);min-height:0;overflow:hidden}
+.nexus-payment-scroll{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;padding-bottom:12px}
+.nexus-checkout-modal .nexus-modal-actions{position:static;bottom:auto;flex-shrink:0;margin-top:0}
+.nexus-checkout-modal .nexus-modal-actions{padding:12px 0;z-index:2}
+.nexus-product-preview{width:112px;flex:0 0 112px}
+.nexus-product-preview .nexus-food-illustration{border-radius:12px}
+@media(min-width:768px){.mantine-AppShell-main.main-area{padding-inline-start:258px!important}}
+@media(max-width:1250px){
+ .nexus-pos .sale-layout{grid-template-columns:minmax(0,1.3fr) minmax(300px,.9fr)}
+ .nexus-pos .order-pane{min-height:540px}
+}
+@media(max-width:1050px){
+ .nexus-pos .sale-layout{grid-template-columns:minmax(0,1fr);gap:14px}
+ .nexus-pos .order-pane{position:static;max-height:none;min-height:340px}
+ .nexus-pos .catalog-pane{min-height:0}
+ .nexus-pos .order-lines{max-height:350px}
+}
+@media(max-width:767px){
+ .nexus-mobile-burger{display:block}
+ .mantine-AppShell-header.topbar{height:72px;gap:10px;padding:10px 12px;flex-wrap:nowrap}
+ .top-title{display:none}
+ .brand strong{font-size:17px}
+ .brand-icon{width:36px;height:36px}
+ .top-status{padding:6px 8px;font-size:10px}
+ .top-right{margin-left:auto;gap:7px}
+ .top-right .btn.top{padding:6px 8px;font-size:11px;min-height:34px}
+ .mantine-AppShell-navbar.sidebar{
+  position:fixed;top:72px;height:calc(100dvh - 72px);width:min(84vw,300px);
+  max-width:300px;padding:14px 10px;overflow-y:auto;overflow-x:hidden;
+  background:white;box-shadow:5px 15px 28px rgba(41,37,36,.10);z-index:110
+ }
+ .sidebar nav{display:flex;flex-direction:column;min-width:0;gap:2px}
+ .sidebar .nav-group{display:block}
+ .sidebar-foot{display:block}
+ .mantine-AppShell-main.main-area{padding:calc(72px + 15px) 13px 26px;padding-inline-start:13px!important}
+ .nexus-pos .catalog-pane,.nexus-pos .order-pane{padding:13px;border-radius:15px}
+ .nexus-pos .pageheading h1{font-size:25px}
+ .nexus-pos .product-grid{gap:10px}
+ .nexus-pos .product-card{min-height:166px}
+ .nexus-food-illustration{height:77px!important}
+ .nexus-pos .nexus-product-list .nexus-food-illustration{height:70px!important}
+ .nexus-pos .nexus-product-price{font-size:15px}
+ .nexus-pos .categories{grid-template-columns:none!important}
+ .nexus-pos .order-lines{min-height:130px}
+ .nexus-checkout-modal .nexus-modal-body{max-height:calc(100dvh - 80px)}
+ .nexus-payment-container{max-height:calc(100dvh - 115px)}
+}
+@media(max-width:420px){
+ .top-status{display:none}
+ .brand strong{font-size:16px}
+ .nexus-pos .sale-toolbar{gap:7px}
+ .nexus-pos .product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .nexus-pos .product-card{padding:8px}
+ .nexus-pos .product-card .nexus-product-name{font-size:13px}
+ .nexus-modal-actions{gap:8px}
+ .nexus-modal-actions .mantine-Button-root{flex:1;min-width:0}
+}
+@media(prefers-reduced-motion:reduce){
+ .nexus-pos .product-card,.nexus-pos .category{transition:none!important;transform:none!important}
+}
+@media print{
+ .mantine-AppShell-header,.mantine-AppShell-navbar{display:none!important}
+ .mantine-AppShell-main.main-area{padding:0!important}
+ .nexus-pos .order-pane{position:static;max-height:none}
+}
+
+
+/* Visual-clip fix: checkout footer is outside the independently scrollable form.
+   A bounding box inside the viewport is insufficient if an ancestor clips it. */
+.nexus-checkout-modal.mantine-Modal-content{
+ display:flex!important;flex-direction:column!important;
+ height:min(690px,calc(100dvh - 24px))!important;
+ max-height:calc(100dvh - 24px)!important;
+ overflow:hidden!important;
+}
+.nexus-checkout-modal .mantine-Modal-header{flex:0 0 auto!important}
+.nexus-checkout-modal .nexus-modal-body{
+ flex:1 1 auto!important;min-height:0!important;height:auto!important;
+ max-height:none!important;display:flex!important;flex-direction:column!important;
+ overflow:hidden!important;padding:0!important;
+}
+.nexus-checkout-modal .nexus-payment-container{
+ display:flex!important;flex-direction:column!important;flex:1 1 auto!important;
+ min-height:0!important;max-height:none!important;height:100%!important;
+ overflow:hidden!important;padding:14px 20px 0!important;
+}
+.nexus-checkout-modal .nexus-payment-scroll{
+ display:flex!important;flex-direction:column!important;
+ min-height:0!important;flex:1 1 auto!important;overflow-y:auto!important;
+ overscroll-behavior:contain!important;padding-right:4px;padding-bottom:8px
+}
+.nexus-checkout-modal .nexus-modal-actions{
+ flex:0 0 auto!important;position:relative!important;
+ min-height:62px!important;background:#fff!important;
+ border-top:1px solid #F3E7DE!important;margin-top:0!important;
+ padding:10px 0 12px!important;z-index:2!important;
+}
+.nexus-checkout-modal .mantine-SimpleGrid-root{
+ grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important
+}
+.nexus-checkout-modal .mantine-Radio-label{font-size:13px}
+.mantine-Button-root[data-variant="filled"][data-color="orange"]{
+ background:#C2410C!important;color:#fff!important
+}
+.mantine-Button-root[data-variant="filled"][data-color="orange"]:hover:not(:disabled){
+ background:#9A3412!important
+}
+@media(min-width:640px){
+ .nexus-checkout-modal .mantine-SimpleGrid-root{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+}
+
+/* Final visual QA: readable cashier search and full action label on narrow phones */
+.nexus-pos .searchfield .mantine-TextInput-root,
+.nexus-pos .searchfield .mantine-InputWrapper-root{width:100%;min-width:0}
+.nexus-pos .searchfield .mantine-Input-wrapper{width:100%}
+.nexus-checkout-modal .mantine-Button-root[data-variant="filled"],
+.nexus-pos .order-foot .mantine-Button-root[data-variant="filled"]{
+ background:#C2410C!important;color:#fff!important
+}
+.nexus-checkout-modal .mantine-Button-root[data-variant="filled"]:hover:not(:disabled),
+.nexus-pos .order-foot .mantine-Button-root[data-variant="filled"]:hover:not(:disabled){
+ background:#9A3412!important
+}
+@media(max-width:420px){
+ .nexus-checkout-modal .nexus-modal-actions .mantine-Button-root:first-child{
+   flex:0 0 80px!important;width:80px!important;padding-inline:8px!important
+ }
+ .nexus-checkout-modal .nexus-modal-actions .mantine-Button-root:last-child{
+   flex:1 1 auto!important;width:auto!important;
+   font-size:12px!important;padding-inline:8px!important
+ }
+}
+
+/* WCAG AA: force readable dark orange on the actual Mantine POS actions.
+   The default orange shade used by third-party components is too light for white text. */
+.nexus-primary-action.mantine-Button-root{
+ background-color:#C2410C!important;color:#FFFFFF!important;
+ border-color:#C2410C!important
+}
+.nexus-primary-action.mantine-Button-root:hover:not(:disabled){
+ background-color:#9A3412!important;border-color:#9A3412!important
+}
+
+/* AppShell v9 does not consistently expose data-hidden after changing desktop
+   viewport to mobile. Controlled class prevents accidental full-screen overlay. */
+@media(max-width:767px){
+ .mantine-AppShell-navbar.sidebar.nexus-sidebar-closed{display:none!important;visibility:hidden!important;pointer-events:none!important}
+ .mantine-AppShell-navbar.sidebar.nexus-sidebar-open{display:flex!important;visibility:visible!important;pointer-events:auto!important}
+}

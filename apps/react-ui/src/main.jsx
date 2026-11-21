@@ -1,5 +1,13 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+import '@mantine/charts/styles.css';
+import 'mantine-datatable/styles.css';
+import {NexusTheme} from './NexusTheme.jsx';
 import App from './App.jsx';
 import './theme.css';
-createRoot(document.getElementById('root')).render(<App/>);
+import './nexus-pos.css';
+import './nexus-restaurant.css';
+import './nexus-management.css';
+createRoot(document.getElementById('root')).render(<NexusTheme><App/></NexusTheme>);
