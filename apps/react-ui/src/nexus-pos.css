@@ -30,7 +30,7 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
  min-height:42px;color:#57534E;background:transparent;padding:10px 12px;font-size:13px;font-weight:650;
  width:100%;text-align:left
 }
-.sidebar .mantine-NavLink-root.nav-item .mantine-NavLink-label{font-size:13px;font-weight:650}
+.sidebar .mantine-NavLink-root.nav-item .mantine-NavLink-label{font-size:13px;font-weight:650;color:#57534E}
 .sidebar .mantine-NavLink-root.nav-item .mantine-NavLink-section{color:#78716C}
 .sidebar .mantine-NavLink-root.nav-item:hover{background:#FFF7ED;color:#9A3412}
 .sidebar .mantine-NavLink-root.nav-item.active{
@@ -155,7 +155,7 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
 .nexus-pos .total-hero .mantine-Text-root{color:#7C2D12}
 .nexus-payment-total{background:#FFF1E6;color:#7C2D12;text-align:center}
 .nexus-payment-total .hero-number{font-size:34px;line-height:1.2;padding:4px 0;color:#7C2D12}
-.nexus-payment-method{border-color:#E9DDCF;min-height:58px;display:flex;align-items:center}
+.nexus-payment-method{border-color:#E9DDCF;min-height:52px;display:flex;align-items:center;padding:8px!important}
 .nexus-payment-method.is-selected{background:#FFF7ED;border-color:#C2410C}
 .nexus-change-row{border-radius:12px;padding:12px;background:#F8FAFC}
 .nexus-modal-actions{background:#fff;border-top:1px solid #F3E7DE;padding-top:13px}
@@ -224,4 +224,49 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
  .mantine-AppShell-header,.mantine-AppShell-navbar{display:none!important}
  .mantine-AppShell-main.main-area{padding:0!important}
  .nexus-pos .order-pane{position:static;max-height:none}
+}
+
+
+/* Visual-clip fix: checkout footer is outside the independently scrollable form.
+   A bounding box inside the viewport is insufficient if an ancestor clips it. */
+.nexus-checkout-modal.mantine-Modal-content{
+ display:flex!important;flex-direction:column!important;
+ height:min(690px,calc(100dvh - 24px))!important;
+ max-height:calc(100dvh - 24px)!important;
+ overflow:hidden!important;
+}
+.nexus-checkout-modal .mantine-Modal-header{flex:0 0 auto!important}
+.nexus-checkout-modal .nexus-modal-body{
+ flex:1 1 auto!important;min-height:0!important;height:auto!important;
+ max-height:none!important;display:flex!important;flex-direction:column!important;
+ overflow:hidden!important;padding:0!important;
+}
+.nexus-checkout-modal .nexus-payment-container{
+ display:flex!important;flex-direction:column!important;flex:1 1 auto!important;
+ min-height:0!important;max-height:none!important;height:100%!important;
+ overflow:hidden!important;padding:14px 20px 0!important;
+}
+.nexus-checkout-modal .nexus-payment-scroll{
+ display:flex!important;flex-direction:column!important;
+ min-height:0!important;flex:1 1 auto!important;overflow-y:auto!important;
+ overscroll-behavior:contain!important;padding-right:4px;padding-bottom:8px
+}
+.nexus-checkout-modal .nexus-modal-actions{
+ flex:0 0 auto!important;position:relative!important;
+ min-height:62px!important;background:#fff!important;
+ border-top:1px solid #F3E7DE!important;margin-top:0!important;
+ padding:10px 0 12px!important;z-index:2!important;
+}
+.nexus-checkout-modal .mantine-SimpleGrid-root{
+ grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important
+}
+.nexus-checkout-modal .mantine-Radio-label{font-size:13px}
+.mantine-Button-root[data-variant="filled"][data-color="orange"]{
+ background:#C2410C!important;color:#fff!important
+}
+.mantine-Button-root[data-variant="filled"][data-color="orange"]:hover:not(:disabled){
+ background:#9A3412!important
+}
+@media(min-width:640px){
+ .nexus-checkout-modal .mantine-SimpleGrid-root{grid-template-columns:repeat(4,minmax(0,1fr))!important}
 }
