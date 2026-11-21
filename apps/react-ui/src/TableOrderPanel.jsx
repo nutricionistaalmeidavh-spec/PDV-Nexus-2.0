@@ -145,7 +145,7 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
    return result;
   }catch(e){setError(e.message);}finally{setBusy(false)}
  };
- const lineAllowed=order&&['DRAFT','OPEN'].includes(order.status);
+ const lineAllowed=order&&['DRAFT','OPEN'].includes(order.status)&&!order.suspendedAt&&!order.payments?.some(p=>p.state==='CONFIRMED');
  const canConfirm=order?.status==='DRAFT'&&order?.lines?.length>0;
  const canCheckout=order?.status==='OPEN'&&!!session;
  const safeProducts=products.filter(x=>x.active&&x.categoryActive!==0);
