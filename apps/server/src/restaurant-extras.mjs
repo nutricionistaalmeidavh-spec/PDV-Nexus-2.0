@@ -45,6 +45,7 @@ export function comboWrite(db,method,route,body,h){
  if(method==='POST'&&split)return transact(db,route,body,()=>{
   const id=split[1],order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
   if(!['DRAFT','OPEN'].includes(order.status))conflict('Comanda encerrada');
+  if(db.prepare('SELECT 1 FROM payment WHERE order_id=?').get(id))conflict('A distribuição está bloqueada após qualquer pagamento','SPLIT_ALREADY_PAID');
   if(!order.lines.length||order.lines.length>100)bad('Comanda vazia ou grande demais');
   const allocations=body.allocations;
   if(!Array.isArray(allocations)||allocations.length!==order.lines.length)bad('Atribua todas as linhas da comanda');
@@ -77,8 +78,8 @@ export function comboWrite(db,method,route,body,h){
  return null;
 }
 export function splitSummary(db,orderId){
- const lines=db.prepare('SELECT id,unit_price_cents AS unitPriceCents,quantity FROM order_line WHERE order_id=?').all(orderId);
- const alloc=db.prepare('SELECT s.line_id AS lineId,s.guest,s.quantity,l.unit_price_cents AS unitPriceCents FROM order_guest_split s JOIN order_line l ON l.id=s.line_id WHERE l.order_id=? ORDER BY s.guest COLLATE NOCASE,s.line_id').all(orderId);
+ const lines=db.prepare('SELECT id,unit_price_cents AS unitPriceCents,quantity FROM order_line WHERE order_id=? AND cancelled_at IS NULL').all(orderId);
+ const alloc=db.prepare('SELECT s.line_id AS lineId,s.guest,s.quantity,l.unit_price_cents AS unitPriceCents FROM order_guest_split s JOIN order_line l ON l.id=s.line_id WHERE l.order_id=? AND l.cancelled_at IS NULL ORDER BY s.guest COLLATE NOCASE,s.line_id').all(orderId);
  const groups=new Map();
  for(const x of alloc){
   const total=x.unitPriceCents*x.quantity;if(!cents(total))throw new Error('Subtotais invalidos');
