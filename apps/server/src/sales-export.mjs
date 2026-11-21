@@ -39,7 +39,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
   if(orders.length>MAX_ORDERS)throw new Error('Muitas vendas para exportar. Selecione um periodo menor.');
   const lineQuery=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? AND cancelled_at IS NULL ORDER BY rowid');
   const modifierQuery=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=? ORDER BY rowid');
-  const paymentQuery=db.prepare("SELECT method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? AND state='CONFIRMED' ORDER BY rowid");
+  const paymentQuery=db.prepare("SELECT method,amount_cents AS amountCents,state,guest,created_at AS createdAt FROM payment WHERE order_id=? AND state='CONFIRMED' ORDER BY rowid");
   const comboQuery=db.prepare('SELECT product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid');
   const sales=orders.map(row=>{
     let grossCents=0;
@@ -53,7 +53,8 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
     const payments=paymentQuery.all(row.id);
     const paidCents=payments.reduce((sum,p)=>addCents(sum,p.amountCents),0);
     if(paidCents!==grossCents)throw new Error('Pagamento inconsistente no pedido '+row.id);
-    const refundedCents=row.refundedCents??0;
+    const partialRefundedCents=db.prepare('SELECT COALESCE(SUM(amount_cents),0) AS cents FROM order_line_refund WHERE order_id=?').get(row.id).cents;
+    const refundedCents=(row.refundedCents??0)+partialRefundedCents;
     if(!Number.isSafeInteger(refundedCents)||refundedCents<0||refundedCents>grossCents)throw new Error('Devolucao inconsistente no pedido '+row.id);
     return {
       orderId:row.id,
@@ -66,7 +67,8 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
       grossCents,
       refundedCents,
       netCents:grossCents-refundedCents,
-      refund:row.refundReason===null?null:{reason:row.refundReason,cashCents:row.cashRefundCents,createdAt:row.refundCreatedAt}
+      refund:row.refundReason===null?null:{reason:row.refundReason,cashCents:row.cashRefundCents,createdAt:row.refundCreatedAt},
+      partialRefunds:db.prepare('SELECT line_id AS lineId,quantity,amount_cents AS amountCents,reason,created_at AS createdAt FROM order_line_refund WHERE order_id=? ORDER BY created_at,rowid').all(row.id)
     };
   });
   return {schemaVersion:1,documentType:'DATA_ONLY_NON_FISCAL',generatedAt:new Date().toISOString(),
