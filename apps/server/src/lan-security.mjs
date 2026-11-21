@@ -32,7 +32,7 @@ export function lanRole(req,config,dynamicRole=()=>null) {
 export function roleAllows(role,method,route) {
   if(role==='local'||role==='manager')return true;
   if(role==='mirror')return method==='GET'&&route==='/api/sync/operational/export';
-  if(role==='kitchen') return (method==='GET'&&['/api/kitchen/tickets','/api/kitchen/events'].includes(route)) ||
+  if(role==='kitchen') return (method==='GET'&&['/api/kitchen/tickets','/api/kitchen/events','/api/kitchen/stations'].includes(route)) ||
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
   if(role==='waiter')return (method==='GET'&&(
@@ -45,6 +45,7 @@ export function roleAllows(role,method,route) {
       route==='/api/orders'|| /^\/api\/tables\/[^/]+\/open$/.test(route)||
       /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)||
       /^\/api\/orders\/[^/]+\/lines\/[^/]+\/(edit|cancel)$/.test(route)||
+      /^\/api\/orders\/[^/]+\/pizzas$/.test(route)||
       /^\/api\/tables\/[^/]+\/qr$/.test(route)||
       /^\/api\/table-requests\/[^/]+\/(accept|reject)$/.test(route)));
   return false;
