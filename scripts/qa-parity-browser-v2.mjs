@@ -76,9 +76,13 @@ try{
  await page.locator('.cash-main input').fill('100,00');
  await page.getByRole('button',{name:'Abrir caixa'}).click();
  await page.getByText('Caixa aberto',{exact:true}).waitFor();
+ await clickNav('Garçom mobile');
+ await page.getByRole('heading',{name:'Garçom mobile'}).waitFor();
+ await shot('p2-01-garcom-mobile');
  await clickNav('Mesas e comandas');
  await page.getByPlaceholder('Ex.: Mesa 13').fill('Mesa Paridade QA');
  await page.getByRole('button',{name:/Nova mesa/}).click();
+ await shot('p2-02-mapa-salao');
  await page.locator('.table-card').filter({hasText:'Mesa Paridade QA'}).click();
  await page.getByRole('heading',{name:'Gerenciar mesa'}).waitFor();
  const add=panel('Adicionar produtos');
@@ -89,6 +93,22 @@ try{
  await page.getByRole('button',{name:'Salvar divisão'}).click();
  await page.getByText('Alocação completa: Sim').waitFor();
  await shot('03-comanda-confirmada-e-divisao');
+ await clickNav('Cozinha (KDS)');
+ await page.getByRole('heading',{name:'Painel KDS'}).waitFor();
+ const kitchenTicket=page.locator('.kds-ticket').filter({hasText:'Hamburguer Paridade QA'});
+ await kitchenTicket.first().waitFor();
+ await shot('p2-03-kds-novos');
+ await kitchenTicket.getByRole('button',{name:'Iniciar preparo'}).click();
+ await kitchenTicket.getByRole('button',{name:'Marcar como pronto'}).waitFor();
+ await shot('p2-04-kds-preparo');
+ await kitchenTicket.getByRole('button',{name:'Marcar como pronto'}).click();
+ await kitchenTicket.getByRole('button',{name:'Entregar'}).waitFor();
+ await shot('p2-05-kds-prontos');
+ await kitchenTicket.getByRole('button',{name:'Entregar'}).click();
+ await kitchenTicket.waitFor({state:'hidden'});
+ await clickNav('Mesas e comandas');
+ await page.locator('.table-card').filter({hasText:'Mesa Paridade QA'}).click();
+ await page.getByRole('heading',{name:'Gerenciar mesa'}).waitFor();
  await page.getByRole('button',{name:'Finalizar venda'}).click();
  await page.getByRole('dialog',{name:'Finalizar venda'}).waitFor();
  await page.getByRole('button',{name:'Confirmar recebimento'}).click();
@@ -121,8 +141,27 @@ try{
  await page.getByRole('heading',{name:'Diagnósticos de periféricos'}).waitFor();
  await shot('07-hardware');
 
+ await clickNav('Financeiro');
+ await page.getByRole('heading',{name:'Financeiro',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Evolução de receita e CMV'}).waitFor();
+ await page.locator('.nexus-financial-chart svg').first().waitFor();
+ assert.ok(await page.locator('.nexus-management-table').count()>=3,'Painel financeiro requer DataTable para métodos, dias e sessões');
+ await shot('p3-01-financeiro-graficos');
+ await clickNav('Relatórios');
+ await page.getByRole('heading',{name:'Relatórios financeiros'}).waitFor();
+ await shot('p3-02-relatorios-graficos');
+ await clickNav('Estoque');
+ await page.getByRole('heading',{name:'Estoque, fornecedores e compras'}).waitFor();
+ await page.locator('.nexus-management-table').first().waitFor();
+ await shot('p3-03-estoque-datatable');
+ await page.setViewportSize({width:390,height:844});
+ await shot('p4-01-gestao-mobile');
+ const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+3);
+ assert.equal(overflow,false,'Gestão mobile não deve provocar overflow horizontal na página inteira');
+ await page.setViewportSize({width:1440,height:940});
+
  assert.deepEqual(errors,[]);
- console.log('REACT PARITY E2E PASS: catalog, modifiers, stock, recipe, cash, table, split, payment, KDS, delivery, units, hardware, redirects.');
+ console.log('REACT PARITY E2E PASS: catalog, stock, salon, waiter, table, split, KDS stage transitions, payment, delivery, units, hardware, management charts and DataTables.');
 }catch(error){
  console.error('REACT PARITY E2E FAIL',error);process.exitCode=1;
  if(page&&!page.isClosed())await shot('ERROR').catch(()=>{});
