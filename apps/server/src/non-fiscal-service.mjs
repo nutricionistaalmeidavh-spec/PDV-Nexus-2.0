@@ -3,9 +3,15 @@ export function receiptBytes(payload) {
   // ESC/POS básico, sem dependência: permitir apenas ASCII até parametrizar página de código.
   const clean=x=>String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'?');
   const width=38;
+  // Reserva espaço para o subtotal, mesmo em nomes longos e valores elevados.
+  const itemLine=l=>{
+    const subtotal=(l.unitPriceCents*l.quantity/100).toFixed(2);
+    const suffix='  '+subtotal;
+    return (`${l.quantity}x ${clean(l.productName)}`).slice(0,Math.max(0,width-suffix.length))+suffix;
+  };
   const lines=['PDV NEXUS 2.0','RECIBO DE PEDIDO - NAO FISCAL','',`Pedido ${payload.id.slice(0,8)}`, '-'.repeat(width),
     ...payload.lines.flatMap(l=>[
-      `${l.quantity}x ${clean(l.productName).slice(0,24)}  ${(l.unitPriceCents*l.quantity/100).toFixed(2)}`.slice(0,width),
+      itemLine(l),
       `  Item #${clean(l.id??'').slice(-8)}`,
       ...(l.modifiers??[]).map(m=>`  + ${clean(m.name).slice(0,width-4)}`),
       ...(l.note?[`  Obs: ${clean(l.note).slice(0,width-7)}`]:[])
