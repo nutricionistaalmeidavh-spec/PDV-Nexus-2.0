@@ -9,6 +9,7 @@ import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, order
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
+import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
 import {financialRead} from './retail-finance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
@@ -247,6 +248,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
         const financeResult=financialRead(db,method,route,url.searchParams);
         if(financeResult)return response(res,financeResult.status,financeResult.body);
+        const purchaseResult=purchasesRead(db,method,route);
+        if(purchaseResult)return response(res,purchaseResult.status,purchaseResult.body);
         const suppliersResult=supplyRead(db,method,route,url.searchParams);
         if(suppliersResult)return response(res,suppliersResult.status,suppliersResult.body);
         if(method==='GET'&&route==='/api/catalog/barcode'){
@@ -304,7 +307,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         let out;
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
-        const special=supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
