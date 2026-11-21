@@ -19,7 +19,7 @@ export function financialRead(db,method,route,params){
   const byDay=new Map(),methods={cash:0,pix:0,credit:0,debit:0,other:0};
   let grossSalesCents=0,refundedCents=0,cogsCents=0;
   for(const order of orders){
-    const gross=grossQuery.get(order.id).amount,cost=costQuery.get(order.id).amount,refunded=order.refund;
+    const gross=grossQuery.get(order.id).amount,cost=costQuery.get(order.id).amount,refunded=order.refund+db.prepare('SELECT COALESCE(SUM(amount_cents),0) AS amount FROM order_line_refund WHERE order_id=?').get(order.id).amount;
     grossSalesCents=add(grossSalesCents,gross);
     refundedCents=add(refundedCents,refunded);
     cogsCents=add(cogsCents,cost);
