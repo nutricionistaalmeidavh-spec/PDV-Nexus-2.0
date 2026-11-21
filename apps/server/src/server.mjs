@@ -28,6 +28,12 @@ import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaur
 import { refundWrite } from './refunds.mjs';
 import {lineHistory,lineWrite} from './order-line-edits.mjs';
 import {tableQrRead,tableQrWrite,publicTableRead,publicTableSubmit} from './table-qr.mjs';
+import {settlementSummary,settlementRead,settlementWrite,validatePayment} from './settlements.mjs';
+import {itemRefundRead,itemRefundWrite} from './item-refunds.mjs';
+import {kdsRead,kdsWrite} from './kds-extensions.mjs';
+import {pizzaRead,pizzaWrite} from './pizzeria.mjs';
+import {scaleRead,scaleWrite,readSerialWeight,recordScaleCapture} from './weighted-sales.mjs';
+import {counterWrite} from './counter-advanced.mjs';
 import { cashWrite } from './cash-service.mjs';
 import { receiptBytes } from './non-fiscal-service.mjs';
 import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
@@ -53,13 +59,17 @@ function databaseOrder(db, id) {
   const row=db.prepare('SELECT * FROM sales_order WHERE id=?').get(id);
   if (!row) missing('Pedido');
   const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? AND cancelled_at IS NULL ORDER BY rowid').all(id);
-  const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
+  const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,guest,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
   for(const line of lines){
     line.modifiers=db.prepare('SELECT modifier_id AS id,name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
     line.comboComponents=db.prepare('SELECT product_id AS productId,product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid').all(line.id);
+    const pizza=db.prepare('SELECT size_name_snapshot AS sizeName,flavors_json AS flavorsJson,border_json AS borderJson,price_rule AS priceRule,pizza_price_cents AS priceCents FROM order_line_pizza WHERE line_id=?').get(line.id);
+    if(pizza)line.pizza={sizeName:pizza.sizeName,flavors:JSON.parse(pizza.flavorsJson),border:pizza.borderJson?JSON.parse(pizza.borderJson):null,priceRule:pizza.priceRule,priceCents:pizza.priceCents};
+    const weight=db.prepare('SELECT weight_grams AS weightGrams,price_per_kg_cents AS pricePerKgCents FROM order_line_weight WHERE line_id=?').get(line.id);
+    if(weight)line.weight=weight;
   }
   const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
-  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,lines,payments,refunded,totalCents:0};
+  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,suspendedAt:row.suspended_at,lines,payments,refunded,totalCents:0};
   order.totalCents=orderTotalCents(order);
   return order;
 }
@@ -289,7 +299,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(cats)return response(res,cats.status,cats.body);
         const comboResult=comboRead(db,method,route,{missing});
         if(comboResult)return response(res,comboResult.status,comboResult.body);
-        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
+        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,suspended_at AS suspendedAt,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
@@ -315,6 +325,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(editedHistory)return response(res,editedHistory.status,editedHistory.body);
         const qrQueue=tableQrRead(db,method,route,{missing});
         if(qrQueue)return response(res,qrQueue.status,qrQueue.body);
+        const xReads=[
+          settlementRead(db,method,route,{databaseOrder,missing,conflict}),
+          itemRefundRead(db,method,route,{databaseOrder,missing}),
+          kdsRead(db,method,route,url.searchParams,{missing}),
+          pizzaRead(db,method,route),
+          scaleRead(db,method,route)
+        ];
+        for(const candidate of xReads)if(candidate)return response(res,candidate.status,candidate.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
         if(method==='POST'&&route==='/api/system/config'){
@@ -358,7 +376,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         let out;
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,supervisor:requestRole==='admin'||role==='manager'};
-        const special=lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
+        const special=settlementWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kdsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??scaleWrite(db,method,route,body,h)??counterWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
+        if(method==='POST'&&route==='/api/hardware/scale/capture'){
+          if(!h.supervisor)throw new HttpError(403,'SUPERVISOR_REQUIRED','Captura da balança exige supervisor');
+          const config=db.prepare("SELECT device_path AS devicePath,baud_rate AS baudRate,brand FROM scale_config WHERE id='default'").get();
+          if(!config)conflict('Configure a balança antes de capturar','SCALE_NOT_CONFIGURED');
+          // Somente bytes recebidos fisicamente do dispositivo local; não aceita peso enviado pelo navegador.
+          const reading=await readSerialWeight(config);
+          const captured=transactWithEvents(db,route,body,()=>recordScaleCapture(db,reading,h),201);
+          return response(res,captured.status,captured.body);
+        }
         if(special){
           out=special;
           if(method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route)&&out.body?.url){
@@ -410,6 +437,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(order.suspendedAt)conflict('Retome a venda antes de adicionar produtos','ORDER_SUSPENDED');
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
             const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
             if(note===null||note.length>240)bad('Observação inválida');
@@ -445,16 +473,22 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(order.suspendedAt)conflict('Retome a venda antes de confirmar','ORDER_SUSPENDED');
             const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);auditForRequest(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
           const id=route.split('/')[3];
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(order.suspendedAt)conflict('Retome a venda antes de finalizar','ORDER_SUSPENDED');
             try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
             const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
-            const payments=body.payments;if(!Array.isArray(payments)||payments.length===0||payments.length>10)bad('Pagamentos inválidos');
-            let amount=0,change=0;
+            const payments=body.payments??[];
+            const previous=settlementSummary(db,id,{databaseOrder,conflict});
+            if(!Array.isArray(payments)||payments.length>10||(!payments.length&&!previous.paidCents))bad('Pagamentos inválidos');
+            let amount=previous.paidCents,change=0;
+            // Pagamentos anteriores não são regravados e compõem o total final.
+            const byGuest=new Map(previous.guests.map(g=>[g.guest.toLocaleLowerCase('pt-BR'),g.balanceCents]));
             for(const p of payments) {
               if(!['cash','pix','credit','debit','other'].includes(p.method))bad('Meio de pagamento inválido');
               requireCents(p.amountCents,'Pagamento',false);
@@ -463,13 +497,18 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
                 if((p.tenderedCents??p.amountCents)<p.amountCents)bad('Dinheiro recebido inferior ao pagamento');
                 change+= (p.tenderedCents??p.amountCents)-p.amountCents;
               } else if(p.tenderedCents!==undefined) bad('Troco somente para dinheiro');
+              if(previous.paidCents&&previous.guests.length){
+                const label=typeof p.guest==='string'?p.guest.trim().toLocaleLowerCase('pt-BR'):'';
+                if(!byGuest.has(label)||p.amountCents>byGuest.get(label))conflict('Pagamento excede saldo do convidado','GUEST_OVERPAYMENT');
+                byGuest.set(label,byGuest.get(label)-p.amountCents);
+              }
               amount+=p.amountCents;
-              if(!safeCents(amount)||!safeCents(change))bad('Valor excedeu limite seguro');
+              if(!safeCents(amount)||!safeCents(change)||amount>order.totalCents)bad('Pagamento excedeu limite seguro');
             }
             let next;try{next=closeOrder(order,amount);}catch(e){bad(e.message);}
             const stock=consumeStockForOrder(db,id,requestActor,conflict);
-            for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id) VALUES(?,?,?,?,?,?,?)')
-              .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id);
+            for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id,guest) VALUES(?,?,?,?,?,?,?,?)')
+              .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id,p.guest??null);
             writeOrder(db,next);
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
               .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
@@ -512,12 +551,15 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const id=route.split('/')[4];
           const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind='PRINT_RECEIPT'").get(id);if(!job)missing('Impressão');
           if(job.status==='DONE'||sendingPrintJobs.has(id)) conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
-          const printer=db.prepare("SELECT * FROM printer_profile WHERE id='default' AND enabled=1").get();
+          const printPayload=JSON.parse(job.payload_json);
+          const printer=printPayload.profileId?
+            db.prepare("SELECT * FROM print_profile WHERE id=? AND enabled=1").get(printPayload.profileId):
+            db.prepare("SELECT * FROM printer_profile WHERE id='default' AND enabled=1").get();
           if(!printer)conflict('Impressora não configurada');
           // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
           sendingPrintJobs.add(id);
           try {
-            const bytes=receiptBytes(JSON.parse(job.payload_json));
+            const bytes=receiptBytes(printPayload);
             if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
             else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
             else await transmit(printer.host,printer.port,bytes);
