@@ -572,7 +572,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       // Somente portal público do cliente e recursos de atualização dos PWAs antigos.
       // As páginas operacionais clássicas e scripts administrativos não são mais servidos.
       const file=route.slice(1);
-      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js,'pwa-192.png','pwa-512.png'].includes(file))
+      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
         return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
