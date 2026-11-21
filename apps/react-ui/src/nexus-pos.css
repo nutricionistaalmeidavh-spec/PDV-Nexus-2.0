@@ -270,3 +270,25 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
 @media(min-width:640px){
  .nexus-checkout-modal .mantine-SimpleGrid-root{grid-template-columns:repeat(4,minmax(0,1fr))!important}
 }
+
+/* Final visual QA: readable cashier search and full action label on narrow phones */
+.nexus-pos .searchfield .mantine-TextInput-root,
+.nexus-pos .searchfield .mantine-InputWrapper-root{width:100%;min-width:0}
+.nexus-pos .searchfield .mantine-Input-wrapper{width:100%}
+.nexus-checkout-modal .mantine-Button-root[data-variant="filled"],
+.nexus-pos .order-foot .mantine-Button-root[data-variant="filled"]{
+ background:#C2410C!important;color:#fff!important
+}
+.nexus-checkout-modal .mantine-Button-root[data-variant="filled"]:hover:not(:disabled),
+.nexus-pos .order-foot .mantine-Button-root[data-variant="filled"]:hover:not(:disabled){
+ background:#9A3412!important
+}
+@media(max-width:420px){
+ .nexus-checkout-modal .nexus-modal-actions .mantine-Button-root:first-child{
+   flex:0 0 80px!important;width:80px!important;padding-inline:8px!important
+ }
+ .nexus-checkout-modal .nexus-modal-actions .mantine-Button-root:last-child{
+   flex:1 1 auto!important;width:auto!important;
+   font-size:12px!important;padding-inline:8px!important
+ }
+}
