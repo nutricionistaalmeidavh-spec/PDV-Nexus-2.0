@@ -34,7 +34,7 @@ export function StockBusiness({mode,api,onChanged,reloadKey}){
   setRefresh(x=>x+1);
  onChanged?.();
  }catch(e){setError(e.message);}};
- return <div className="page"><div className="pageheading"><div><p className="eyebrow">ESTOQUE / DADOS CANÔNICOS</p><h1>Estoque, fornecedores e compras</h1><p className="subtext">Saldo e custo obtidos diretamente do SQLite do host. Compras só afetam estoque após recebimento.</p></div><button className="btn secondary" type="button" onClick={()=>setRefresh(x=>x+1)}>Atualizar</button></div>
+ return <div className="page nexus-management"><div className="pageheading"><div><p className="eyebrow">ESTOQUE / DADOS CANÔNICOS</p><h1>Estoque, fornecedores e compras</h1><p className="subtext">Saldo e custo obtidos diretamente do SQLite do host. Compras só afetam estoque após recebimento.</p></div><button className="btn secondary" type="button" onClick={()=>setRefresh(x=>x+1)}>Atualizar</button></div>
   <Notice error={error||state.error}/>
   {state.offline?<Block title="Host local necessário">Sem conexão não há dados reais nem lançamentos.</Block>:state.pending?<p className="subtext">Consultando o host...</p>:<>
    <div className="metric-grid"><div className="metric-card"><span>Valor contábil do estoque</span><strong>{amt(state.report.totalValueCents)}</strong></div><div className="metric-card"><span>Ingredientes com saldo baixo</span><strong>{state.report.lowStockCount}</strong></div><div className="metric-card"><span>Fornecedores cadastrados</span><strong>{state.suppliers.suppliers.length}</strong></div><div className="metric-card"><span>Compras pendentes</span><strong>{state.purchases.purchases.filter(p=>p.status==='DRAFT').length}</strong></div></div>
@@ -70,7 +70,7 @@ export function FinanceBusiness({mode,api,section='financeiro'}){
     .catch(e=>{if(active)setState({pending:false,error:e.message})});
   return()=>{active=false;};
  },[api,mode,from,to,revision]);
- return <div className="page"><div className="pageheading"><div><p className="eyebrow">GESTÃO / CONCILIAÇÃO LOCAL</p><h1>{section==='relatorios'?'Relatórios financeiros':'Financeiro'}</h1><p className="subtext">Vendas, devoluções, CMV e pagamentos confirmados no mesmo banco local; sem dados simulados.</p></div><button className="btn secondary" type="button" onClick={()=>setRevision(n=>n+1)}>Atualizar</button></div>
+ return <div className="page nexus-management"><div className="pageheading"><div><p className="eyebrow">GESTÃO / CONCILIAÇÃO LOCAL</p><h1>{section==='relatorios'?'Relatórios financeiros':'Financeiro'}</h1><p className="subtext">Vendas, devoluções, CMV e pagamentos confirmados no mesmo banco local; sem dados simulados.</p></div><button className="btn secondary" type="button" onClick={()=>setRevision(n=>n+1)}>Atualizar</button></div>
   <Block title="Período"><div className="row wrap compact"><label className="field">Início<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label className="field">Fim<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label></div></Block>
   <Notice error={state.error}/>
   {state.offline?<Block title="Host local necessário">Sem dados financeiros demonstrativos.</Block>:state.pending?<p className="subtext">Consultando lançamentos...</p>:<>
