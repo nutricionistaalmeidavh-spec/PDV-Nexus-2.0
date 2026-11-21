@@ -171,7 +171,15 @@ try{
  await page.locator('.nexus-management-table').first().waitFor();
  await shot('p3-03-estoque-datatable');
  await page.setViewportSize({width:390,height:844});
+ await page.locator('.sidebar').waitFor({state:'hidden'});
+ const navHidden=await page.locator('.sidebar').isVisible();
+ assert.equal(navHidden,false,'Menu deve iniciar recolhido no celular, sem sobrepor formulários');
  await shot('p4-01-gestao-mobile');
+ await page.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
+ await page.locator('.sidebar .nav-item').first().waitFor({state:'visible'});
+ await shot('p4-02-menu-mobile-aberto');
+ await page.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
+ await page.locator('.sidebar').waitFor({state:'hidden'});
  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+3);
  assert.equal(overflow,false,'Gestão mobile não deve provocar overflow horizontal na página inteira');
  await page.setViewportSize({width:1440,height:940});
