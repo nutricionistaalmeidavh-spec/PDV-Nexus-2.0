@@ -29,11 +29,11 @@ test('EAN-13: checksum e PLU de balança não aceitam etiquetas adulteradas',()=
   assert.equal(decodeEan13(code).valid,true);
   assert.equal(decodeEan13(code.slice(0,-1)+(code.endsWith('0')?'1':'0')).valid,false);
   const weighted=encodeEan13('200012300750');
-  assert.deepEqual(decodeScaleLabel(weighted,{mode:'weight'}),{plu:'00123',weightMilli:750});
+  assert.deepEqual(decodeScaleLabel(weighted,{mode:'weight'}),{plu:'00123',weightGrams:750});
   assert.deepEqual(decodeScaleLabel(weighted,{mode:'price'}),{plu:'00123',priceCents:750});
 });
 test('Leitura serial: protocolos retornam peso estável ou erro verificável',()=>{
-  assert.equal(parseScaleSerial('ST,GS,+0001.250kg',{brand:'generic'}).weightMilli,1250);
+  assert.equal(parseScaleSerial('ST,GS,+0001.250kg',{brand:'generic'}).weightGrams,1250);
   assert.equal(parseScaleSerial('US,GS,+0001.250kg',{brand:'generic'}).stable,false);
   assert.equal(parseScaleSerial('\u0002+001.250kg\u0003',{brand:'filizola'}).weightMilli,1250);
   assert.throws(()=>parseScaleSerial('lixo',{brand:'generic'}),/Peso|quadro/);
