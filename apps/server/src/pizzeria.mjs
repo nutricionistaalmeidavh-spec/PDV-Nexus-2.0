@@ -49,7 +49,7 @@ export function pizzaWrite(db,method,route,body,h){
   if(db.prepare('SELECT suspended_at FROM sales_order WHERE id=?').get(order.id)?.suspended_at)h.conflict('Retome a venda primeiro');
   if(db.prepare('SELECT 1 FROM payment WHERE order_id=?').get(order.id))h.conflict('Comanda já possui pagamento','ORDER_ALREADY_PAID');
   if(!Number.isSafeInteger(body.quantity)||body.quantity<1||body.quantity>10)h.bad('Quantidade de pizzas inválida');
-  const template=db.prepare('SELECT id,name FROM menu_product WHERE id=? AND active=1').get(body.templateProductId);
+  const template=db.prepare('SELECT id,name FROM menu_product WHERE id=? AND active=1 AND sale_unit='unit'').get(body.templateProductId);
   if(!template)h.missing('Produto de pizza ativo');
   const size=db.prepare('SELECT id,name,base_price_cents AS basePriceCents FROM pizza_size WHERE id=? AND active=1').get(body.sizeId);
   if(!size)h.missing('Tamanho da pizza');
