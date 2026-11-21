@@ -141,6 +141,11 @@ try{
  await page.getByRole('heading',{name:'Diagnósticos de periféricos'}).waitFor();
  await shot('07-hardware');
 
+ await clickNav('Gestão geral');
+ await page.getByRole('heading',{name:'Gestão e relatórios'}).waitFor();
+ await page.getByRole('heading',{name:'Receita e CMV'}).waitFor();
+ await page.locator('.nexus-overview .nexus-management-table').first().waitFor();
+ await shot('p3-00-gestao-geral');
  await clickNav('Financeiro');
  await page.getByRole('heading',{name:'Financeiro',exact:true}).waitFor();
  await page.getByRole('heading',{name:'Evolução de receita e CMV'}).waitFor();
