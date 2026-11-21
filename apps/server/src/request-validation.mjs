@@ -12,3 +12,9 @@ export function assertRevision(order,revision){
  if(!Number.isSafeInteger(revision)||revision<0)bad('Revisão obrigatória');
  if(order.revision!==revision)conflict('Pedido alterado em outro terminal','REVISION_CONFLICT');
 }
+
+/** One canonical approval policy for cancelling an already confirmed order. */
+export function requireSupervisorForConfirmed(order,operatorRole,deviceRole){
+ if(order.status==='OPEN'&&operatorRole!=='admin'&&deviceRole!=='manager')
+  throw new HttpError(403,'SUPERVISOR_REQUIRED','Cancelamento de comanda confirmada exige supervisor');
+}
