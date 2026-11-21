@@ -458,6 +458,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
         fs.createReadStream(path.join(publicDir,route.slice(1))).pipe(res);return;
       }
+      if(licenseControl.required&&method!=='GET'&&!(await licenseControl.status()).active)
+        throw new HttpError(402,'LICENSE_REQUIRED','Avaliação comercial encerrada: novos pedidos estão indisponíveis. Consulte os dados existentes no host.');
       if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio indisponível'});
       const found=publicRead(db,method,route);
       if(found)return response(res,found.status,found.body);
