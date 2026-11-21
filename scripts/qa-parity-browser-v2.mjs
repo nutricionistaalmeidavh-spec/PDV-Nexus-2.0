@@ -82,6 +82,12 @@ try{
  await clickNav('Mesas e comandas');
  await page.getByPlaceholder('Ex.: Mesa 13').fill('Mesa Paridade QA');
  await page.getByRole('button',{name:/Nova mesa/}).click();
+ const roomTiles=page.locator('.nexus-room-summary > .mantine-Paper-root');
+ assert.equal(await roomTiles.count(),3,'Mapa deve oferecer três indicadores de salão');
+ const roomY=await Promise.all([0,1,2].map(i=>roomTiles.nth(i).evaluate(el=>Math.round(el.getBoundingClientRect().top))));
+ assert.equal(new Set(roomY).size,1,'Indicadores do salão devem compartilhar uma linha no desktop');
+ const statusReadable=await page.locator('.table-card .mantine-Badge-label').first().evaluate(el=>el.scrollWidth<=el.clientWidth+1);
+ assert.ok(statusReadable,'Etiqueta Livre/Ocupada não pode ser truncada nos cartões');
  await shot('p2-02-mapa-salao');
  await page.locator('.table-card').filter({hasText:'Mesa Paridade QA'}).click();
  await page.getByRole('heading',{name:'Gerenciar mesa'}).waitFor();
@@ -144,6 +150,11 @@ try{
  await clickNav('Gestão geral');
  await page.getByRole('heading',{name:'Gestão e relatórios'}).waitFor();
  await page.getByRole('heading',{name:'Receita e CMV'}).waitFor();
+ const metrics=page.locator('.nexus-overview-kpis > .mantine-Paper-root');
+ assert.equal(await metrics.count(),4);
+ const metricsY=await Promise.all([0,1,2,3].map(i=>metrics.nth(i).evaluate(el=>Math.round(el.getBoundingClientRect().top))));
+ assert.equal(new Set(metricsY).size,1,'Quatro KPIs de gestão devem compartilhar linha no desktop');
+
  await page.locator('.nexus-overview .nexus-management-table').first().waitFor();
  await shot('p3-00-gestao-geral');
  await clickNav('Financeiro');
