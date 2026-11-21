@@ -163,7 +163,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     return result;
   }
   async function handler(req,res) {
-    let requestActor='unauthenticated';
+    let requestActor='unauthenticated',requestRole=null;
     const auditForRequest=(db,aggregateId,action,payload={})=>audit(db,aggregateId,action,payload,requestActor);
     const url=new URL(req.url,'http://localhost');
     const route=url.pathname;
@@ -210,6 +210,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const operator=operatorAuth.user(req);
           if(!operator)throw new HttpError(401,'OPERATOR_REQUIRED','Entre com um operador local');
           requestActor=operator.id;
+          requestRole=operator.role;
           if(!allowedOperator(operator.role,method,route))throw new HttpError(403,'OPERATOR_FORBIDDEN','Perfil sem permissao para este comando');
         }
         if(method==='GET'&&route==='/api/kitchen/events'){
@@ -475,6 +476,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const reason=requireString(body.reason,'Motivo do cancelamento',240);
+            // Após confirmar, só supervisor local ou gerente LAN pode cancelar.
+            if(order.status==='OPEN'&&requestRole!=='admin'&&role!=='manager')
+              throw new HttpError(403,'SUPERVISOR_REQUIRED','Cancelamento de comanda confirmada exige supervisor');
+            const production=db.prepare("SELECT 1 FROM kitchen_ticket WHERE order_id=? AND status IN ('PREPARING','READY','SERVED') LIMIT 1").get(id);
+            if(production)conflict('Produção já iniciada: faça o procedimento gerencial de ocorrência, sem apagar a comanda','KITCHEN_ALREADY_STARTED');
+            if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))
+              conflict('Comanda possui pagamento registrado; utilize o fluxo financeiro de devolução','ORDER_HAS_PAYMENT');
             const next=cancelOrder(order);writeOrder(db,next);
             db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status NOT IN ('SERVED','CANCELLED')").run(stamp(),id);
             auditForRequest(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
@@ -492,7 +500,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             requireCents(body.amountCents,'Valor',false);
             if(body.kind==='WITHDRAWAL'&&body.amountCents>cashExpected(db,session))bad('Sangria superior ao saldo');
             const id=randomUUID();db.prepare('INSERT INTO cash_movement(id,session_id,kind,amount_cents,actor_id,created_at) VALUES(?,?,?,?,?,?)')
-              .run(id,session.id,body.kind,body.amountCents,actorId,stamp());
+              .run(id,session.id,body.kind,body.amountCents,requestActor,stamp());
             auditForRequest(db,session.id,'CASH_MOVEMENT',{kind:body.kind,amountCents:body.amountCents});return {session:visibleCash(db)};
           },201);
         } else if(method==='POST'&&route==='/api/cash/close') {
