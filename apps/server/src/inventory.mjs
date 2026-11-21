@@ -99,7 +99,7 @@ export function returnStockForRefund(db,lineId,quantity,refundId,actor,stamp){
   const cost=Number((BigInt(original)*BigInt(amount)+BigInt(entire)/2n)/BigInt(entire));
   if(!nonneg(cost))throw new Error('Valor devolvido excede precisão');
   // Devolução física é opção explícita: saldo canônico aumenta, sem inventar lote/validade.
-  applyMovement(db,ing,amount,cost,'ADJUST_IN','Devolução vendida '+refundId,actor);
+  applyMovement(db,ing,amount,cost,'ADJUST_IN','Devolução vendida '+refundId,actor,line.orderId);
  }
 }
 
