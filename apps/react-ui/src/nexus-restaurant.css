@@ -82,3 +82,9 @@
 @media(prefers-reduced-motion:reduce){
  .nexus-restaurant .table-card{transition:none}
 }
+
+/* Visual QA: override legacy .table-card span rule; preserve readable status badges. */
+.nexus-restaurant .nexus-room-summary{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:13px!important}
+.nexus-restaurant .table-card .mantine-Badge-root{display:inline-flex;width:auto;max-width:none;min-width:0;flex:0 0 auto;border-radius:999px;padding:4px 9px;height:24px;white-space:nowrap}
+.nexus-restaurant .table-card .mantine-Badge-root span,.nexus-restaurant .table-card .mantine-Badge-label{font-size:10px!important;line-height:1.15!important;white-space:nowrap;overflow:visible}
+@media(max-width:520px){.nexus-restaurant .nexus-room-summary{gap:7px!important}.nexus-restaurant .nexus-room-summary .mantine-Paper-root{padding:10px!important}}
