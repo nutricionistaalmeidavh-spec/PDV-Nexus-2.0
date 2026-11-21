@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {formatMoney} from './model.mjs';
+import {SettlementPanel,PizzaComposer,ScaleSalePanel,AdvancedCounterPanel} from './TableOrderExtras.jsx';
 const money=c=>formatMoney(Number.isSafeInteger(c)?c:0);
 const uuid=()=>crypto.randomUUID();
 function Panel({title,children}){return <section className="panel"><div className="sectiontitle"><h2>{title}</h2></div>{children}</section>}
@@ -179,7 +180,11 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
       <p className="help">Pedidos já confirmados podem receber itens adicionais: o KDS recebe tickets independentes.</p>
      </Panel>
     </div>
-    {isTable&&<TableQrPanel order={order} api={api} mode={mode} run={run} busy={busy} onError={setError}/>}
+    {mode==='live'&&<SettlementPanel order={order} api={api} run={run} session={session} busy={busy} mode={mode}/>}
+    <PizzaComposer order={order} api={api} products={products} run={run} busy={busy} mode={mode}/>
+    {mode==='live'&&<ScaleSalePanel order={order} api={api} products={products} run={run} busy={busy} mode={mode}/>}
+    {mode==='live'&&<AdvancedCounterPanel order={order} api={api} tables={tables} run={run} busy={busy}/>}
+    {isTable&&<TableQrPanel order={order} api={api} mode={mode} run={run} busy={busy} onError={setError}/>
     {isTable&&<Panel title="Transferir mesa">
       <div className="row wrap compact"><label className="field">Mesa de destino<select value={destination} onChange={e=>setDestination(e.target.value)}><option value="">Selecionar mesa livre</option>{tables.filter(t=>!t.orderId&&t.id!==order.tableId).map(t=><option value={t.id} key={t.id}>{t.label}</option>)}</select></label>
        <button className="btn secondary" disabled={!lineAllowed||!destination||busy} onClick={()=>void run('/api/orders/'+encodeURIComponent(order.id)+'/transfer-table',{tableId:destination}).then(result=>{if(result)setDestination('')})}>Transferir comanda</button></div>
