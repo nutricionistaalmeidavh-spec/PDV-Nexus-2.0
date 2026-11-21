@@ -59,9 +59,9 @@ test('P1: estorno parcial por linha e quantidade é auditável e protegido contr
  const a=await ok('POST',`/api/orders/${order.id}/refund-items`,refund,201);
  assert.equal(a.refund.amountCents,1200);
  assert.equal((await ok('POST',`/api/orders/${order.id}/refund-items`,refund,201)).refund.id,a.refund.id);
- const b=await ok('POST',`/api/orders/${order.id}/refund-items`,cmd({...refund,quantity:2}),201);
+ const b=await ok('POST',`/api/orders/${order.id}/refund-items`,cmd({lineId,quantity:2,cashCents:2400,reason:'Restante devolvido',returnToStock:false}),201);
  assert.equal(b.refund.amountCents,2400);
- assert.equal((await api('POST',`/api/orders/${order.id}/refund-items`,cmd(refund))).status,409);
+ assert.equal((await api('POST',`/api/orders/${order.id}/refund-items`,cmd({lineId,quantity:1,cashCents:1200,reason:'Duplicada',returnToStock:false}))).status,409);
  const report=await ok('GET',`/api/orders/${order.id}/refund-items`);
  assert.equal(report.totalRefundedCents,3600);
  assert.equal(report.refunds.length,2);
