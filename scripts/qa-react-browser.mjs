@@ -52,6 +52,8 @@ try {
  await clickNav('Nova venda');
  await page.getByRole('heading',{name:'Nova venda'}).waitFor();
  await page.getByRole('button',{name:'Todos'}).first().waitFor();
+ const searchWidth=await page.locator('.nexus-pos .searchfield input').evaluate(el=>el.getBoundingClientRect().width);
+ assert.ok(searchWidth>=300,'Busca precisa ocupar largura adequada no caixa desktop: '+searchWidth);
  const firstProduct=page.locator('.product-card').filter({hasText:'X-QA-React'});
  const productLeft=await firstProduct.evaluate(el=>el.getBoundingClientRect().left);
  assert.ok(productLeft>=230,'Catálogo não pode ficar coberto pela sidebar AppShell: x='+productLeft);
@@ -82,6 +84,11 @@ try {
      return Boolean(top&&(top===el||el.contains(top)));
    });
    assert.ok(confirmVisible,'Botão de confirmação está oculto/recortado pelo modal: '+width+'x'+height);
+   const readable=await page.getByRole('button',{name:'Confirmar recebimento'}).evaluate(el=>{
+     const text=el.querySelector('.mantine-Button-label');
+     return Boolean(text&&text.scrollWidth<=text.clientWidth+1);
+   });
+   assert.ok(readable,'Texto de Confirmar recebimento truncado: '+width+'x'+height);
    await snap('react-checkout-'+width+'x'+height);
  }
  await page.setViewportSize({width:1440,height:940});
