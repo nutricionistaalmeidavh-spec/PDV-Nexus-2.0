@@ -18,7 +18,7 @@ export function lineHistory(db,method,route,h){
   if(!db.prepare('SELECT 1 FROM sales_order WHERE id=?').get(match[1]))h.missing('Pedido');
   const events=db.prepare(`SELECT id,line_id AS lineId,action,before_json AS beforeJson,
     after_json AS afterJson,reason,actor_id AS actorId,created_at AS createdAt
-    FROM order_line_change WHERE order_id=? ORDER BY created_at,id`).all(match[1])
+    FROM order_line_change WHERE order_id=? OR line_id IN (SELECT id FROM order_line WHERE order_id=?) ORDER BY created_at,id`).all(match[1],match[1])
     .map(x=>({id:x.id,lineId:x.lineId,action:x.action,before:JSON.parse(x.beforeJson),
       after:x.afterJson?JSON.parse(x.afterJson):null,reason:x.reason,actorId:x.actorId,createdAt:x.createdAt}));
   return {status:200,body:{events}};
