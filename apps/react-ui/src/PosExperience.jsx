@@ -85,7 +85,7 @@ export function PosProductModal({product,requester,onClose,onSubmit,busy,demo}){
    {error&&<Text size="sm" role="alert" c="red.8">{error}</Text>}
    <Group className="nexus-modal-actions" justify="space-between" align="center" wrap="nowrap">
     <Button variant="default" onClick={onClose}>Cancelar</Button>
-    <Button color="orange" onClick={submit} disabled={!valid} loading={busy} leftSection={<Plus size={16}/>}>
+    <Button className="nexus-primary-action" color="orange" onClick={submit} disabled={!valid} loading={busy} leftSection={<Plus size={16}/>}>
      Adicionar ao pedido · {money((product.priceCents+extra)*(valid?quantity:1))}
     </Button>
    </Group>
@@ -162,7 +162,7 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
    </Stack>
    <Group className="nexus-modal-actions" justify="space-between" align="center" wrap="nowrap">
     <Button variant="default" onClick={onClose}>Voltar</Button>
-    <Button color="orange" onClick={submit} loading={busy} leftSection={<Check size={18}/>}>Confirmar recebimento</Button>
+    <Button className="nexus-primary-action" color="orange" onClick={submit} loading={busy} leftSection={<Check size={18}/>}>Confirmar recebimento</Button>
    </Group>
   </Stack>
  </Modal>;
@@ -261,11 +261,11 @@ export function PosSale({products,categories,order,onChoose,onConfirm,onCancel,o
      <Group justify="space-between" className="total-hero">
       <Text fw={700}>Total</Text><Text fw={900} size="xl">{money(total)}</Text>
      </Group>
-     {status==='DRAFT'&&<Button fullWidth color="orange" size="md" loading={busy}
+     {status==='DRAFT'&&<Button className="nexus-primary-action" fullWidth color="orange" size="md" loading={busy}
        disabled={!lines.length} onClick={onConfirm}>Confirmar pedido</Button>}
-     {status==='OPEN'&&<Button fullWidth color="orange" size="md" loading={busy}
+     {status==='OPEN'&&<Button className="nexus-primary-action" fullWidth color="orange" size="md" loading={busy}
        disabled={!lines.length} onClick={onPay} leftSection={<Wallet size={18}/>}>Finalizar venda (F10)</Button>}
-     {['CLOSED','CANCELLED'].includes(status)&&<Button fullWidth color="orange" onClick={onNew}>Iniciar nova venda</Button>}
+     {['CLOSED','CANCELLED'].includes(status)&&<Button className="nexus-primary-action" fullWidth color="orange" onClick={onNew}>Iniciar nova venda</Button>}
      {['DRAFT','OPEN'].includes(status)&&<Button fullWidth variant="light" color="gray" loading={busy}
        onClick={onCancel} leftSection={<Trash2 size={16}/>}>Cancelar pedido</Button>}
      <Text size="xs" c="dimmed" ta="center">Pagamento confirmado no host · Comprovante não fiscal</Text>
