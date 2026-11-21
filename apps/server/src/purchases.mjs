@@ -32,7 +32,7 @@ export function purchasesWrite(db,method,route,body,h){
    const hasLot=item.lotCode!==undefined||item.expiryDate!==undefined;
    if(hasLot){
     if(typeof item.lotCode!=='string'||!item.lotCode.trim()||item.lotCode.length>64||
-      typeof item.expiryDate!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(item.expiryDate))
+      typeof item.expiryDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(item.expiryDate))
        h.bad('Lote e data de validade obrigatórios juntos');
     const d=new Date(item.expiryDate+'T00:00:00.000Z');
     if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==item.expiryDate)h.bad('Validade inválida');
