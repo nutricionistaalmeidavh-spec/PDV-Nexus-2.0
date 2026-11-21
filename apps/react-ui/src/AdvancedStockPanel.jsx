@@ -7,7 +7,7 @@ const cents=raw=>{const v=Number(raw),scaled=Math.round(v*100);if(!Number.isSafe
 const uuid=()=>crypto.randomUUID();
 const Item=({children})=><div className="list-row">{children}</div>;
 const Section=({title,children})=><section className="panel"><div className="sectiontitle"><h2>{title}</h2></div>{children}</section>;
-export function AdvancedStockPanel({mode,api}){
+export function AdvancedStockPanel({mode,api,onChanged,reloadKey}){
  const [state,setState]=useState({pending:true}),[revision,setRevision]=useState(0);
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  const [productId,setProductId]=useState(''),[ingredientId,setIngredientId]=useState(''),[recipe,setRecipe]=useState([]),[qty,setQty]=useState('0.200');
@@ -20,7 +20,7 @@ export function AdvancedStockPanel({mode,api}){
    .then(([stock,products,suppliers,purchases,margin])=>{if(live)setState({stock,products,suppliers,purchases,margin})})
    .catch(e=>{if(live)setState({error:e.message})});
   return()=>{live=false;};
- },[api,mode,revision]);
+ },[api,mode,revision,reloadKey]);
  useEffect(()=>{
   if(!productId||mode!=='live'){setRecipe([]);return;}
   let live=true;
@@ -38,7 +38,7 @@ export function AdvancedStockPanel({mode,api}){
   return()=>{live=false;};
  },[api,mode,histIngredient,revision]);
  const call=async(url,body={},method='POST')=>{if(busy||mode!=='live')return;setError('');setNotice('');setBusy(true);
-  try{const response=await api(url,{method,body:{commandId:uuid(),...body}});setRevision(x=>x+1);setNotice('Operação confirmada no banco local.');return response;}
+  try{const response=await api(url,{method,body:{commandId:uuid(),...body}});setRevision(x=>x+1);onChanged?.();setNotice('Operação confirmada no banco local.');return response;}
   catch(e){setError(e.message);}finally{setBusy(false);}
  };
  const ingredients=state.stock?.ingredients||[],products=(state.products?.products||[]).filter(p=>!p.isCombo),suppliers=state.suppliers?.suppliers||[];
