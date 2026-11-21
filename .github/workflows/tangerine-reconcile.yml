@@ -1,0 +1,50 @@
+name: Temporary Tangerine 3-way integration
+on:
+  push:
+    branches: ['feat/integrate-tangerine-p0-p4-20261121']
+permissions:
+  contents: write
+jobs:
+  integrate:
+    if: github.event.head_commit.message != 'chore: integrate Tangerine P0-P4 with current main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Merge Tangerine preserving main history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin feat/nexus-tangerine-p2-p4-20261121
+          if ! git merge --no-commit --no-ff origin/feat/nexus-tangerine-p2-p4-20261121; then
+            echo 'MERGE_CONFLICT_FILES'
+            git diff --name-only --diff-filter=U
+            echo 'MERGE_STATUS'
+            git status --short
+            exit 1
+          fi
+      - name: Remove ephemeral integration workflow from resulting tree
+        shell: bash
+        run: |
+          git rm .github/workflows/tangerine-reconcile.yml
+      - name: Validate merge in isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm run ui:test
+          npm run ui:build
+          npm test
+          npm run test:api
+      - name: Commit merge only after checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m 'chore: integrate Tangerine P0-P4 with current main'
+          git push origin HEAD:feat/integrate-tangerine-p0-p4-20261121
