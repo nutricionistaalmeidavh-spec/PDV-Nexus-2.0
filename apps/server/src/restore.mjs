@@ -12,7 +12,7 @@ export function inspectBackup(source) {
   if(db.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Backup corrompido');
   if(db.prepare('PRAGMA foreign_key_check').all().length)throw new Error('Referências inválidas');
   const versions=db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(x=>x.version);
-  if(!versions.includes(2)||versions.some(x=>x>18))throw new Error('Backup de versão incompatível');
+  if(!versions.includes(2)||versions.some(x=>x>19))throw new Error('Backup de versão incompatível');
   const orders=db.prepare('SELECT COUNT(*) AS count FROM sales_order').get().count;
   const payments=db.prepare('SELECT COUNT(*) AS count FROM payment').get().count;
   return {compatible:true,schemaVersion:Math.max(...versions),orders,payments,fileBytes:fs.statSync(source).size};
