@@ -81,7 +81,7 @@ export function createCommercialLicense(db,{required=false,endpoint='https://pdv
     const current=state.entitlement?.payload;
     const active=!!current&&!state.revoked&&(!current.expiresAt||issued(current.expiresAt)>now())&&verifyEntitlement(state.entitlement,installationId,key);
     if(t>state.lastSeen+60000){state.lastSeen=t;persist()}
-    return {required:true,active,product:PRODUCT,kind:'COMMERCIAL',email:current?.email||null,
+    return {required:true,active,product:PRODUCT,kind:current?.kind||'COMMERCIAL',email:current?.email||null,
       expiresAt:current?.expiresAt||null,reason:active?'ACTIVE':state.revoked?'SUSPENDED':current?.expiresAt&&issued(current.expiresAt)<=t?'EXPIRED':'NOT_LICENSED'};
   }
   return {
