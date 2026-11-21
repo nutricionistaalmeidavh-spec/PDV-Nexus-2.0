@@ -11,7 +11,7 @@
       <button data-view="history" class="nav-item">Histórico</button>
       <a href="/restaurant.html" class="nav-item">Mesas e comandas</a>
       <a href="/kitchen.html" class="nav-item">Cozinha (KDS)</a>
-      <button data-view="cash" class="nav-item">Gestão do caixa</button>
+      <button data-view="cash" class="nav-item">Gestão do caixa</button><button data-view="finance-report" class="nav-item">Relatórios financeiros</button>
       <button data-view="print" class="nav-item">Impressão</button><button data-view="devices" class="nav-item">Dispositivos</button>
       <button data-view="fiscal" class="nav-item">Exportar vendas</button>
       <button data-view="stock" class="nav-item">Estoque &amp; fichas</button>
@@ -45,7 +45,7 @@
       </div><div class="panel"><div class="section-head"><div><span class="eyebrow">GESTÃO DO CARDÁPIO</span><h2>Produtos cadastrados</h2></div></div>
       <form id="product-form" class="form-row"><label>Nome<input name="name" required maxlength="120" placeholder="Ex.: X-Burger"/></label>
         <label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required placeholder="19,90"/></label>
-        <label>Categoria<select id="product-category" name="categoryId" required></select></label>
+        <label>Categoria<select id="product-category" name="categoryId" required></select></label><label>EAN-13 (opcional)<input name="barcode" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" placeholder="7891234567895"></label>
         <button class="button primary" type="submit">Cadastrar produto</button></form>
       <div id="product-list" class="data-list"></div></div><div class="panel"><h3>Adicionais por produto</h3><form id="modifier-form" class="form-row"><label>Produto<select name="productId" id="modifier-product"></select></label><label>Nome<input name="name" maxlength="80" required placeholder="Queijo extra"></label><label>Preço (R$)<input name="price" type="number" min="0" step="0.01" required></label><button class="button secondary">Adicionar opção</button></form></div>
     <div class="panel" id="combo-panel"><h2>Combos de preço fixo</h2><p class="note">O combo é cadastrado como um produto do cardápio. Sua composição fica preservada no pedido e é exibida para a cozinha.</p>
@@ -84,10 +84,11 @@
           <label>Unidade<select name="unit"><option value="g">Gramas (g)</option><option value="ml">Mililitros (ml)</option><option value="unit">Unidades</option></select></label>
           <label>Alerta abaixo de<input name="lowStock" type="number" min="0" step="0.001" value="0" required></label><button class="button primary">Cadastrar</button></form>
         <div id="stock-ingredient-list" class="data-list"></div></div>
+      <div class="panel"><h2>Fornecedores</h2><form id="supplier-form" class="form-row"><label>Nome<input name="name" maxlength="120" required></label><label>Documento opcional<input name="document" maxlength="30"></label><button class="button primary">Cadastrar fornecedor</button></form><div id="supplier-list" class="data-list"></div></div>
       <div class="panel"><h2>Movimentações de estoque</h2>
         <form id="stock-receive-form" class="form-row"><label>Ingrediente<select name="ingredientId" id="stock-receive-ingredient" required></select></label>
           <label>Quantidade recebida<input type="number" name="quantity" min="0.001" step="0.001" required></label>
-          <label>Custo total (R$)<input type="number" name="cost" min="0" step="0.01" required></label><button class="button primary">Registrar entrada</button></form>
+          <label>Custo total (R$)<input type="number" name="cost" min="0" step="0.01" required></label><label>Lote (opcional)<input name="lotCode" maxlength="64" placeholder="L-2026-001"></label><label>Validade do lote<input type="date" name="expiryDate"></label><label>Fornecedor<select id="stock-receive-supplier" name="supplierId"></select></label><button class="button primary">Registrar entrada</button></form>
         <form id="stock-adjust-form" class="form-row"><label>Ingrediente<select name="ingredientId" id="stock-adjust-ingredient" required></select></label>
           <label>Ajuste (+ entrada / − saída)<input type="number" name="quantity" step="0.001" required></label>
           <label>Custo (R$, se entrada)<input type="number" name="cost" step="0.01" min="0" value="0"></label>
@@ -100,7 +101,7 @@
           <label>Quantidade por produto<input type="number" id="stock-recipe-quantity" step="0.001" min="0.001" value="1"></label>
           <button type="button" class="button secondary" id="stock-recipe-add">Incluir na ficha</button></div>
         <div id="stock-recipe-lines" class="data-list"></div><button type="button" class="button primary" id="stock-recipe-save">Salvar ficha técnica</button>
-      </div></section>
+      </div><div class="panel"><h2>Lotes e validade FEFO</h2><p class="note">As saídas usam os lotes válidos de vencimento mais próximo. Lotes vencidos ficam bloqueados para vendas; ajustes de perda permanecem disponíveis.</p><label>Ingrediente<select id="stock-batches-ingredient"></select></label><div id="stock-batch-list" class="data-list"></div></div></section>
     <section id="view-delivery" class="view">
       <div class="panel"><div class="section-head"><div><span class="eyebrow">RECEBIMENTO MANUAL</span><h2>Delivery e cardápio digital</h2></div><button type="button" class="button secondary" id="delivery-refresh">Atualizar</button></div>
         <p class="note">O cardápio digital é gratuito, funciona no servidor local e fica desativado até você habilitá-lo. Para acesso de outros aparelhos é necessário configurar a rede local HTTPS. Solicitações não equivalem a vendas pagas.</p>
@@ -144,9 +145,10 @@
         <label>Valor (R$)<input name="amount" type="number" min="0.01" step="0.01" required/></label><button class="button secondary">Registrar</button></form>
       <form id="cash-close-form" class="form-row" hidden><label>Dinheiro contado (R$)<input name="amount" type="number" min="0" step="0.01" required/></label><button class="button danger">Fechar caixa</button></form>
     </div></section>
-    <section id="view-print" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">HARDWARE</span><h2>Impressora térmica TCP</h2></div></div>
-      <p class="note">Impressão ESC/POS de recibo não fiscal. O envio TCP não garante que o papel tenha sido impresso.</p>
-      <form id="printer-form" class="form-row"><label>IPv4 local<input name="host" placeholder="192.168.1.100" required/></label><label>Porta<input name="port" type="number" value="9100" min="1" max="65535" required/></label><button class="button primary">Salvar impressora</button></form>
+    <section id="view-finance-report" class="view"><div class="panel"><h2>Relatórios financeiros</h2><form class="form-row" id="finance-filter"><label>De<input type="date" name="from"></label><label>Até<input type="date" name="to"></label><button class="button primary">Consultar</button></form><p class="metric" id="finance-totals"></p><div id="finance-methods" class="data-list"></div><h3>Vendas por dia</h3><div id="finance-days" class="data-list"></div><h3>Fechamentos de caixa</h3><div id="finance-cash" class="data-list"></div></div></section>
+    <section id="view-print" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">HARDWARE</span><h2>Impressora térmica ESC/POS</h2></div></div>
+      <p class="note">TCP ou serial USB/COM (driver opcional no host). Enviar bytes não garante impressão física.</p>
+      <form id="printer-form" class="form-row"><label>Transporte<select name="transport" id="printer-transport"><option value="tcp">Rede TCP</option><option value="serial">USB serial / COM</option></select></label><label>IPv4 local<input name="host" placeholder="192.168.1.100"/></label><label>Porta TCP<input name="port" type="number" value="9100" min="1" max="65535"/></label><label>Porta serial<input name="devicePath" placeholder="COM3 ou /dev/ttyUSB0"/></label><label>Velocidade<select name="baudRate"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label><button class="button primary">Salvar impressora</button></form>
       <h3>Fila de impressão</h3><div id="print-list" class="data-list"></div></div></section>
     <section id="view-fiscal" class="view"><div class="panel"><div class="section-head"><div><span class="eyebrow">ARQUIVOS PARA CONTABILIDADE</span><h2>Exportar vendas</h2></div></div>
       <p class="note">Exportação de dados operacionais de vendas fechadas para contabilidade ou emissão externa. Não gera NF-e/NFC-e ou outro documento fiscal.</p>
