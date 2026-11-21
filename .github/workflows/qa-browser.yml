@@ -27,10 +27,11 @@ jobs:
           node --experimental-strip-types scripts/qa-browser.mjs
           if [ -f scripts/qa-p2-browser.mjs ]; then node --experimental-strip-types scripts/qa-p2-browser.mjs; fi
           node --experimental-strip-types scripts/qa-react-browser.mjs
+          node --experimental-strip-types scripts/qa-visual-journey.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: PDV-Nexus-browser-QA
-          path: artifacts/qa/*.png
+          path: artifacts/qa/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
