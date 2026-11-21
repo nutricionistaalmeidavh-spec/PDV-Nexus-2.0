@@ -67,6 +67,7 @@ export function scaleWrite(db,method,route,body,h){
   const order=h.databaseOrder(db,m[1]);h.assertRevision(order,body.expectedRevision);
   if(!['DRAFT','OPEN'].includes(order.status))h.conflict('Pedido encerrado');
   if(db.prepare('SELECT suspended_at FROM sales_order WHERE id=?').get(order.id)?.suspended_at)h.conflict('Retome a venda primeiro');
+  if(db.prepare('SELECT 1 FROM payment WHERE order_id=?').get(order.id))h.conflict('Comanda já possui pagamento','ORDER_ALREADY_PAID');
   if(typeof body.readingId!=='string')h.bad('Leitura da balança obrigatória');
   const reading=db.prepare('SELECT * FROM scale_reading WHERE id=?').get(body.readingId);
   if(!reading||reading.stable!==1||reading.consumed_line_id||Date.parse(reading.expires_at)<=Date.now())
