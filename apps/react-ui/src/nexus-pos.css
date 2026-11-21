@@ -292,3 +292,13 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
    font-size:12px!important;padding-inline:8px!important
  }
 }
+
+/* WCAG AA: force readable dark orange on the actual Mantine POS actions.
+   The default orange shade used by third-party components is too light for white text. */
+.nexus-primary-action.mantine-Button-root{
+ background-color:#C2410C!important;color:#FFFFFF!important;
+ border-color:#C2410C!important
+}
+.nexus-primary-action.mantine-Button-root:hover:not(:disabled){
+ background-color:#9A3412!important;border-color:#9A3412!important
+}
