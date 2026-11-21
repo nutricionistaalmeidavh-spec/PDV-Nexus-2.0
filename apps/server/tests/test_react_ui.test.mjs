@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createApp} from '../src/server.mjs';
 
-test('P0: build React servido em /ui/ sem substituir PWA e caixa legado', async t => {
+test('React é a interface única e URLs antigas redirecionam sem servir HTML clássico', async t => {
   const root=path.resolve(import.meta.dirname,'../../react-ui/dist');
   assert.ok(fs.existsSync(path.join(root,'index.html')), 'Compilar React com npm run ui:build antes dos testes');
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-react-route-'));
@@ -24,12 +24,18 @@ test('P0: build React servido em /ui/ sem substituir PWA e caixa legado', async 
   assert.equal(js.status,200);
   assert.match(js.headers.get('content-type')||'',/javascript/);
   assert.ok((await js.text()).length>5000);
-  const legacy=await fetch(origin+'/');
-  assert.equal(legacy.status,200);
-  assert.match(await legacy.text(),/view-pos/);
-  const pwa=await fetch(origin+'/restaurant.html');
-  assert.equal(pwa.status,200);
-  assert.match(await pwa.text(),/comanda|mesa/i);
+  for(const [oldPath,destination] of [
+    ['/','/ui/?embedded=1'],['/index.html','/ui/?embedded=1'],
+    ['/restaurant.html','/ui/?device=waiter'],['/kitchen.html','/ui/?device=kitchen']
+  ]){
+    const redirected=await fetch(origin+oldPath,{redirect:'manual'});
+    assert.equal(redirected.status,302,oldPath);
+    assert.equal(redirected.headers.get('location'),destination,oldPath);
+  }
+  for(const asset of ['/app.js','/p2-admin.js','/restaurant.js','/kitchen.js','/styles.css']){
+    const res=await fetch(origin+asset);
+    assert.equal(res.status,404,asset);
+  }
 });
 
 test('P0: ativos React não dão acesso a arquivos ou rotas arbitrárias',async t=>{
