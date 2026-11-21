@@ -1,9 +1,10 @@
 import React,{useEffect,useState} from 'react';
 import {formatMoney,parseMoney} from './model.mjs';
 const money=c=>formatMoney(Number.isSafeInteger(c)?c:0);
-export function AdvancedOrderOperations({order,tables,api,onAction,busy,mode,canManage}){
+export function AdvancedOrderOperations({order,tables,api,onAction,busy,mode,canManage,canDiscount}){
  const [stations,setStations]=useState([]),[printStation,setPrintStation]=useState(''),[mergeId,setMergeId]=useState('');
  const [priceLine,setPriceLine]=useState(''),[newPrice,setNewPrice]=useState(''),[reason,setReason]=useState('');
+ const [discountLine,setDiscountLine]=useState(''),[discountPercent,setDiscountPercent]=useState('10'),[discountReason,setDiscountReason]=useState('');
  const [notice,setNotice]=useState(''),[error,setError]=useState('');
  useEffect(()=>{
   if(mode==='demo')return;let live=true;
@@ -40,6 +41,17 @@ export function AdvancedOrderOperations({order,tables,api,onAction,busy,mode,can
    if(result){setNotice('Preço atualizado com trilha de auditoria');setPriceLine('');setNewPrice('');setReason('')}
   }catch(e){setError(e.message)}
  };
+ const applyDiscount=async e=>{
+  e.preventDefault();setError('');setNotice('');
+  const percent=discountPercent.trim().replace(',','.');
+  if(!/^(?:\\d{1,3})(?:\\.\\d{1,2})?$/.test(percent))return setError('Informe percentual de 0,01% a 100,00%');
+  const bps=Math.round(Number(percent)*100);
+  if(!Number.isSafeInteger(bps)||bps<1||bps>10000)return setError('Percentual fora do limite');
+  const result=await onAction('/api/orders/'+encodeURIComponent(order.id)+'/lines/'+encodeURIComponent(discountLine)+'/discount',{
+   discountBps:bps,reason:discountReason.trim()
+  });
+  if(result){setDiscountLine('');setDiscountReason('');setNotice('Desconto aplicado com auditoria em centavos');}
+ };
  return <section className="panel">
   <div className="sectiontitle"><h2>Impressão e operações avançadas</h2></div>
   <p className="help">Comprovantes não fiscais enviados à fila local. Nenhum serviço externo é necessário.</p>
@@ -58,6 +70,18 @@ export function AdvancedOrderOperations({order,tables,api,onAction,busy,mode,can
     </select></label>
     <button type="button" className="btn secondary" disabled={!mergeId||busy} onClick={()=>void merge()}>Juntar à comanda atual</button>
    </div>
+  </details>}
+  {canDiscount&&!order.payments?.length&&['DRAFT','OPEN'].includes(order.status)&&<details>
+   <summary>Desconto por item com limite de autorização</summary>
+   <p className="help">Caixa: até 10% por item. Acima de 10% somente supervisor. Um desconto por linha, com histórico obrigatório.</p>
+   <form className="stack" onSubmit={applyDiscount}>
+    <label className="field">Item<select required value={discountLine} onChange={e=>setDiscountLine(e.target.value)}>
+     <option value="">Selecione</option>{order.lines.map(x=><option key={x.id} value={x.id}>{x.productName} · {money(x.unitPriceCents)}/un.</option>)}
+    </select></label>
+    <label className="field">Percentual (%)<input required inputMode="decimal" value={discountPercent} onChange={e=>setDiscountPercent(e.target.value)} placeholder="10,00"/></label>
+    <label className="field">Justificativa<input required maxLength={240} value={discountReason} onChange={e=>setDiscountReason(e.target.value)}/></label>
+    <button className="btn secondary" disabled={busy||!discountLine||!discountReason.trim()}>Aplicar desconto auditado</button>
+   </form>
   </details>}
   {canManage&&<details><summary>Alterar preço individual com justificativa (supervisor)</summary>
    <form className="stack" onSubmit={override}>
