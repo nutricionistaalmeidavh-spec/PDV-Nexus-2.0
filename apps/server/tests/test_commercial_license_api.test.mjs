@@ -24,10 +24,11 @@ test('commercial edition: only verified license unlocks writes and expiry preser
     if(url.endsWith('/v1/nexus/entitlement/refresh'))return Response.json({active:false});
     throw Error('Unexpected central route');
   };
-  const app=createApp({dataPath:path.join(dir,'nexus.db'),commercialLicense:{
+  const app=createApp({dataPath:path.join(dir,'nexus.db'),publicMenuEnabled:true,commercialLicense:{
     required:true,publicJwk,storagePath:path.join(dir,'licence.json'),fetchImpl,now:()=>clock,endpoint:'https://license.example'
   }});
   await app.listen({port:0});
+  const publicOrigin=await app.startPublicPortal({port:0});
   t.after(async()=>app.close());
   let cookie='';
   const req=async (method,route,body)=>{
@@ -47,5 +48,10 @@ test('commercial edition: only verified license unlocks writes and expiry preser
   clock=baseline+120_000;
   assert.equal((await req('GET','/api/license/status')).data.reason,'SUSPENDED');
   assert.equal((await req('POST','/api/orders',{commandId:'trial-expired-01',serviceMode:'counter'})).status,402);
+  const publicDelivery=await fetch(publicOrigin+'/api/public/delivery/requests',{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({name:'Cliente sem autorização comercial'})
+  });
+  assert.equal(publicDelivery.status,402,'public portal must also block writes when the commercial entitlement expires');
   assert.equal((await req('GET','/api/system/identity')).status,200);
 });
