@@ -12,6 +12,7 @@ import {supplyRead,supplyWrite} from './retail-supply.mjs';
 import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
 import {financialRead} from './retail-finance.mjs';
+import {checkUpdates,currentVersion} from './system-maintenance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
 import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
@@ -234,6 +235,19 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
+        if(method==='GET'&&route==='/api/system/version')return response(res,200,{version:currentVersion,offline:true,updateMode:'manual'});
+        if(method==='GET'&&route==='/api/system/update/check'){
+          if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','A verificação de atualização exige o supervisor no host local');
+          return response(res,200,await checkUpdates());
+        }
+        if(method==='GET'&&route==='/api/system/backups'){
+          if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','Consulte backups apenas no host local');
+          const dir=path.join(path.dirname(dataPath),'backups');
+          const backups=fs.existsSync(dir)?fs.readdirSync(dir).filter(x=>/^[a-z0-9._-]+\.sqlite$/i.test(x))
+            .map(name=>({name,sizeBytes:fs.statSync(path.join(dir,name)).size,modifiedAt:fs.statSync(path.join(dir,name)).mtime.toISOString()}))
+            .sort((a,b)=>b.modifiedAt.localeCompare(a.modifiedAt)).slice(0,100):[];
+          return response(res,200,{backups});
+        }
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
@@ -297,6 +311,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
+        if(method==='POST'&&route==='/api/system/backup'){
+          if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','Backup manual somente no host local');
+          const commandId=requireString(body.commandId,'Identificador do backup',100);
+          if(!/^[a-zA-Z0-9_-]{3,100}$/.test(commandId))bad('Identificador do backup inválido');
+          const destination=path.join(path.dirname(dataPath),'backups','manual-'+commandId+'.sqlite');
+          const existed=fs.existsSync(destination);
+          if(!existed)await createBackup(db,destination);
+          if(!existed)auditForRequest(db,'r-local','BACKUP_CREATED',{file:path.basename(destination)});
+          return response(res,existed?200:201,{created:!existed,filename:path.basename(destination),path:destination,warning:'Para restaurar, feche o PDV e use o procedimento offline.'});
+        }
         if(method==='POST'&&route==='/api/pairing/start'){
           try{return response(res,201,pairing.start(body));}
           catch(e){return response(res,400,{code:'PAIRING_INVALID',message:e.message});}
