@@ -19,7 +19,7 @@ export function decodeScaleLabel(code,{mode='weight'}={}){
 /** Returns grams, not money or inventory milli-units. Must confirm stable reading before selling. */
 export function parseScaleSerial(raw,{brand='generic'}={}){
   if(typeof raw!=='string'||raw.length>256||!['generic','toledo','filizola'].includes(brand))throw new Error('Quadro de balança inválido');
-  const frame=raw.replace(/^[\x02\s]+|[\x03\r\n\s]+$/g,'').replace(',','.');
+  const frame=raw.replace(/^[\x02\s]+|[\x03\r\n\s]+$/g,'').replace(/,(?=\d)/g,'.');
   let stable=!/^(?:US|UNSTABLE)[,:]/i.test(frame);
   if(/^(?:ST|US)[,:]/i.test(frame))stable=/^ST[,:]/i.test(frame);
   let weightGrams;
