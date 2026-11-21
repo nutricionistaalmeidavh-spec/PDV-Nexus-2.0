@@ -1,1 +1,24 @@
-{"id": "/restaurant.html", "name": "PDV Nexus 2.0 · Restaurante", "short_name": "Nexus Garçom", "start_url": "/restaurant.html", "scope": "/", "display": "standalone", "background_color": "#f7f9fc", "theme_color": "#1b293b", "icons": [{"src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"}, {"src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
+{
+  "id": "/ui/?device=waiter",
+  "name": "PDV Nexus 2.0 · Garçom React",
+  "short_name": "Nexus Garçom",
+  "start_url": "/ui/?device=waiter",
+  "scope": "/ui/",
+  "display": "standalone",
+  "background_color": "#f7f9fc",
+  "theme_color": "#5d18d3",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
