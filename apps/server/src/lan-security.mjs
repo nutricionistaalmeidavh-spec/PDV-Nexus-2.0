@@ -38,9 +38,14 @@ export function roleAllows(role,method,route) {
   if(role==='waiter')return (method==='GET'&&(
     ['/api/products','/api/orders','/api/tables','/api/restaurant/summary','/api/health'].includes(route)||
     /^\/api\/orders\/[^/]+$/.test(route)||
+    /^\/api\/orders\/[^/]+\/line-history$/.test(route)||
+    /^\/api\/tables\/[^/]+\/requests$/.test(route)||
     /^\/api\/products\/[^/]+\/modifiers$/.test(route))) ||
     (method==='POST'&&(
       route==='/api/orders'|| /^\/api\/tables\/[^/]+\/open$/.test(route)||
-      /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)));
+      /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)||
+      /^\/api\/orders\/[^/]+\/lines\/[^/]+\/(edit|cancel)$/.test(route)||
+      /^\/api\/tables\/[^/]+\/qr$/.test(route)||
+      /^\/api\/table-requests\/[^/]+\/(accept|reject)$/.test(route)));
   return false;
 }
