@@ -7,7 +7,8 @@ import {generateKeyPairSync,sign} from 'node:crypto';
 import {createApp} from '../src/server.mjs';
 test('commercial edition: only verified license unlocks writes and expiry preserves reads',async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-license-api-'));
-  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  let app;
+  t.after(async()=>{try{if(app)await app.close()}finally{fs.rmSync(dir,{recursive:true,force:true})}});
   const keys=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
   const publicJwk=keys.publicKey.export({format:'jwk'});
   const baseline=Date.now();let clock=baseline;
@@ -24,12 +25,11 @@ test('commercial edition: only verified license unlocks writes and expiry preser
     if(url.endsWith('/v1/nexus/entitlement/refresh'))return Response.json({active:false});
     throw Error('Unexpected central route');
   };
-  const app=createApp({dataPath:path.join(dir,'nexus.db'),publicMenuEnabled:true,commercialLicense:{
+  app=createApp({dataPath:path.join(dir,'nexus.db'),publicMenuEnabled:true,commercialLicense:{
     required:true,publicJwk,storagePath:path.join(dir,'licence.json'),fetchImpl,now:()=>clock,endpoint:'https://license.example'
   }});
   await app.listen({port:0});
   const publicOrigin=await app.startPublicPortal({port:0});
-  t.after(async()=>app.close());
   let cookie='';
   const req=async (method,route,body)=>{
     const r=await fetch(app.origin+route,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(cookie?{cookie}:{})},
