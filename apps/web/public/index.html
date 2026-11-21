@@ -85,6 +85,18 @@
           <label>Alerta abaixo de<input name="lowStock" type="number" min="0" step="0.001" value="0" required></label><button class="button primary">Cadastrar</button></form>
         <div id="stock-ingredient-list" class="data-list"></div></div>
       <div class="panel"><h2>Fornecedores</h2><form id="supplier-form" class="form-row"><label>Nome<input name="name" maxlength="120" required></label><label>Documento opcional<input name="document" maxlength="30"></label><button class="button primary">Cadastrar fornecedor</button></form><div id="supplier-list" class="data-list"></div></div>
+      <div class="panel"><h2>Pedidos de compra</h2><p class="note">Criar uma compra não altera o estoque. A entrada ocorre somente quando o supervisor confirma o recebimento.</p>
+        <form id="purchase-form" class="form-row">
+          <label>Fornecedor<select name="supplierId" id="purchase-supplier" required></select></label>
+          <label>Ingrediente<select name="ingredientId" id="purchase-ingredient" required></select></label>
+          <label>Quantidade<input name="quantity" type="number" min="0.001" step="0.001" required></label>
+          <label>Custo total (R$)<input name="cost" type="number" min="0" step="0.01" required></label>
+          <label>Lote (opcional)<input name="lotCode" maxlength="64"></label>
+          <label>Validade<input name="expiryDate" type="date"></label>
+          <button class="button primary">Criar compra</button>
+        </form>
+        <div id="purchase-list" class="data-list"></div>
+      </div>
       <div class="panel"><h2>Movimentações de estoque</h2>
         <form id="stock-receive-form" class="form-row"><label>Ingrediente<select name="ingredientId" id="stock-receive-ingredient" required></select></label>
           <label>Quantidade recebida<input type="number" name="quantity" min="0.001" step="0.001" required></label>
