@@ -43,7 +43,7 @@ export function StockBusiness({mode,api}){
      <label className="field">Lote (opcional)<input maxLength={64} value={purchase.lotCode} onChange={e=>setPurchase(s=>({...s,lotCode:e.target.value}))}/></label>
      <label className="field">Validade<input type="date" value={purchase.expiryDate} onChange={e=>setPurchase(s=>({...s,expiryDate:e.target.value}))}/></label>
      <button className="btn primary">Criar compra pendente</button></form>
-     <p className="help">Edição de lotes, fichas técnicas e ajustes avançados continuam no <a href="/?view=stock">painel operacional local</a>.</p>
+     <p className="help">Lotes, fichas técnicas, ajustes, histórico e fornecedores estão disponíveis logo abaixo, nesta mesma interface React.</p>
    </Block>
   </>}
  </div>;
