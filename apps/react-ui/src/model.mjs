@@ -33,7 +33,7 @@ export function appendDemoLine(order,product,quantity=1,options={}) {
   if(!Number.isSafeInteger(quantity)||quantity<1) throw new Error('Quantidade inválida');
   const price=product.priceCents+(options.modifierPriceCents||0);
   if(!Number.isSafeInteger(price)||price<0) throw new Error('Preço inválido');
-  const lines=[...(order.lines||[]),{id:`demo-line-${(order.lines||[]).length+1}`,productId:product.id,productName:product.name,unitPriceCents:price,quantity,note:options.note||'',modifiers:options.modifiers||[]}];
+  const lines=[...(order.lines||[]),{id:`demo-line-${globalThis.crypto.randomUUID()}`,productId:product.id,productName:product.name,unitPriceCents:price,quantity,note:options.note||'',modifiers:options.modifiers||[]}];
   return {...order,lines,revision:order.revision+1,totalCents:lines.reduce((s,l)=>s+l.unitPriceCents*l.quantity,0)};
 }
 export function sumOrder(order){return order?.totalCents??(order?.lines||[]).reduce((s,l)=>s+l.unitPriceCents*l.quantity,0);}
