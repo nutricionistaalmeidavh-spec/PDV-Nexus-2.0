@@ -1,8 +1,10 @@
 name: Desktop Installer (manual, no release)
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
-    branches: ['feat/p0-p1-hardening-20261118', 'feat/p2-stock-delivery-selfhost-20261118', 'feat/react-electron-p0-p2-20261118', 'feat/p2-final-react-compatible-20261118', 'feat/p2-operational-mirror-hardening-20261120']
+    branches: [main, 'feat/p0-p1-hardening-20261118', 'feat/p2-stock-delivery-selfhost-20261118', 'feat/react-electron-p0-p2-20261118', 'feat/p2-final-react-compatible-20261118', 'feat/p2-operational-mirror-hardening-20261120']
 jobs:
   windows:
     runs-on: windows-latest
@@ -12,10 +14,10 @@ jobs:
         with:
           node-version: '22.16.0'
       - name: Install open-source dependencies for unsigned QA build
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Prepare React UI bundle for API, restart and package verification
         run: |
-          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
           npm run ui:test
           npm run ui:build
       - name: Test business and API logic

@@ -9,8 +9,10 @@ import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, order
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
+import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
 import {financialRead} from './retail-finance.mjs';
+import {checkUpdates,currentVersion} from './system-maintenance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
 import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
@@ -146,6 +148,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
+  const backupJobs=new Map();
   const kitchenListeners=new Set();
   function notifyKitchen() {
     const message='event: changed\ndata: {"changed":true}\n\n';
@@ -233,6 +236,24 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
+        if(method==='GET'&&route==='/api/system/config'){
+          const restaurant=db.prepare("SELECT id,display_name AS displayName FROM restaurant WHERE id='r-local'").get();
+          const terminal=db.prepare("SELECT id,label FROM terminal WHERE id='t-local'").get();
+          return response(res,200,{restaurant,terminal});
+        }
+        if(method==='GET'&&route==='/api/system/version')return response(res,200,{version:currentVersion,offline:true,updateMode:'manual'});
+        if(method==='GET'&&route==='/api/system/update/check'){
+          if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','A verificação de atualização exige o supervisor no host local');
+          return response(res,200,await checkUpdates());
+        }
+        if(method==='GET'&&route==='/api/system/backups'){
+          if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','Consulte backups apenas no host local');
+          const dir=path.join(path.dirname(dataPath),'backups');
+          const backups=fs.existsSync(dir)?fs.readdirSync(dir).filter(x=>/^[a-z0-9._-]+\.sqlite$/i.test(x))
+            .map(name=>({name,sizeBytes:fs.statSync(path.join(dir,name)).size,modifiedAt:fs.statSync(path.join(dir,name)).mtime.toISOString()}))
+            .sort((a,b)=>b.modifiedAt.localeCompare(a.modifiedAt)).slice(0,100):[];
+          return response(res,200,{backups});
+        }
         if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
@@ -247,6 +268,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
         const financeResult=financialRead(db,method,route,url.searchParams);
         if(financeResult)return response(res,financeResult.status,financeResult.body);
+        const purchaseResult=purchasesRead(db,method,route);
+        if(purchaseResult)return response(res,purchaseResult.status,purchaseResult.body);
         const suppliersResult=supplyRead(db,method,route,url.searchParams);
         if(suppliersResult)return response(res,suppliersResult.status,suppliersResult.body);
         if(method==='GET'&&route==='/api/catalog/barcode'){
@@ -294,6 +317,37 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
+        if(method==='POST'&&route==='/api/system/config'){
+          const out=transactWithEvents(db,route,body,()=>{
+            const displayName=requireString(body.displayName,'Nome do estabelecimento',120);
+            const terminalLabel=requireString(body.terminalLabel,'Nome do terminal',80);
+            db.prepare("UPDATE restaurant SET display_name=? WHERE id='r-local'").run(displayName);
+            db.prepare("UPDATE terminal SET label=? WHERE id='t-local'").run(terminalLabel);
+            auditForRequest(db,'r-local','INSTALLATION_CONFIGURED',{displayName,terminalLabel});
+            return {restaurant:{id:'r-local',displayName},terminal:{id:'t-local',label:terminalLabel}};
+          });
+          return response(res,out.status,out.body);
+        }
+        if(method==='POST'&&route==='/api/system/backup'){
+          if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','Backup manual somente no host local');
+          const commandId=requireString(body.commandId,'Identificador do backup',100);
+          if(!/^[a-zA-Z0-9_-]{3,100}$/.test(commandId))bad('Identificador do backup inválido');
+          const destination=path.join(path.dirname(dataPath),'backups','manual-'+commandId+'.sqlite');
+          const existing=fs.existsSync(destination);
+          let created=false;
+          if(!existing&&!backupJobs.has(commandId)&&backupJobs.size)conflict('Backup já em andamento no host','BACKUP_BUSY');
+          if(!existing){
+            const ongoing=backupJobs.get(commandId);
+            if(ongoing)await ongoing;
+            else{
+              const operation=createBackup(db,destination);
+              backupJobs.set(commandId,operation);
+              try{await operation;created=true;auditForRequest(db,'r-local','BACKUP_CREATED',{file:path.basename(destination)});}
+              finally{backupJobs.delete(commandId);}
+            }
+          }
+          return response(res,created?201:200,{created,filename:path.basename(destination),path:destination,warning:'Para restaurar, feche o PDV e use o procedimento offline.'});
+        }
         if(method==='POST'&&route==='/api/pairing/start'){
           try{return response(res,201,pairing.start(body));}
           catch(e){return response(res,400,{code:'PAIRING_INVALID',message:e.message});}
@@ -304,7 +358,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         let out;
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
-        const special=supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');

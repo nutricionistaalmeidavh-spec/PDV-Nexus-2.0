@@ -9,7 +9,9 @@ PDV **local-first para restaurantes e lanchonetes**, sem assinatura, cloud, APIs
 Requer Node.js >= 22.16.0. Python 3 é utilizado **apenas nos testes históricos de esquema**, não no aplicativo distribuído.
 
 ```bash
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
+npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+npm run ui:build
 npm test
 npm start
 ```
@@ -93,3 +95,13 @@ Nenhum gateway de pagamento, emissão NFC-e ou serviço pago é necessário para
 ### Opcional: espelhos operacionais de outras unidades
 
 O supervisor pode habilitar consultas automáticas por HTTPS à LAN/VPN privada para visualizar pedidos, produtos e saldos de **outras** unidades. São espelhos de leitura, sem lançar vendas ou estoque no banco local e sem API paga. O recurso permanece desativado por padrão; use tokens específicos de leitura, certificados confiáveis e configure peers fora do Git. Veja [guia de homologação](docs/HOMOLOGACAO_SELFHOSTED.md).
+
+
+## Consolidação P0–P3 (21/11/2026)
+
+- **P0:** raiz e interface MIT; lockfiles raiz/React versionados e `npm ci` nos builds; páginas React de estoque, financeiro e relatórios conectadas às APIs reais; assistente salva estabelecimento/terminal em transação idempotente.
+- **P1:** EAN-13, consulta de etiquetas Toledo/Filizola e TCP/serial/Winspool RAW opcionais; leitura física de balança e compatibilidade de cada impressora ainda exigem testes no modelo real.
+- **P2:** fornecedores, compras com confirmação de recebimento, lotes e validade FEFO, ficha técnica/custo médio e relatórios sem duplicar ledger.
+- **P3:** backup manual autenticado, snapshot pré-migração, inspeção/restauração offline, verificação de releases opt-in e QA automatizado (sem release automática).
+
+O core permanece **R$ 0, self-hosted, open source e não fiscal**. Veja [licenciamento](docs/LICENSING.md), [restauração e atualização](docs/RESTAURACAO_E_ATUALIZACAO.md), [extensões comerciais](docs/RETAIL_EXTENSIONS_20261121.md) e [roadmap e pendências de hardware](docs/ROADMAP.md).

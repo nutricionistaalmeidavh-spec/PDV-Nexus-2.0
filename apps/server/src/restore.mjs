@@ -4,6 +4,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** Inspect before closing or replacing the live database. No writes. */
+export function inspectBackup(source) {
+ if(!source||!fs.existsSync(source))throw new Error('Arquivo de backup não encontrado');
+ const db=new DatabaseSync(source,{readOnly:true});
+ try {
+  if(db.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Backup corrompido');
+  if(db.prepare('PRAGMA foreign_key_check').all().length)throw new Error('Referências inválidas');
+  const versions=db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(x=>x.version);
+  if(!versions.includes(2)||versions.some(x=>x>18))throw new Error('Backup de versão incompatível');
+  const orders=db.prepare('SELECT COUNT(*) AS count FROM sales_order').get().count;
+  const payments=db.prepare('SELECT COUNT(*) AS count FROM payment').get().count;
+  return {compatible:true,schemaVersion:Math.max(...versions),orders,payments,fileBytes:fs.statSync(source).size};
+ }finally{db.close();}
+}
 export function restoreBackup(source, destination) {
   if (!source || !destination) throw new Error('Origem e destino são obrigatórios');
   if (path.resolve(source) === path.resolve(destination)) throw new Error('Origem e destino precisam ser diferentes');
@@ -11,13 +25,7 @@ export function restoreBackup(source, destination) {
   if (fs.existsSync(destination+'-wal') || fs.existsSync(destination+'-shm')) {
     throw new Error('Arquivo WAL/SHM encontrado. Feche o PDV antes de restaurar');
   }
-  const sourceDb = new DatabaseSync(source, { readOnly:true });
-  try {
-    if (sourceDb.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw new Error('Backup corrompido');
-    if (sourceDb.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Backup com referências inválidas');
-    const migrated = sourceDb.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    if (!migrated.some(row=>row.version===2)) throw new Error('Versão de backup incompatível');
-  } finally { sourceDb.close(); }
+  inspectBackup(source);
   fs.mkdirSync(path.dirname(destination),{recursive:true,mode:0o700});
   const temporary = destination+'.restore-'+process.pid+'.tmp';
   const previous = destination+'.pre-restore.bak';
@@ -36,10 +44,13 @@ export function restoreBackup(source, destination) {
 
 if (process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   const args=process.argv.slice(2);
-  if(args.length!==3 || args[0]!=='--offline') {
-    console.error('Uso: node apps/server/src/restore.mjs --offline <backup.db> <nexus.db>');process.exitCode=2;
-  } else {
+  if(args.length===2&&args[0]==='--inspect'){
+    try{console.log(JSON.stringify(inspectBackup(args[1]),null,2));}
+    catch(e){console.error('Backup inválido:',e.message);process.exitCode=1;}
+  }else if(args.length===3&&args[0]==='--offline'){
     try {const r=restoreBackup(args[1],args[2]);console.log('Restaurado:',r.restored,'Backup anterior:',r.previous??'nenhum');}
     catch(e){console.error('Falha:',e.message);process.exitCode=1;}
+  }else{
+    console.error('Uso: node apps/server/src/restore.mjs --inspect <backup.db> OU --offline <backup.db> <nexus.db>');process.exitCode=2;
   }
 }

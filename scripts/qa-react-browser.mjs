@@ -63,15 +63,30 @@ try {
  const closedId=closed[0].id;
  await page.reload();await clickNav('Pedidos');await page.getByText('#'+closedId.slice(-8)).waitFor();
  await snap('react-04-pedidos-persistidos');
- // Navegação para estoque e delivery legados não perde os módulos operacionais.
+ // P0-P3: telas React agora consultam o mesmo host em vez de mostrar apenas prévias.
  await clickNav('Estoque');
- await page.getByRole('link',{name:/Abrir módulo operacional/}).click();
+ await page.getByRole('heading',{name:'Estoque, fornecedores e compras'}).waitFor();
+ await page.getByText('Valor contábil do estoque').waitFor();
+ await snap('react-05-estoque-canonico');
+ await clickNav('Financeiro');
+ await page.getByRole('heading',{name:'Financeiro',exact:true}).waitFor();
+ await page.getByText('Receita líquida').waitFor();
+ await snap('react-06-financeiro-canonico');
+ await clickNav('Relatórios');
+ await page.getByRole('heading',{name:'Relatórios financeiros'}).waitFor();
+ await snap('react-07-relatorios-canonicos');
+ await clickNav('Backup e atualizações');
+ await page.getByRole('heading',{name:'Backup e atualizações'}).waitFor();
+ await page.getByRole('button',{name:'Criar backup agora'}).click();
+ await page.getByText('Backup SQLite validado:',{exact:false}).waitFor();
+ await snap('react-08-manutencao');
+ await page.goto(origin+'/?view=stock');
  await page.locator('#view-stock.visible').waitFor();
- await snap('react-05-estoque-operacional-legado');
+ await snap('react-09-estoque-classico');
  // Teste mobile da interface React.
  await page.setViewportSize({width:390,height:844});
  await page.goto(origin+'/ui/?embedded=1');await page.getByRole('heading',{name:'Nova venda'}).waitFor();
- await snap('react-06-mobile');
+ await snap('react-10-mobile');
  // Com o host indisponível, Electron bloqueia prévia e recebimentos.
  const offline=await browser.newContext({viewport:{width:1200,height:800}});
  const offPage=await offline.newPage();
@@ -88,7 +103,7 @@ try {
  assert.equal(result.status,200);
  const snapshot=await result.json();
  assert.ok(snapshot.orders.some(o=>o.id===closedId&&o.status==='CLOSED'),'Venda deve sobreviver ao reinício');
- console.log('PASS React: build+login+catálogo+caixa+venda+comprovante+pedidos+estoque legado+mobile+offline+restart');
+ console.log('PASS React: build+login+catálogo+caixa+venda+comprovante+pedidos+estoque/financeiro/relatorios React+backup+mobile+offline+restart');
 } catch(e){
  await snap('react-ERRO');console.error('React browser QA failed',e);process.exitCode=1;
 } finally {

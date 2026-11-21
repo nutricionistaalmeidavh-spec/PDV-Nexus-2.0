@@ -3,6 +3,8 @@ import {request,authFor,commandId} from './api.mjs';
 import {formatMoney,parseMoney,paymentDraft,splitEvenly,appendDemoLine,DEMO_ORDER,sumOrder,formatTime} from './model.mjs';
 import {sampleCategories,sampleProducts,sampleModifiers,sampleOrders,sampleTables,sampleTickets} from './demo.mjs';
 import {foodAsset} from './media.mjs';
+import {StockBusiness,FinanceBusiness} from './BusinessPanels.jsx';
+import {Maintenance} from './Maintenance.jsx';
 
 const links=[
  ['venda','▣','Nova venda','Operação'],['pedidos','≡','Pedidos','Operação'],['produtos','◇','Produtos e cardápio','Operação'],
@@ -10,7 +12,7 @@ const links=[
  ['caixa','▤','Controle de caixa','Gestão'],['geral','▥','Gestão geral','Gestão'],['estoque','⬡','Estoque','Gestão'],
  ['financeiro','▥','Financeiro','Gestão'],['relatorios','▤','Relatórios','Gestão'],['unidades','⇄','Unidades','Gestão'],['privacidade','◇','Privacidade delivery','Gestão'],['usuarios','♙','Usuários','Configuração'],
  ['integracoes','⇄','Integrações','Configuração'],['dispositivos','▦','Dispositivos LAN','Configuração'],
- ['impressao','▣','Impressão','Configuração'],['exportacao','⇩','Exportar vendas','Configuração'],['primeiro-acesso','⚙','Primeiro acesso','Configuração']
+ ['impressao','▣','Impressão','Configuração'],['sistema','⚙','Backup e atualizações','Configuração'],['exportacao','⇩','Exportar vendas','Configuração'],['primeiro-acesso','⚙','Primeiro acesso','Configuração']
 ];
 const titleOf=id=>links.find(x=>x[0]===id)?.[2]||'Nova venda';
 const demoOrder=()=>({...DEMO_ORDER,lines:[]});
@@ -74,7 +76,43 @@ function Kitchen({tickets,onUpdate,busy,onRefresh}){
 }
 function Waiter({tables,products,onOpenTable,busy}){const [filter,setFilter]=useState('');const [tableId,setTableId]=useState('');return <Frame eyebrow="ATENDIMENTO MOBILE" title="Garçom mobile" description="Interface compacta para atendimento via host na rede local."><div className="phone-preview"><div className="phone-header"><strong>PDV Nexus</strong><Pill>Garçom</Pill></div><div className="phone-body"><label className="field">Selecionar mesa<select value={tableId} onChange={e=>setTableId(e.target.value)}><option value="">Escolha uma mesa</option>{tables.map(t=><option key={t.id} value={t.id}>{t.label} · {t.orderId?'ocupada':'livre'}</option>)}</select></label><Button kind="primary block" onClick={()=>{const t=tables.find(x=>x.id===tableId);if(t)onOpenTable(t);}} busy={busy}>Abrir comanda</Button><label className="searchfield"><span>⌕</span><input placeholder="Buscar produto" value={filter} onChange={e=>setFilter(e.target.value)}/></label><div className="phone-products">{products.filter(p=>p.name.toLowerCase().includes(filter.toLowerCase())).slice(0,5).map(p=><div key={p.id} className="list-row"><span>{p.emoji||'🍽️'}</span><div className="grow"><strong>{p.name}</strong><small>{centsLabel(p.priceCents)}</small></div></div>)}</div><p className="help">O envio de itens pelo garçom usa a comanda do host. Sem conexão, não confirma ações.</p></div></div></Frame>}
 function Split({order}){const [people,setPeople]=useState(2),total=sumOrder(order),shares=splitEvenly(total,people);return <Frame eyebrow="SALÃO / FECHAMENTO" title="Fechamento de mesa" description="Prévia de rateio para conferência antes de cobrar no caixa."><div className="dashboard-grid"><Panel title="Itens da comanda">{(order?.lines||[]).length?(order.lines||[]).map(l=><div className="list-row" key={l.id}><span>{l.quantity} × {l.productName}</span><strong>{centsLabel(l.quantity*l.unitPriceCents)}</strong></div>):<Empty>Abra uma comanda no mapa do salão para consultar seus itens.</Empty>}<div className="total-hero"><span>Total</span><strong>{centsLabel(total)}</strong></div></Panel><Panel title="Dividir por pessoas"><label className="field">Número de pessoas<select value={people} onChange={e=>setPeople(Number(e.target.value))}>{Array.from({length:10},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select></label>{shares.map((s,i)=><div className="list-row" key={i}><span>Pessoa {i+1}</span><strong>{centsLabel(s)}</strong></div>)}<p className="help">Prévia matemática, não registra pagamentos ou rateios. Conclua a cobrança pelo caixa para manter a conciliação canônica.</p></Panel></div></Frame>}
-function Onboarding(){const [step,setStep]=useState(0);const steps=['Estabelecimento','Terminal (caixa)','Impressão','Operação'];return <Frame eyebrow="CONFIGURAÇÃO / PRIMEIRO USO" title="Configuração inicial" description="Fluxo visual de primeiro acesso. Persistência da configuração depende do serviço de instalação."><div className="onboard-grid"><Panel><div className="stack">{steps.map((s,i)=><button className={'step-tab '+(i===step?'active':'')} onClick={()=>setStep(i)} key={s}><span>{i+1}</span>{s}</button>)}</div></Panel><Panel title={steps[step]}><p className="subtext">{['Identifique o estabelecimento e o tipo de atendimento.','Selecione o nome da estação e a configuração local.','Configure e teste sua impressora ESC/POS, se disponível.','Revise os dados antes de começar a operar.'][step]}</p>{step===0?<div className="stack"><label className="field">Nome do estabelecimento<input placeholder="Minha Lanchonete"/></label><label className="field">Tipo de operação<select><option>Restaurante e lanchonete</option><option>Balcão</option></select></label></div>:step===1?<div className="stack"><label className="field">Terminal<input defaultValue="Caixa 01"/></label><p className="help">Banco SQLite pertence somente ao computador host.</p></div>:step===2?<p className="help">A impressão ESC/POS utiliza a configuração do dispositivo e fila do host local.</p>:<p className="help">Nesta versão, o assistente é apenas uma prévia visual. Nenhuma configuração é salva por este formulário.</p>}<div className="row end"><Button disabled={step===0} onClick={()=>setStep(s=>s-1)}>Voltar</Button><Button kind="primary" disabled={step===3} onClick={()=>setStep(s=>s+1)}>Próximo</Button></div></Panel></div></Frame>}
+function Onboarding({mode,api}){
+ const [step,setStep]=useState(0),[restaurant,setRestaurant]=useState(''),[terminal,setTerminal]=useState('');
+ const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const steps=['Estabelecimento','Terminal','Impressão','Conferência'];
+ useEffect(()=>{
+  if(mode!=='live')return;
+  let active=true;
+  api('/api/system/config').then(config=>{
+   if(active){setRestaurant(config.restaurant?.displayName||'');setTerminal(config.terminal?.label||'');}
+  }).catch(e=>{if(active)setError(e.message)});
+  return()=>{active=false};
+ },[api,mode]);
+ const next=()=>{
+  if(step===0&&!restaurant.trim())return setError('Informe o nome do estabelecimento');
+  if(step===1&&!terminal.trim())return setError('Informe o nome do terminal');
+  setError('');setStep(x=>Math.min(3,x+1));
+ };
+ const save=async()=>{
+  if(mode!=='live')return setError('Conecte o host para salvar');
+  setBusy(true);setError('');setNotice('');
+  try{
+   await api('/api/system/config',{method:'POST',body:{commandId:crypto.randomUUID(),displayName:restaurant.trim(),terminalLabel:terminal.trim()}});
+   setNotice('Configuração salva no SQLite do host local');
+  }catch(e){setError(e.message);}finally{setBusy(false);}
+ };
+ return <Frame eyebrow="CONFIGURAÇÃO / PRIMEIRO ACESSO" title="Configuração inicial" description="Defina o restaurante e o terminal. Dados são gravados no banco local após confirmação.">
+  <div className="onboard-grid"><section className="panel"><div className="stack">{steps.map((s,i)=><button type="button" className={'step-tab '+(step===i?'active':'')} onClick={()=>setStep(i)} key={s}><span>{i+1}</span>{s}</button>)}</div></section>
+  <section className="panel"><h2>{steps[step]}</h2>
+   {step===0?<label className="field">Nome do estabelecimento<input required maxLength={120} value={restaurant} onChange={e=>setRestaurant(e.target.value)} placeholder="Minha lanchonete"/></label>:null}
+   {step===1?<label className="field">Nome do terminal<input required maxLength={80} value={terminal} onChange={e=>setTerminal(e.target.value)} placeholder="Caixa principal"/></label>:null}
+   {step===2?<p className="help">Impressoras são opcionais. Configure TCP, COM ou fila Windows em Impressão. O caixa permanece offline e funcional sem equipamento conectado.</p>:null}
+   {step===3?<div className="stack"><p><strong>Estabelecimento:</strong> {restaurant}</p><p><strong>Terminal:</strong> {terminal}</p><p className="help">Salvar registra uma mudança auditada; não habilita emissão fiscal nem serviços pagos.</p></div>:null}
+   {error&&<p className="errorbox" role="alert">{error}</p>}{notice&&<p className="notice" role="status">{notice}</p>}
+   <div className="row end"><Button disabled={step===0||busy} onClick={()=>setStep(x=>Math.max(0,x-1))}>Voltar</Button>{step===3?<Button kind="primary" busy={busy} onClick={()=>void save()}>Salvar configuração</Button>:<Button kind="primary" onClick={next}>Próximo</Button>}</div>
+  </section></div>
+ </Frame>;
+}
 function Dashboard({orders,session,tables,onGo}){return <Frame eyebrow="ADMINISTRAÇÃO / VISÃO GERAL" title="Gestão e relatórios" description="Indicadores disponíveis a partir do host; métricas futuras não são inventadas."><div className="metric-grid"><div className="metric-card"><span>Pedidos carregados</span><strong>{orders.length}</strong><small>Últimos registros consultados</small></div><div className="metric-card"><span>Pedidos abertos</span><strong>{orders.filter(o=>o.status==='OPEN').length}</strong><small>No conjunto consultado</small></div><div className="metric-card"><span>Mesas ocupadas</span><strong>{tables.filter(t=>t.orderId).length}</strong><small>Atualização local</small></div><div className="metric-card"><span>Dinheiro no caixa (esperado)</span><strong>{centsLabel(session?.expectedCents||0)}</strong><small>{session?'Sessão aberta':'Sem sessão ativa'}</small></div></div><div className="shortcut-grid">{[['estoque','Estoque','Controle e movimentações'],['financeiro','Financeiro','Recebimentos e caixa'],['relatorios','Relatórios','Vendas e desempenho'],['usuarios','Usuários','Acessos e permissões'],['integracoes','Integrações','Periféricos e serviços opcionais']].map(([id,label,sub])=><button className="shortcut" key={id} onClick={()=>onGo(id)}><strong>{label}</strong><small>{sub}</small><span>→</span></button>)}</div></Frame>}
 function PreviewModule({title,description,entries,aside,legacyView}){return <Frame eyebrow="GESTÃO / PLANEJADO" title={title} description={description}><Panel><Pill tone="orange">Estrutura React — aguardando contrato operacional</Pill><p className="subtext gap-top">Esta tela está implementada visualmente. Indicadores e movimentações não são simulados como dados reais.</p><div className="preview-grid">{entries.map(([name,detail])=><div className="preview-tile" key={name}><strong>{name}</strong><p>{detail}</p><small>Integração pendente</small></div>)}</div>{legacyView&&<div className="row gap-top"><a className="btn primary" href={'/?view='+encodeURIComponent(legacyView)}>Abrir módulo operacional (interface anterior)</a></div>}{aside}</Panel></Frame>}
 function OperationalModule({title,description,legacyView}){return <Frame eyebrow="GESTÃO / DISPONÍVEL NO HOST" title={title} description={description}><Panel>
@@ -139,7 +177,7 @@ function App(){
  if(mode==='boot')return <div className="loading">Conectando ao PDV Nexus local…</div>;
  if(mode==='offline')return <main className="authpage"><section className="authcard" role="alert"><h1>Caixa indisponível</h1><p>O host SQLite local não respondeu. Nenhuma venda foi registrada. O aplicativo não entra em modo demonstrativo no Electron.</p><Button kind="primary" onClick={boot}>Tentar novamente</Button></section></main>;
  if(mode==='auth')return <Login setup={needsSetup} onSubmit={login} busy={busy} error={loginError}/>;
- const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','usuarios','integracoes','dispositivos','impressao','exportacao','primeiro-acesso']);
+ const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','usuarios','integracoes','dispositivos','impressao','sistema','exportacao','primeiro-acesso']);
  const canEdit=isAdmin(user);const allowedLinks=links.filter(([id])=>!restricted.has(id)||canEdit);
  const page=()=>{switch(view){
  case 'venda':return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>{if(!session&&!isDemo){setError('Abra o caixa antes de receber pagamento');setView('caixa');}else setModal({type:'payment'})}} onNew={()=>{setOrder(null);setView('venda')}} busy={busy} mode={mode}/>;
@@ -151,17 +189,18 @@ function App(){
  case 'kds':return <Kitchen tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
  case 'garcom':return <><Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/><div className="row gap-top"><a className="btn primary" href="/restaurant.html">Abrir garçom operacional (PWA)</a></div></>;
  case 'divisao':return <><Split order={order}/><div className="row gap-top"><a className="btn secondary" href="/?view=pos">Abrir cobrança operacional no caixa antigo</a></div></>;
- case 'primeiro-acesso':return <Onboarding/>;
+ case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
  case 'geral':return <Dashboard orders={orders} session={session} tables={tables} onGo={navigate}/>;
- case 'estoque':return <OperationalModule title="Estoque, fornecedores e lotes FEFO" description="Movimentações e fichas técnicas no SQLite, com lotes e fornecedores vinculados." legacyView="stock"/>;
- case 'financeiro':return <OperationalModule title="Financeiro" description="Vendas, formas de pagamento, CMV e fechamento de caixa com dados canônicos." legacyView="finance-report"/>;
- case 'relatorios':return <OperationalModule title="Relatórios financeiros" description="Vendas por dia, por forma de pagamento, ticket médio e margem bruta." legacyView="finance-report"/>;
+ case 'estoque':return <StockBusiness mode={mode} api={api}/>;
+ case 'financeiro':return <FinanceBusiness mode={mode} api={api}/>;
+ case 'relatorios':return <FinanceBusiness mode={mode} api={api} section="relatorios"/>;
  case 'unidades':return <OperationalModule title="Unidades e espelhos operacionais" description="Indicadores financeiros por arquivos e consulta automática opt-in de pedidos, produtos e saldos, sempre somente leitura." legacyView="units"/>;
  case 'privacidade':return <OperationalModule title="Privacidade do delivery" description="Anonimização de solicitações finalizadas e retenção local de dados de clientes." legacyView="delivery"/>;
  case 'usuarios':return <Users onAdd={addOperator} busy={busy} user={user}/>;
- case 'integracoes':return <PreviewModule legacyView="delivery" title="Integrações" description="Tudo opcional: nenhum serviço pago compõe o núcleo." entries={[["Impressoras","ESC/POS TCP e serial/COM opcional"],["Balanças","Adaptador por modelo"],["Leitor de código","Entrada de produto"],["Pagamentos","Somente confirmação manual no core"]]}/>;
+ case 'integracoes':return <OperationalModule title="Periféricos e integrações locais" description="Impressoras TCP, serial/COM e Windows, EAN-13 e diagnósticos de etiquetas disponíveis no host." legacyView="print"/>;
  case 'dispositivos':return <Devices onStart={startPair} busy={busy} mode={mode}/>;
  case 'impressao':return <Printing mode={mode} onSave={savePrinter} busy={busy} jobs={jobs}/>;
+ case 'sistema':return <Maintenance mode={mode} api={api}/>;
  case 'exportacao':return <Exports mode={mode}/>;
  default:return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>setModal({type:'payment'})} onNew={()=>setOrder(null)} busy={busy} mode={mode}/>;
  }};

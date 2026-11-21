@@ -18,11 +18,11 @@
     "build:linux": "electron-builder --linux AppImage --x64 --publish never",
     "ui:build": "npm --prefix apps/react-ui run build",
     "ui:test": "npm --prefix apps/react-ui test",
-    "predesktop": "npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:build",
-    "prebuild:win": "npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build",
-    "prebuild:linux": "npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build"
+    "predesktop": "npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:build",
+    "prebuild:win": "npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build",
+    "prebuild:linux": "npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "main": "apps/desktop/main.cjs",
   "devDependencies": {
     "electron": "45.3.4",

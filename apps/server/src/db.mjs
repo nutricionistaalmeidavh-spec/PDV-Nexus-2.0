@@ -12,15 +12,40 @@ export function openDatabase(dataPath = defaultDataPath()) {
   fs.mkdirSync(path.dirname(dataPath), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(dataPath);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
-  migrate(db);
-  seed(db);
+  try {
+    safeguardMigrations(db,dataPath);
+    migrate(db);
+    seed(db);
+  }catch(e){db.close();throw e;}
   return db;
 }
 
+/** Before an upgrade, preserve a validated SQLite snapshot away from the live WAL. */
+function safeguardMigrations(db,dataPath){
+ const exists=db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get();
+ if(!exists)return; // clean installation
+ const current=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()?.version??0;
+ if(current>=18||current<=0)return;
+ const backupDir=path.join(path.dirname(dataPath),'backups');
+ fs.mkdirSync(backupDir,{recursive:true,mode:0o700});
+ const name='before-v18-from-v'+current+'-'+Date.now()+'-'+randomUUID()+'.sqlite';
+ const target=path.join(backupDir,name),temporary=target+'.tmp';
+ try{
+   db.prepare('VACUUM INTO ?').run(temporary);
+   const check=new DatabaseSync(temporary,{readOnly:true});
+   try{
+     if(check.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Integridade inválida');
+     if(check.prepare('PRAGMA foreign_key_check').all().length)throw new Error('Referências inválidas');
+   }finally{check.close();}
+   fs.renameSync(temporary,target);
+ }catch(e){
+   throw new Error('Migração interrompida: não foi possível criar backup de segurança: '+e.message);
+ }finally{fs.rmSync(temporary,{force:true});}
+}
 function migrate(db) {
   const current = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()
     ? new Set(db.prepare('SELECT version FROM schema_migrations').all().map(r => r.version)) : new Set();
-  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql'],[3,'003_restaurant.sql'],[4,'004_refunds.sql'],[5,'005_order_notes.sql'],[6,'006_auth_categories.sql'],[7,'007_paired_devices.sql'],[8,'008_combos_splits.sql'],[9,'009_inventory_ledger.sql'],[10,'010_delivery_requests.sql'],[11,'011_delivery_settings.sql'],[12,'012_installation_identity.sql'],[13,'013_multiunit_summary.sql'],[14,'014_delivery_privacy.sql'],[15,'015_delivery_request_idempotency.sql'],[16,'016_readonly_operational_mirror.sql'],[17,'017_retail_extensions.sql']]) {
+  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql'],[3,'003_restaurant.sql'],[4,'004_refunds.sql'],[5,'005_order_notes.sql'],[6,'006_auth_categories.sql'],[7,'007_paired_devices.sql'],[8,'008_combos_splits.sql'],[9,'009_inventory_ledger.sql'],[10,'010_delivery_requests.sql'],[11,'011_delivery_settings.sql'],[12,'012_installation_identity.sql'],[13,'013_multiunit_summary.sql'],[14,'014_delivery_privacy.sql'],[15,'015_delivery_request_idempotency.sql'],[16,'016_readonly_operational_mirror.sql'],[17,'017_retail_extensions.sql'],[18,'018_purchase_orders.sql']]) {
     if (current.has(version)) continue;
     db.exec('BEGIN IMMEDIATE');
     try {

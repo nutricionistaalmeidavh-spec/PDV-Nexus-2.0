@@ -1,6 +1,6 @@
 # PDV Nexus 2.0 — UI React (direção visual v1)
 
-Front-end React 19 + Vite 8, **R$ 0 / self-hosted**, com dependências open source e código React sob licença MIT. **A licença da raiz ainda é `UNLICENSED` e deve ser definida antes de declarar todo o produto como open source.** Implementação separada das telas existentes. Não altera rotas públicas, SQLite, Electron, backend ou fiscal existente.
+Front-end React 19 + Vite 8, **R$ 0 / self-hosted**, com dependências open source e código React sob licença MIT. **O núcleo e a interface React são distribuídos sob licença MIT; dependências externas mantêm suas licenças próprias.** Implementação separada das telas existentes. Não altera rotas públicas, SQLite, Electron, backend ou fiscal existente.
 
 ## Rodar localmente
 
@@ -31,14 +31,14 @@ Acesse `http://127.0.0.1:5173`. Vite encaminha **somente `/api`** para o host lo
 - Configuração de impressora TCP, pareamento e exportação CSV/JSON;
 - Todos os fluxos com comandos usam `commandId`, revisão quando aplicável e aguardam resposta antes de confirmar sucesso visual.
 
-**Importante**: não presumir que todo fluxo está homologado; QA de hardware e Windows real continua necessário. Garçom móvel React é interface de leitura/seleção; operação LAN autenticada permanece no PWA existente até validar paridade. Fechamento dividido é **prévia matemática**, pagamento é registrado no caixa. Estoque avançado, financeiro, relatórios e integrações são páginas com conteúdo de estrutura, sem inventar endpoints nem dados.
+**Importante**: não presumir que todo fluxo está homologado; QA de hardware e Windows real continua necessário. Garçom móvel React é interface de leitura/seleção; operação LAN autenticada permanece no PWA existente até validar paridade. Fechamento dividido é **prévia matemática**, pagamento é registrado no caixa. Estoque, fornecedores, compras, financeiro e relatórios consultam APIs locais canônicas. Integrações de hardware e operações avançadas continuam no painel clássico quando não houver paridade de interação.
 
 ## Estado e limitações
 
 - Cada ação mantém estado React imutável, sem atualizar banco diretamente pelo navegador.
 - Sem hospedar app, sem CDN, sem SaaS de pagamento nem emissão fiscal integrada.
 - Documentos fiscais exigidos legalmente devem ser emitidos externamente; os recibos gerados pelo core são não fiscais. O sistema **somente exporta** CSV/JSON.
-- Esta PR inclui o **frontend fonte** e testes unitários; ainda não substitui `apps/web/public` nem compõe o instalador Electron. Essa troca exige build e homologação de fluxo completo, em PR posterior.
+- O Electron serve a UI React empacotada em `/ui/`, preservando o painel clássico em `/`; os módulos usam o mesmo SQLite. O build usa lockfile npm e `npm ci`. Homologação física permanece necessária.
 
 ## Telas cobertas
 

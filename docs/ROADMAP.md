@@ -73,3 +73,17 @@ Detalhes e limites: [P2_IMPLEMENTATION.md](P2_IMPLEMENTATION.md) e [P2_FINALIZAT
 - [ ] Replicação bidirecional multiwriter de pedidos e estoque: **não implementada**, necessita arquitetura/escopo separado.
 
 Instruções: [Homologação self-hosted](HOMOLOGACAO_SELFHOSTED.md).
+
+
+## Fechamento de software P0–P3 — 21/11/2026
+
+Esta seção consolida o escopo ampliado de confiabilidade, hardware, gestão e distribuição. Os checkboxes acima permanecem como histórico dos milestones anteriores.
+
+- [x] **P0:** licenciamento MIT consistente; lockfiles npm versionados; CI Linux/Windows com `npm ci`; React estoque/financeiro/relatórios com dados de APIs canônicas; onboarding grava estabelecimento/terminal com idempotência; testes de pedidos/pagamentos mantidos.
+- [x] **P1:** EAN-13 de produtos, diagnóstico de etiquetas de balança e parsing inicial Toledo/Filizola, impressão TCP/COM/Winspool opcional e testes de contratos simulados. Nada obriga drivers de balança ou serial em instalações sem equipamento.
+- [x] **P2:** fornecedores, compras pendentes com recebimento único e transacional, lotes, vencimento FEFO, estoque por ingrediente, CMV e relatórios financeiros locais. Nenhum segundo saldo canônico.
+- [x] **P3:** backup sob demanda validado, pré-migração SQLite com snapshot, restauração offline verificável, consulta manual a releases e workflows de QA Windows/navegador/instalador, sem publicação automática.
+- [ ] **Homologação física obrigatória:** balança identificada por modelo/protocolo, USB/COM/driver de impressão, leitor físico, Wi-Fi e certificado em dispositivo móvel real, instalação sobre máquina do cliente, recuperação em falha de energia e avaliação de SmartScreen. CI e máquinas virtuais não comprovam esses itens.
+- [ ] **Emissor fiscal integrado:** fora do escopo por decisão de produto. Mantidos comprovantes não fiscais e exportação CSV/JSON para fluxo externo.
+
+Guia de recuperação: [RESTAURACAO_E_ATUALIZACAO.md](RESTAURACAO_E_ATUALIZACAO.md). Licença e custo: [LICENSING.md](LICENSING.md).
