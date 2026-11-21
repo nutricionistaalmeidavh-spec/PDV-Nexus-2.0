@@ -15,3 +15,5 @@ __pycache__/
 *.pyc
 *.pre-restore.bak
 *.restore-*.tmp
+
+apps/desktop/edition-manifest.json
