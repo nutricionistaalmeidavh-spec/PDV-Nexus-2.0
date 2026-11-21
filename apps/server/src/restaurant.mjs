@@ -34,7 +34,7 @@ export function restaurantRead(db,method,route,{missing}) {
       so.service_mode AS serviceMode,st.label AS tableLabel
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
       JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id
-      WHERE kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.updated_at>=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString());
+      WHERE kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.change_note IS NOT NULL AND kt.updated_at>=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString());
     return {status:200,body:{tickets}};
   }
   if(route==='/api/restaurant/summary') {
