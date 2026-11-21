@@ -125,3 +125,33 @@ test('QR em modo automático envia diretamente ao KDS, rejeita token inválido e
   assert.equal(latest.lines[0].note,'Pouco açúcar');
   assert.equal((await good(api,'GET','/api/kitchen/tickets')).tickets.length,1);
 });
+
+test('mesa transferida invalida QR antigo e aprovação pendente retorna conflito sem aceitar itens',async t=>{
+ const {api,publicOrigin}=await fixture(t);
+ const a=(await good(api,'POST','/api/tables',cmd({label:'Mesa A'}),201)).table;
+ const b=(await good(api,'POST','/api/tables',cmd({label:'Mesa B'}),201)).table;
+ const order=(await good(api,'POST',`/api/tables/${a.id}/open`,cmd(),201)).order;
+ const product=(await good(api,'POST','/api/products',cmd({name:'Pão',priceCents:1200}),201)).product;
+ const qr=await good(api,'POST',`/api/tables/${a.id}/qr`,cmd({publicBaseUrl:publicOrigin}));
+ const token=new URL(qr.url).searchParams.get('token');
+ const submission=await good(api,'POST',`/api/public/table/${token}/requests`,
+   {clientRequestId:randomUUID(),items:[{productId:product.id,quantity:1}]},202,true);
+ const moved=await good(api,'POST',`/api/orders/${order.id}/transfer-table`,
+   cmd({expectedRevision:order.revision,tableId:b.id}));
+ assert.equal(moved.order.tableId,b.id);
+ assert.equal((await api('GET',`/api/public/table/${token}`,null,true)).status,404);
+ const attempted=await api('POST',`/api/table-requests/${submission.requestId}/accept`,cmd());
+ assert.equal(attempted.status,409,JSON.stringify(attempted));
+ assert.equal((await good(api,'GET',`/api/orders/${order.id}`)).order.lines.length,0);
+});
+test('autoaprovação exige supervisor, mantendo QR manual disponível para operador de caixa',async t=>{
+ const {api,publicOrigin}=await fixture(t);
+ const table=(await good(api,'POST','/api/tables',cmd({label:'Mesa C'}),201)).table;
+ await good(api,'POST',`/api/tables/${table.id}/open`,cmd(),201);
+ await good(api,'POST','/api/auth/operators',{username:'caixa',password:'SenhaSeguraCaixa-2026',role:'cashier'},201);
+ await good(api,'POST','/api/auth/login',{username:'caixa',password:'SenhaSeguraCaixa-2026'},200);
+ const denied=await api('POST',`/api/tables/${table.id}/qr`,cmd({publicBaseUrl:publicOrigin,autoAccept:true}));
+ assert.equal(denied.status,403,JSON.stringify(denied));
+ const manual=await good(api,'POST',`/api/tables/${table.id}/qr`,cmd({publicBaseUrl:publicOrigin,autoAccept:false}));
+ assert.match(manual.url,/\/table\.html\?token=/);
+});
