@@ -24,7 +24,17 @@ jobs:
       - name: JavaScript syntax checks
         run: |
           node --check apps/server/src/server.mjs
+          node --check apps/server/src/request-validation.mjs
+          node --check apps/server/src/command-service.mjs
+          node --check apps/server/src/audit-service.mjs
+          node --check apps/server/src/order-read.mjs
+          node --check apps/server/src/order-lines.mjs
+          node --check apps/server/src/order-lifecycle.mjs
+          node --check apps/server/src/order-router.mjs
           node --check apps/server/src/restaurant.mjs
+          node --check apps/server/src/table-service.mjs
+          node --check apps/server/src/modifier-service.mjs
+          node --check apps/server/src/kitchen-service.mjs
           node --check apps/server/src/refunds.mjs
           node --check apps/server/src/lan-security.mjs
           node --check apps/server/src/inventory.mjs
