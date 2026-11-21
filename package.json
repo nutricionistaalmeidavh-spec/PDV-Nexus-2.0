@@ -28,7 +28,6 @@
   },
   "license": "MIT",
   "main": "apps/desktop/main.cjs",
-      "apps/desktop/edition-manifest.json",
   "devDependencies": {
     "electron": "45.3.4",
     "electron-builder": "26.18.0"
@@ -43,6 +42,7 @@
       "apps/web/public/**/*",
       "apps/react-ui/dist/**/*",
       "apps/desktop/main.cjs",
+      "apps/desktop/edition-manifest.json",
       "packages/core/src/**/*",
       "package.json"
     ],
