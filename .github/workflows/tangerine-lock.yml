@@ -1,0 +1,25 @@
+name: P0-P1 Mantine lockfile generation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - apps/react-ui/package.json
+      - .github/workflows/tangerine-lock.yml
+  workflow_dispatch:
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Resolve dependency lockfile without install scripts
+        run: npm install --package-lock-only --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tangerine-react-ui-package-lock
+          path: apps/react-ui/package-lock.json
+          retention-days: 7
