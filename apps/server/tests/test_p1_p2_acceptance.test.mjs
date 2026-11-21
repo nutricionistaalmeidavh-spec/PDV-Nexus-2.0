@@ -103,8 +103,9 @@ test('P2 pizza fracionada calcula preço sem float e preserva sabores',async t=>
 test('P2 preço por peso exige leitura estável e evita overflow',async t=>{
  const api=await fixture(t);
  const p=(await ok(api,'POST','/api/products',cmd({name:'Comida por Kg',priceCents:6000}),201)).product;
+ await ok(api,'POST',`/api/products/${p.id}/sale-unit`,cmd({saleUnit:'kg'}));
  const order=(await ok(api,'POST','/api/orders',cmd({serviceMode:'counter'}),201)).order;
- const result=await ok(api,'POST',`/api/orders/${order.id}/weight-lines`,cmd({expectedRevision:order.revision,productId:p.id,weightGrams:1250,stable:true}));
+ const result=await ok(api,'POST',`/api/orders/${order.id}/weight-lines`,cmd({expectedRevision:order.revision,productId:p.id,weightGrams:1250,stable:true,manualConfirmed:true}));
  assert.equal(result.order.lines[0].unitPriceCents,7500);
  assert.equal(result.order.totalCents,7500);
  const rejected=await api('POST',`/api/orders/${order.id}/weight-lines`,cmd({expectedRevision:result.order.revision,productId:p.id,weightGrams:1000,stable:false}));
