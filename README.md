@@ -21,8 +21,10 @@ A instalação inicial baixa dependências de código aberto (incluindo `qr` 0.7
 Abrir no próprio computador:
 
 - **Caixa:** http://127.0.0.1:3434/
-- **Mesas e comandas:** http://127.0.0.1:3434/restaurant.html
-- **Cozinha/KDS:** http://127.0.0.1:3434/kitchen.html
+- **Interface única do PDV (React):** http://127.0.0.1:3434/ui/?embedded=1
+- **Garçom (dispositivo pareado):** https://SEU-HOST-LAN:3434/ui/?device=waiter
+- **Cozinha/KDS (dispositivo pareado):** https://SEU-HOST-LAN:3434/ui/?device=kitchen
+- As URLs históricas `/`, `/restaurant.html` e `/kitchen.html` redirecionam para a UI React, sem servir as antigas telas. Garçom/KDS usam PIN de 6 dígitos e HTTPS na rede local; sem configuração TLS, a interface remota não é liberada.
 
 O banco padrão é `~/.pdv-nexus-2/nexus.db`. Os pedidos e pagamentos são gravados em transações com chave idempotente. Não compartilhe o arquivo SQLite por rede.
 

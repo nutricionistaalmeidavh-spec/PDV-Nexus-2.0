@@ -519,7 +519,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         return response(res,out.status,out.body);
       }
       if(method!=='GET') return response(res,405,{code:'METHOD_NOT_ALLOWED'});
-      // Nova UI do Electron: caminho próprio, sem mudar o legado/PWA/API.
+      // Interface única React. URLs antigas apenas redirecionam, nunca servem o PDV legado.
+      const redirects={'/':'/ui/?embedded=1','/index.html':'/ui/?embedded=1','/restaurant.html':'/ui/?device=waiter','/kitchen.html':'/ui/?device=kitchen'};
+      if(Object.hasOwn(redirects,route)){
+        res.writeHead(302,{'location':redirects[route],'cache-control':'no-store','x-content-type-options':'nosniff'});
+        res.end();return;
+      }
+      // Build estático de uma única UI React, hospedada inteiramente no servidor local.
       // Apenas o output estático assinado pelo build local do Vite é servido.
       if(route==='/ui'||route==='/ui/'||route.startsWith('/ui/assets/')){
         const relative=route.startsWith('/ui/assets/')?route.slice('/ui/'.length):'index.html';
@@ -539,10 +545,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         fs.createReadStream(target).pipe(res);
         return;
       }
-      const file=route==='/'?'index.html':route.slice(1);
-      if(!['index.html','app.js','styles.css','menu.html','menu.js','menu.css','p2-admin.js','auth.js','auth.css','restaurant.html','kitchen.html','restaurant.js','kitchen.js','restaurant.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-register.js'].includes(file)) return response(res,404,{code:'NOT_FOUND'});
+      // Somente portal público do cliente e recursos de atualização dos PWAs antigos.
+      // As páginas operacionais clássicas e scripts administrativos não são mais servidos.
+      const file=route.slice(1);
+      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
+        return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
-      const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
+      const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
       fs.createReadStream(path.join(publicDir,file)).pipe(res);
     } catch(e) {

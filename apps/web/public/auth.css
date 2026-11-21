@@ -1,6 +1,0 @@
-.nexus-auth-screen{position:fixed;inset:0;z-index:9999;background:#0e1928ef;display:grid;place-items:center;padding:20px}
-.nexus-auth-panel{background:#fff;color:#1d2a36;border-radius:18px;box-shadow:0 12px 60px #0005;width:min(480px,100%);padding:32px;display:grid;gap:14px}
-.nexus-auth-panel h1{font-size:1.6rem;margin:0}.nexus-auth-panel p{font-size:.92rem;line-height:1.6;margin:0}
-.nexus-auth-panel form{display:grid;gap:15px}.nexus-auth-panel label{display:grid;gap:7px;font-weight:600;font-size:.9rem}
-.nexus-auth-panel input{border:1px solid #b7c5d2;border-radius:9px;font-size:1rem;padding:12px;width:100%;box-sizing:border-box}
-.nexus-auth-error{color:#b22121;min-height:1.25em}.nexus-auth-panel button{min-height:44px}

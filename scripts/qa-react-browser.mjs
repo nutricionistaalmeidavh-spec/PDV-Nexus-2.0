@@ -99,9 +99,9 @@ try {
  await page.getByRole('button',{name:'Criar backup agora'}).click();
  await page.getByText('Backup SQLite validado:',{exact:false}).waitFor();
  await snap('react-08-manutencao');
- await page.goto(origin+'/?view=stock');
- await page.locator('#view-stock.visible').waitFor();
- await snap('react-09-estoque-classico');
+ await clickNav('Estoque');
+ await page.getByRole('heading',{name:'Lotes, fichas técnicas e movimentações'}).waitFor();
+ await snap('react-09-estoque-avancado');
  // Teste mobile da interface React.
  await page.setViewportSize({width:390,height:844});
  await page.goto(origin+'/ui/?embedded=1');await page.getByRole('heading',{name:'Nova venda'}).waitFor();

@@ -6,7 +6,7 @@ const toMilli=value=>{const n=Number(value);const scaled=Math.round(n*1000);if(!
 const toCents=value=>{const n=Number(value),scaled=Math.round(n*100);if(!Number.isSafeInteger(scaled)||scaled<0||Math.abs(scaled-n*100)>0.000001)throw Error('Custo inválido');return scaled;};
 function Notice({error}){return error?<p className="errorbox" role="alert">{error}</p>:null;}
 function Block({title,children}){return <section className="panel"><div className="sectiontitle"><h2>{title}</h2></div>{children}</section>;}
-export function StockBusiness({mode,api}){
+export function StockBusiness({mode,api,onChanged,reloadKey}){
  const [state,setState]=useState({pending:true}),[refresh,setRefresh]=useState(0),[error,setError]=useState('');
  const [supplier,setSupplier]=useState(''),[name,setName]=useState(''),[unit,setUnit]=useState('g'),[purchase,setPurchase]=useState({supplierId:'',ingredientId:'',quantity:'1',cost:'0',lotCode:'',expiryDate:''});
  useEffect(()=>{
@@ -16,12 +16,13 @@ export function StockBusiness({mode,api}){
    .map(p=>api(p))).then(([report,stock,suppliers,purchases])=>{if(alive)setState({pending:false,report,stock,suppliers,purchases});})
     .catch(e=>{if(alive)setState({pending:false,error:e.message})});
   return()=>{alive=false;};
- },[mode,api,refresh]);
+ },[mode,api,refresh,reloadKey]);
  const perform=async(route,body,after)=>{try{
   setError('');
   await api(route,{method:'POST',body:{commandId:crypto.randomUUID(),...body}});
   if(after)after();
   setRefresh(x=>x+1);
+ onChanged?.();
  }catch(e){setError(e.message);}};
  return <div className="page"><div className="pageheading"><div><p className="eyebrow">ESTOQUE / DADOS CANÔNICOS</p><h1>Estoque, fornecedores e compras</h1><p className="subtext">Saldo e custo obtidos diretamente do SQLite do host. Compras só afetam estoque após recebimento.</p></div><button className="btn secondary" type="button" onClick={()=>setRefresh(x=>x+1)}>Atualizar</button></div>
   <Notice error={error||state.error}/>
@@ -43,7 +44,7 @@ export function StockBusiness({mode,api}){
      <label className="field">Lote (opcional)<input maxLength={64} value={purchase.lotCode} onChange={e=>setPurchase(s=>({...s,lotCode:e.target.value}))}/></label>
      <label className="field">Validade<input type="date" value={purchase.expiryDate} onChange={e=>setPurchase(s=>({...s,expiryDate:e.target.value}))}/></label>
      <button className="btn primary">Criar compra pendente</button></form>
-     <p className="help">Edição de lotes, fichas técnicas e ajustes avançados continuam no <a href="/?view=stock">painel operacional local</a>.</p>
+     <p className="help">Lotes, fichas técnicas, ajustes, histórico e fornecedores estão disponíveis logo abaixo, nesta mesma interface React.</p>
    </Block>
   </>}
  </div>;
