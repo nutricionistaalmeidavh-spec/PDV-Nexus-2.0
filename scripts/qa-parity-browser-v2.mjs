@@ -145,11 +145,16 @@ try{
  mobilePage=await mobileContext.newPage();
  mobilePage.on('pageerror',e=>errors.push('mobile: '+e.message));
  await mobilePage.goto(origin+'/ui/?embedded=1');
+ await mobilePage.getByRole('button',{name:'Abrir ou fechar o menu'}).waitFor();
+ await mobilePage.locator('.sidebar').waitFor({state:'hidden'});
+ await mobilePage.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
  await mobilePage.locator('.sidebar .nav-item').first().waitFor();
  const mobileTabs=await mobilePage.locator('.sidebar .nav-item').allTextContents();
  assert.deepEqual(mobileTabs,desktopTabs,'Paridade de módulos desktop/mobile');
  for(let i=0;i<mobileTabs.length;i++){
+   if(i>0)await mobilePage.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
    await mobilePage.locator('.sidebar .nav-item').nth(i).click();
+   await mobilePage.locator('.sidebar').waitFor({state:'hidden'});
    await mobilePage.waitForFunction(index=>document.querySelectorAll('.sidebar .nav-item')[index]?.classList.contains('active'),i);
    const metrics=await mobilePage.evaluate(()=>({
      viewport:document.documentElement.clientWidth,
@@ -162,7 +167,10 @@ try{
    manifest.mobile.push({index:i+1,view:mobileTabs[i].trim(),file:'parity-'+name+'.png',metrics});
  }
  manifest.errors=errors.slice();
- fs.writeFileSync(path.join(output,'journey-manifest.json'),JSON.stringify(manifest,null,2)+'\\n');
+ fs.writeFileSync(path.join(output,'journey-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+ const persistedManifest=JSON.parse(fs.readFileSync(path.join(output,'journey-manifest.json'),'utf8'));
+ assert.equal(persistedManifest.desktop.length,manifest.desktop.length,'Inventário JSON válido: desktop');
+ assert.equal(persistedManifest.mobile.length,manifest.mobile.length,'Inventário JSON válido: mobile');
  assert.deepEqual(errors,[]);
  console.log('P4 VISUAL INVENTORY PASS:',manifest.desktop.length,'desktop screens;',manifest.mobile.length,'mobile screens');
  console.log('REACT PARITY E2E PASS: catalog, modifiers, stock, recipe, cash, table, split, payment, KDS, delivery, units, hardware, redirects.');

@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, 'feat/p2-operational-mirror-hardening-20261120']
+    branches: [main, 'feat/p2-operational-mirror-hardening-20261120', 'feat/nexus-tangerine-p2-p4-20261121']
 jobs:
   escpos-tcp:
     runs-on: windows-latest
