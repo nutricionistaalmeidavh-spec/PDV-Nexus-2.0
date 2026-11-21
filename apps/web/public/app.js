@@ -18,7 +18,7 @@
   const elt=(tag,cls='',value='')=>{const e=document.createElement(tag);if(cls)e.className=cls;if(value!==undefined&&value!==null)text(e,value);return e;};
   const renderProducts=()=>{
     const grid=$('product-grid'),list=$('product-list'),filter=$('search').value.toLocaleLowerCase('pt-BR');grid.replaceChildren();list.replaceChildren();
-    const active=products.filter(p=>p.active!==0&&p.categoryActive!==0&&p.name.toLocaleLowerCase('pt-BR').includes(filter));
+    const active=products.filter(p=>p.active!==0&&p.categoryActive!==0&&(p.name.toLocaleLowerCase('pt-BR').includes(filter)||p.barcode?.includes(filter)));
     if(!active.length)grid.append(elt('p','empty','Nenhum produto encontrado. Cadastre no Cardápio.'));
     for(const product of active){
       const button=elt('button','product');button.type='button';button.append(elt('span','product-name',product.name),elt('span','product-price',money(product.priceCents)));
@@ -27,13 +27,14 @@
     const modSelect=$('modifier-product');modSelect.replaceChildren();for(const p of products.filter(p=>p.active&&p.categoryActive)){const opt=elt('option','',p.name);opt.value=p.id;modSelect.append(opt);}
     const comboSelect=$('combo-components');comboSelect.replaceChildren();for(const p of products.filter(p=>p.active&&p.categoryActive&&!p.isCombo)){const opt=elt('option','',p.name);opt.value=p.id;comboSelect.append(opt);}
     for(const product of products){
-      const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',product.name),elt('small','',`ID: ${product.id.slice(0,8)}`));
+      const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',product.name),elt('small','',product.barcode?'EAN: '+product.barcode:`ID: ${product.id.slice(0,8)}`));
       const state=elt('span','',product.active&&product.categoryActive?'Ativo':'Inativo');
       const edit=elt('button','button secondary','Editar');
       edit.onclick=()=>perform(async()=>{
         const name=prompt('Nome do produto',product.name);if(!name?.trim())return;
         const price=prompt('Preço (R$)',(product.priceCents/100).toFixed(2));if(price===null)return;
-        await api('PATCH','/api/products/'+product.id,{commandId:uid(),name,priceCents:toCents(price)});
+        const entered=prompt('EAN-13 (opcional)',product.barcode??'');
+        await api('PATCH','/api/products/'+product.id,{commandId:uid(),name,priceCents:toCents(price),...(entered!==null?{barcode:entered.trim()||null}:{})});
         show('Produto atualizado');await refresh();
       });
       const toggle=elt('button','button ghost',product.active?'Desativar':'Reativar');
@@ -97,7 +98,7 @@
     const result=await api('POST',`/api/orders/${order.id}/lines`,{commandId:uid(),expectedRevision:order.revision,productId:product.id,quantity:1});
     order=result.order;renderOrder();$('split-summary').textContent='';show(`${product.name} adicionado`);
   }
-  async function changeView(next){view=next;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('visible',e.id==='view-'+next));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===next));$('view-title').textContent={pos:'Caixa e vendas',products:'Cardápio',history:'Histórico de pedidos',cash:'Gestão do caixa',print:'Impressão',devices:'Dispositivos',fiscal:'Exportação de vendas',stock:'Estoque & fichas',delivery:'Delivery',units:'Consolidação de unidades'}[next];
+  async function changeView(next){view=next;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('visible',e.id==='view-'+next));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===next));$('view-title').textContent={pos:'Caixa e vendas',products:'Cardápio',history:'Histórico de pedidos',cash:'Gestão do caixa',print:'Impressão',devices:'Dispositivos',fiscal:'Exportação de vendas',stock:'Estoque & fichas',delivery:'Delivery',units:'Consolidação de unidades','finance-report':'Relatórios financeiros'}[next];
     if(next==='history')await renderHistory();if(next==='devices')await renderPairedDevices();if(next==='print')await renderPrint();if(next==='cash'){const c=await api('GET','/api/cash/current');session=c.session;renderCash();}
   }
   async function renderHistory(){const result=await api('GET','/api/orders'),container=$('history-list');container.replaceChildren();if(!result.orders.length)container.append(elt('p','empty','Nenhum pedido registrado.'));for(const item of result.orders){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.id.slice(0,8)}`),elt('small','',`${item.serviceMode} · ${new Date(item.createdAt).toLocaleString('pt-BR')}`));row.append(info,elt('span','',item.status));if(item.status==='CLOSED'&&window.pdvAuth.currentUser?.role==='admin'){const b=elt('button','button ghost','Registrar devolução');b.addEventListener('click',()=>perform(async()=>{const reason=prompt('Motivo da devolução integral');if(!reason?.trim())return;const externalRefundConfirmed=confirm('Se houve Pix/cartão, a devolução já foi feita externamente? Confirme somente após executá-la.');await api('POST',`/api/orders/${item.id}/refund`,{commandId:uid(),reason,externalRefundConfirmed});show('Devolução registrada');await renderHistory();}));row.append(b);}if(['DRAFT','OPEN'].includes(item.status)){const btn=elt('button','button secondary','Abrir no caixa');btn.addEventListener('click',()=>perform(async()=>{order=(await api('GET',`/api/orders/${item.id}`)).order;renderOrder();await changeView('pos');show('Comanda carregada');}));row.append(btn);}container.append(row);}}
@@ -126,7 +127,12 @@
   async function renderPrint(){const result=await api('GET','/api/print/jobs'),container=$('print-list');container.replaceChildren();if(!result.jobs.length)container.append(elt('p','empty','Nenhuma impressão pendente.'));for(const item of result.jobs){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.orderId.slice(0,8)}`),elt('small','',`Situação: ${item.status} · Tentativas: ${item.attempts}`));row.append(info);if(item.status!=='DONE'){const btn=elt('button','button secondary','Enviar ao dispositivo');btn.addEventListener('click',()=>perform(async()=>{await api('POST',`/api/print/jobs/${item.id}/send`,{});show('Dados enviados à impressora');await renderPrint();}));row.append(btn);}container.append(row);}}
   document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>perform(()=>changeView(e.dataset.view))));
   $('search').addEventListener('input',renderProducts);
-  $('product-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/products',{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price')),categoryId:f.get('categoryId')});form.reset();show('Produto cadastrado');await refresh();});});
+  $('scale-label-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
+    const f=new FormData(e.currentTarget);
+    const r=await api('GET','/api/hardware/scale/label?code='+encodeURIComponent(f.get('code'))+'&mode='+encodeURIComponent(f.get('mode')));
+    $('scale-label-result').textContent='PLU: '+r.label.plu+' · '+(r.label.weightGrams!==undefined?'Peso: '+r.label.weightGrams+' g':'Preço: '+money(r.label.priceCents))+' (decodificação; não adiciona ao pedido)';
+  });});
+  $('product-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/products',{commandId:uid(),name:f.get('name'),priceCents:toCents(f.get('price')),categoryId:f.get('categoryId'),barcode:f.get('barcode')||null});form.reset();show('Produto cadastrado');await refresh();});});
   $('category-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{
     await api('POST','/api/categories',{commandId:uid(),name:new FormData(e.currentTarget).get('name')});
     form.reset();await refresh();show('Categoria criada');
@@ -193,13 +199,14 @@
   $('cash-open-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{await api('POST','/api/cash/open',{commandId:uid(),openingCents:toCents(new FormData(e.currentTarget).get('amount'))});show('Caixa aberto');await refresh();});});
   $('cash-movement-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/cash/movements',{commandId:uid(),kind:f.get('kind'),amountCents:toCents(f.get('amount'))});show('Movimento registrado');await refresh();});});
   $('cash-close-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const result=await api('POST','/api/cash/close',{commandId:uid(),countedCents:toCents(new FormData(e.currentTarget).get('amount'))});show(`Caixa fechado · Diferença: ${money(result.differenceCents)}`);await refresh();});});
-  $('printer-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);await api('POST','/api/printer',{commandId:uid(),host:f.get('host'),port:Number(f.get('port'))});show('Impressora configurada');await renderPrint();});});
+  $('printer-form').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;perform(async()=>{const f=new FormData(e.currentTarget);const transport=f.get('transport');
+    await api('POST','/api/printer',{commandId:uid(),transport,...(transport==='serial'?{devicePath:f.get('devicePath'),baudRate:Number(f.get('baudRate'))}:{host:f.get('host'),port:Number(f.get('port'))})});show('Impressora configurada');await renderPrint();});});
   window.pdvAuth.ready().then(user=>{
     const isAdmin=user?.role==='admin';
-    for(const view of ['products','print','fiscal','devices']){
+    for(const view of ['products','print','fiscal','devices','finance-report']){
       const button=document.querySelector('[data-view="'+view+'"]');if(button&&!isAdmin)button.hidden=true;
     }
     $('operators-panel').hidden=!isAdmin;
-    return refresh().then(()=>{const desired=new URLSearchParams(location.search).get('view');const allowed=['pos','products','history','cash','print','devices','fiscal','stock','delivery','units'];if(allowed.includes(desired)){const target=document.querySelector('[data-view="'+desired+'"]');if(target&&!target.hidden)return changeView(desired);}});
+    return refresh().then(()=>{const desired=new URLSearchParams(location.search).get('view');const allowed=['pos','products','history','cash','print','devices','fiscal','stock','delivery','units','finance-report'];if(allowed.includes(desired)){const target=document.querySelector('[data-view="'+desired+'"]');if(target&&!target.hidden)return changeView(desired);}});
   }).catch(e=>show(e.message,true));
 })();
