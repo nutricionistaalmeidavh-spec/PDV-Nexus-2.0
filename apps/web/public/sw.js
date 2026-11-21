@@ -1,10 +1,9 @@
-// Apenas assets estáticos; nenhuma resposta de API ou credencial é armazenada.
-const CACHE='nexus-static-v3';
-const STATIC=['/restaurant.html','/kitchen.html','/restaurant.js','/kitchen.js','/pwa-register.js','/auth.js','/auth.css','/styles.css','/restaurant.css','/pwa-icon.svg','/pwa-192.png','/pwa-512.png','/manifest.webmanifest'];
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(STATIC))));
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));
-self.addEventListener('fetch',event=>{
-  const url=new URL(event.request.url);
-  if(event.request.method!=='GET'||url.origin!==self.location.origin||!STATIC.includes(url.pathname))return;
-  event.respondWith(fetch(event.request).catch(()=>caches.match(event.request)));
-});
+/** Legacy PWA cache retirement. All operational screens now use the React UI. */
+self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+  const cachesFound=await caches.keys();
+  await Promise.all(cachesFound.filter(name=>name.startsWith('nexus-static-')).map(name=>caches.delete(name)));
+  await self.clients.claim();
+})()));
+// No offline cache of orders, tokens, personal data or obsolete POS HTML.
+// The React UI communicates only with the local host.
