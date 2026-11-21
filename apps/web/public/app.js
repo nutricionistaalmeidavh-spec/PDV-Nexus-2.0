@@ -98,11 +98,22 @@
     const result=await api('POST',`/api/orders/${order.id}/lines`,{commandId:uid(),expectedRevision:order.revision,productId:product.id,quantity:1});
     order=result.order;renderOrder();$('split-summary').textContent='';show(`${product.name} adicionado`);
   }
-  async function changeView(next){view=next;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('visible',e.id==='view-'+next));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===next));$('view-title').textContent={pos:'Caixa e vendas',products:'Cardápio',history:'Histórico de pedidos',cash:'Gestão do caixa',print:'Impressão',devices:'Dispositivos',fiscal:'Exportação de vendas',stock:'Estoque & fichas',delivery:'Delivery',units:'Consolidação de unidades','finance-report':'Relatórios financeiros'}[next];
-    if(next==='history')await renderHistory();if(next==='devices')await renderPairedDevices();if(next==='print')await renderPrint();if(next==='cash'){const c=await api('GET','/api/cash/current');session=c.session;renderCash();}
+  async function changeView(next){view=next;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('visible',e.id==='view-'+next));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===next));$('view-title').textContent={pos:'Caixa e vendas',products:'Cardápio',history:'Histórico de pedidos',cash:'Gestão do caixa',print:'Impressão',devices:'Dispositivos',fiscal:'Exportação de vendas',stock:'Estoque & fichas',delivery:'Delivery',units:'Consolidação de unidades','finance-report':'Relatórios financeiros',maintenance:'Backup e atualizações'}[next];
+    if(next==='maintenance')await renderMaintenance();if(next==='history')await renderHistory();if(next==='devices')await renderPairedDevices();if(next==='print')await renderPrint();if(next==='cash'){const c=await api('GET','/api/cash/current');session=c.session;renderCash();}
   }
   async function renderHistory(){const result=await api('GET','/api/orders'),container=$('history-list');container.replaceChildren();if(!result.orders.length)container.append(elt('p','empty','Nenhum pedido registrado.'));for(const item of result.orders){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.id.slice(0,8)}`),elt('small','',`${item.serviceMode} · ${new Date(item.createdAt).toLocaleString('pt-BR')}`));row.append(info,elt('span','',item.status));if(item.status==='CLOSED'&&window.pdvAuth.currentUser?.role==='admin'){const b=elt('button','button ghost','Registrar devolução');b.addEventListener('click',()=>perform(async()=>{const reason=prompt('Motivo da devolução integral');if(!reason?.trim())return;const externalRefundConfirmed=confirm('Se houve Pix/cartão, a devolução já foi feita externamente? Confirme somente após executá-la.');await api('POST',`/api/orders/${item.id}/refund`,{commandId:uid(),reason,externalRefundConfirmed});show('Devolução registrada');await renderHistory();}));row.append(b);}if(['DRAFT','OPEN'].includes(item.status)){const btn=elt('button','button secondary','Abrir no caixa');btn.addEventListener('click',()=>perform(async()=>{order=(await api('GET',`/api/orders/${item.id}`)).order;renderOrder();await changeView('pos');show('Comanda carregada');}));row.append(btn);}container.append(row);}}
 
+  async function renderMaintenance(){
+    const [version,backups]=await Promise.all([api('GET','/api/system/version'),api('GET','/api/system/backups')]);
+    $('maintenance-version').textContent='Versão local: '+version.version+' · atualização exclusivamente manual';
+    const list=$('maintenance-list');list.replaceChildren();
+    for(const item of backups.backups){
+      const row=elt('div','data-row'),name=elt('strong','',item.name);
+      row.append(name,elt('small','',Math.round(item.sizeBytes/1024)+' KB · '+new Date(item.modifiedAt).toLocaleString('pt-BR')));
+      list.append(row);
+    }
+    if(!backups.backups.length)list.append(elt('p','note','Nenhum backup encontrado.'));
+  }
   async function renderPairedDevices(){
     const data=await api('GET','/api/pairing/devices'),list=$('paired-device-list');
     list.replaceChildren();
@@ -126,6 +137,16 @@
   function renderCash(){const sum=$('cash-summary');sum.textContent=session?`Caixa aberto · Esperado: ${money(session.expectedCents)}`:'Caixa fechado';$('cash-open-form').hidden=!!session;$('cash-movement-form').hidden=!session;$('cash-close-form').hidden=!session;}
   async function renderPrint(){const result=await api('GET','/api/print/jobs'),container=$('print-list');container.replaceChildren();if(!result.jobs.length)container.append(elt('p','empty','Nenhuma impressão pendente.'));for(const item of result.jobs){const row=elt('div','data-row'),info=elt('div');info.append(elt('b','',`Pedido ${item.orderId.slice(0,8)}`),elt('small','',`Situação: ${item.status} · Tentativas: ${item.attempts}`));row.append(info);if(item.status!=='DONE'){const btn=elt('button','button secondary','Enviar ao dispositivo');btn.addEventListener('click',()=>perform(async()=>{await api('POST',`/api/print/jobs/${item.id}/send`,{});show('Dados enviados à impressora');await renderPrint();}));row.append(btn);}container.append(row);}}
   document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>perform(()=>changeView(e.dataset.view))));
+  $('maintenance-check').addEventListener('click',()=>perform(async()=>{
+    const status=await api('GET','/api/system/update/check');
+    const label={available:'Atualização disponível: ',up_to_date:'Versão atualizada: ',no_release:'Nenhuma release publicada',unavailable:'Consulta indisponível; o caixa continua funcionando'};
+    $('maintenance-result').textContent=(label[status.status]||'Resultado: ')+(status.latestVersion||'')+(status.url?' · '+status.url:'');
+  }));
+  $('maintenance-backup').addEventListener('click',()=>perform(async()=>{
+    const result=await api('POST','/api/system/backup',{commandId:uid()});
+    $('maintenance-result').textContent='Backup validado: '+result.path;
+    await renderMaintenance();
+  }));
   $('search').addEventListener('input',renderProducts);
   $('scale-label-form').addEventListener('submit',e=>{e.preventDefault();perform(async()=>{
     const f=new FormData(e.currentTarget);
@@ -203,10 +224,10 @@
     await api('POST','/api/printer',{commandId:uid(),transport,...(transport==='serial'?{devicePath:f.get('devicePath'),baudRate:Number(f.get('baudRate'))}:transport==='windows'?{devicePath:f.get('devicePath')}:{host:f.get('host'),port:Number(f.get('port'))})});show('Impressora configurada');await renderPrint();});});
   window.pdvAuth.ready().then(user=>{
     const isAdmin=user?.role==='admin';
-    for(const view of ['products','print','fiscal','devices','finance-report']){
+    for(const view of ['products','print','fiscal','devices','finance-report','maintenance']){
       const button=document.querySelector('[data-view="'+view+'"]');if(button&&!isAdmin)button.hidden=true;
     }
     $('operators-panel').hidden=!isAdmin;
-    return refresh().then(()=>{const desired=new URLSearchParams(location.search).get('view');const allowed=['pos','products','history','cash','print','devices','fiscal','stock','delivery','units','finance-report'];if(allowed.includes(desired)){const target=document.querySelector('[data-view="'+desired+'"]');if(target&&!target.hidden)return changeView(desired);}});
+    return refresh().then(()=>{const desired=new URLSearchParams(location.search).get('view');const allowed=['pos','products','history','cash','print','devices','fiscal','stock','delivery','units','finance-report','maintenance'];if(allowed.includes(desired)){const target=document.querySelector('[data-view="'+desired+'"]');if(target&&!target.hidden)return changeView(desired);}});
   }).catch(e=>show(e.message,true));
 })();
