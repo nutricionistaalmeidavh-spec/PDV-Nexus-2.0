@@ -1,8 +1,10 @@
 import React,{useEffect,useState} from 'react';
+import {Badge,Button,Group,Paper,Text,ThemeIcon} from '@mantine/core';
+import {ArrowLeft,CheckCircle2,ClipboardList,Plus,Users,ArrowRightLeft,Wallet} from 'lucide-react';
 import {formatMoney} from './model.mjs';
 const money=c=>formatMoney(Number.isSafeInteger(c)?c:0);
 const uuid=()=>crypto.randomUUID();
-function Panel({title,children}){return <section className="panel"><div className="sectiontitle"><h2>{title}</h2></div>{children}</section>}
+function Panel({title,children,icon:Icon=ClipboardList}){return <Paper component="section" withBorder radius="lg" p="lg" className="panel nexus-table-order-panel"><Group gap="sm" mb="md"><ThemeIcon color="orange" variant="light" radius="md"><Icon size={18}/></ThemeIcon><Text fw={800} size="lg" component="h2">{title}</Text></Group>{children}</Paper>}
 const asGuests=(value,quantity)=>{
  const groups=String(value).split(',').map(x=>x.trim()).filter(Boolean).map(part=>{
    const separator=part.lastIndexOf(':');
@@ -45,23 +47,23 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
  const safeProducts=products.filter(x=>x.active&&x.categoryActive!==0);
  const total=order?.totalCents??0;
  const isTable=order?.serviceMode==='table';
- return <div className="page">
-   <div className="pageheading"><div><p className="eyebrow">RESTAURANTE / COMANDA CANÔNICA</p><h1>{isTable?'Gerenciar mesa':'Gerenciar pedido'}</h1><p className="subtext">{order?.tableId?'Mesa vinculada':'Pedido'} · {order?.status||'Sem comanda'} · nenhuma operação é confirmada sem o host.</p></div><button className="btn secondary" onClick={onBack}>Voltar às mesas</button></div>
+ return <div className="page nexus-restaurant nexus-table-order">
+   <div className="pageheading"><div><p className="eyebrow">RESTAURANTE / COMANDA CANÔNICA</p><h1>{isTable?'Gerenciar mesa':'Gerenciar pedido'}</h1><p className="subtext">{order?.tableId?'Mesa vinculada':'Pedido'} · {order?.status||'Sem comanda'} · nenhuma operação é confirmada sem o host.</p></div><Button variant="default" leftSection={<ArrowLeft size={17}/>} onClick={onBack}>Voltar às mesas</Button></div>
    {error&&<p className="errorbox" role="alert">{error}</p>}
    {notice&&<p className="help" role="status">{notice}</p>}
    {!order?<Panel title="Selecione uma mesa">Abra uma comanda no mapa do salão.</Panel>:<div className="stack">
-    <div className="dashboard-grid">
-     <Panel title="Itens da comanda">
+    <div className="dashboard-grid nexus-table-order-grid">
+     <Panel title="Itens da comanda" icon={ClipboardList}>
       {(order.lines||[]).map(l=><div key={l.id} className="list-row"><span className="grow"><strong>{l.quantity} × {l.productName}</strong><small>{l.note||''}{l.modifiers?.length?' · '+l.modifiers.map(m=>m.name).join(', '):''}</small></span><strong>{money(l.quantity*l.unitPriceCents)}</strong></div>)}
       {!order.lines?.length&&<p className="help">Comanda vazia.</p>}
-      <div className="total-hero"><span>Total</span><strong>{money(total)}</strong></div>
+      <div className="total-hero nexus-table-total"><span>Total</span><strong>{money(total)}</strong></div>
       <div className="row wrap compact">
        {canConfirm&&<button className="btn primary" disabled={busy} onClick={()=>void run('/api/orders/'+encodeURIComponent(order.id)+'/confirm')}>Confirmar e enviar à cozinha</button>}
        {canCheckout&&<button className="btn primary" disabled={busy} onClick={()=>onCheckout(order)}>Finalizar venda</button>}
        {order.status==='OPEN'&&!session&&<p className="help">Abra o caixa para registrar o recebimento.</p>}
       </div>
      </Panel>
-     <Panel title="Adicionar produtos">
+     <Panel title="Adicionar produtos" icon={Plus}>
       <form className="form-grid" onSubmit={e=>{e.preventDefault();const quantity=Number(qty);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>100){setError('Quantidade inválida');return}void run('/api/orders/'+encodeURIComponent(order.id)+'/lines',{productId,quantity,modifierIds:selectedMods,note:note.trim()}).then(result=>{if(result){setQty('1');setNote('');setSelectedMods([]);}});}}>
        <label className="field">Produto<select value={productId} required onChange={e=>{setProductId(e.target.value);setSelectedMods([])}}><option value="">Selecionar</option>{safeProducts.map(p=><option key={p.id} value={p.id}>{p.name} · {money(p.priceCents)}</option>)}</select></label>
        <label className="field">Quantidade<input type="number" required min="1" max="100" value={qty} onChange={e=>setQty(e.target.value)}/></label>
@@ -72,11 +74,11 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
       <p className="help">Pedidos já confirmados podem receber itens adicionais: o KDS recebe tickets independentes.</p>
      </Panel>
     </div>
-    {isTable&&<Panel title="Transferir mesa">
+    {isTable&&<Panel title="Transferir mesa" icon={ArrowRightLeft}>
       <div className="row wrap compact"><label className="field">Mesa de destino<select value={destination} onChange={e=>setDestination(e.target.value)}><option value="">Selecionar mesa livre</option>{tables.filter(t=>!t.orderId&&t.id!==order.tableId).map(t=><option value={t.id} key={t.id}>{t.label}</option>)}</select></label>
        <button className="btn secondary" disabled={!lineAllowed||!destination||busy} onClick={()=>void run('/api/orders/'+encodeURIComponent(order.id)+'/transfer-table',{tableId:destination}).then(result=>{if(result)setDestination('')})}>Transferir comanda</button></div>
      </Panel>}
-    <Panel title="Divisão da comanda por convidados">
+    <Panel title="Divisão da comanda por convidados" icon={Users}>
       <p className="help">Distribua cada linha integralmente. Exemplo: Ana:1,Bruno:2. A divisão não duplica vendas nem gera pagamentos.</p>
       {(order.lines||[]).map(l=><label className="field" key={l.id}>{l.quantity} × {l.productName}<input value={alloc[l.id]??('Pessoa 1:'+l.quantity)} disabled={!lineAllowed||busy} onChange={e=>setAlloc(prev=>({...prev,[l.id]:e.target.value}))}/></label>)}
       <div className="row wrap compact">
