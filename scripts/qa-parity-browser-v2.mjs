@@ -145,11 +145,16 @@ try{
  mobilePage=await mobileContext.newPage();
  mobilePage.on('pageerror',e=>errors.push('mobile: '+e.message));
  await mobilePage.goto(origin+'/ui/?embedded=1');
+ await mobilePage.getByRole('button',{name:'Abrir ou fechar o menu'}).waitFor();
+ await mobilePage.locator('.sidebar').waitFor({state:'hidden'});
+ await mobilePage.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
  await mobilePage.locator('.sidebar .nav-item').first().waitFor();
  const mobileTabs=await mobilePage.locator('.sidebar .nav-item').allTextContents();
  assert.deepEqual(mobileTabs,desktopTabs,'Paridade de módulos desktop/mobile');
  for(let i=0;i<mobileTabs.length;i++){
+   if(i>0)await mobilePage.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
    await mobilePage.locator('.sidebar .nav-item').nth(i).click();
+   await mobilePage.locator('.sidebar').waitFor({state:'hidden'});
    await mobilePage.waitForFunction(index=>document.querySelectorAll('.sidebar .nav-item')[index]?.classList.contains('active'),i);
    const metrics=await mobilePage.evaluate(()=>({
      viewport:document.documentElement.clientWidth,

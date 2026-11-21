@@ -1,4 +1,4 @@
-import React,{useCallback,useEffect,useMemo,useState} from 'react';
+import React,{useCallback,useEffect,useMemo,useState,lazy,Suspense} from 'react';
 import {AppShell,Burger,NavLink} from '@mantine/core';
 import {ShoppingCart,ClipboardList,Package,UtensilsCrossed,Truck,ChefHat,Smartphone,Wallet,LayoutDashboard,Boxes,ChartBar,Store,Shield,Printer,Settings,Download,Monitor,Users as UsersIcon,BookOpen,Cable} from 'lucide-react';
 import {PosSale as Sale,PosPaymentModal as PaymentModal,PosProductModal as ProductModal} from './PosExperience.jsx';
@@ -7,8 +7,11 @@ import {formatMoney,parseMoney,appendDemoLine,DEMO_ORDER} from './model.mjs';
 import {sampleCategories,sampleProducts,sampleOrders,sampleTables,sampleTickets} from './demo.mjs';
 import {Button} from './UIPrimitives.jsx';
 import {Login,Success,Orders,Products} from './CommerceScreens.jsx';
-import {Cash,Tables,Kitchen,Waiter} from './RestaurantScreens.jsx';
-import {Onboarding,Dashboard,Users,Printing,Exports} from './AdminScreens.jsx';
+import {Cash} from './RestaurantScreens.jsx';
+import {RestaurantTables as Tables,RestaurantKitchen as Kitchen,RestaurantWaiter as Waiter} from './RestaurantTangerine.jsx';
+import {Onboarding,Users,Printing,Exports} from './AdminScreens.jsx';
+const Dashboard=lazy(()=>import('./ManagementTangerine.jsx').then(module=>({default:module.ManagementOverview})));
+
 import {availableNavLinks,titleOf} from './navigation.mjs';
 import {useHostRefresh,useKitchenPolling,useBusyCommand} from './useOperations.jsx';
 import {StockBusiness,FinanceBusiness} from './BusinessPanels.jsx';
@@ -118,7 +121,7 @@ function App(){
  case 'garcom':return <Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/>;
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':'mesas');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
- case 'geral':return <Dashboard orders={orders} session={session} tables={tables} onGo={navigate}/>;
+ case 'geral':return <Suspense fallback={<p className="subtext">Carregando gestão local...</p>}><Dashboard orders={orders} session={session} tables={tables} onGo={navigate} api={api} mode={mode}/></Suspense>;
  case 'estoque':return <div className="stack"><StockBusiness mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/><AdvancedStockPanel mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/></div>;
  case 'financeiro':return <FinanceBusiness mode={mode} api={api}/>;
  case 'relatorios':return <FinanceBusiness mode={mode} api={api} section="relatorios"/>;
@@ -143,7 +146,7 @@ function App(){
     <Burger className="nexus-mobile-burger" opened={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)} size="sm" aria-label="Abrir ou fechar o menu"/>
   </div>
  </AppShell.Header>
- <AppShell.Navbar className="sidebar"><nav aria-label="Navegação principal">
+ <AppShell.Navbar className={"sidebar "+(sidebarOpen?"nexus-sidebar-open":"nexus-sidebar-closed")}><nav aria-label="Navegação principal">
   {allowedLinks.map(([id,_icon,label,group],i)=>{const Icon=navIcons[id]||Package;return <React.Fragment key={id}>
     {(i===0||allowedLinks[i-1]?.[3]!==group)&&<div className="nav-group">{group}</div>}
     <NavLink component="button" type="button" active={view===id} variant="light"

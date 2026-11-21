@@ -302,3 +302,10 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
 .nexus-primary-action.mantine-Button-root:hover:not(:disabled){
  background-color:#9A3412!important;border-color:#9A3412!important
 }
+
+/* AppShell v9 does not consistently expose data-hidden after changing desktop
+   viewport to mobile. Controlled class prevents accidental full-screen overlay. */
+@media(max-width:767px){
+ .mantine-AppShell-navbar.sidebar.nexus-sidebar-closed{display:none!important;visibility:hidden!important;pointer-events:none!important}
+ .mantine-AppShell-navbar.sidebar.nexus-sidebar-open{display:flex!important;visibility:visible!important;pointer-events:auto!important}
+}
