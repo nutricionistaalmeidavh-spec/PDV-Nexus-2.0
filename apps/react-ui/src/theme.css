@@ -7,3 +7,21 @@
 @media print{.topbar,.sidebar,.demo-banner,.notice,.errorbox,.btn{display:none!important}.layout{display:block}.main-area{padding:0;background:white}.panel{box-shadow:none}}
 
 .food-art img{display:block;width:100%;height:100%;max-width:130px;object-fit:contain}.mini-food img{width:40px;height:40px;object-fit:contain}
+
+/* Regressão ArtiSys #178: ações de checkout sempre visíveis em telas baixas/mobile.
+   O conteúdo rola dentro do diálogo, sem empurrar o botão Confirmar para fora. */
+.modal-backdrop{padding:12px}
+.modal{display:flex;flex-direction:column;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:hidden}
+.modal-head,.modal-foot{flex-shrink:0}
+.modal-content{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:770px){
+ .modal-head{padding:12px 16px}
+ .modal-content{padding:14px 16px}
+ .modal-foot{padding:12px 16px;gap:8px}
+}
+@media(max-height:650px){
+ .modal-backdrop{padding:6px}
+ .modal{max-height:calc(100vh - 12px);max-height:calc(100dvh - 12px)}
+ .modal-head{padding:10px 16px}
+ .modal-foot{padding:10px 16px}
+}
