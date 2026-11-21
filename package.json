@@ -14,8 +14,12 @@
     "test:api": "node scripts/run-tests.mjs api",
     "start": "node --experimental-strip-types apps/server/src/index.mjs",
     "desktop": "electron .",
-    "build:win": "electron-builder --win nsis --x64 --publish never",
-    "build:linux": "electron-builder --linux AppImage --x64 --publish never",
+    "build:win": "node scripts/package-edition.mjs free win",
+    "build:commercial:win": "node scripts/package-edition.mjs commercial win",
+    "prebuild:commercial:win": "npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build",
+    "build:linux": "node scripts/package-edition.mjs free linux",
+    "build:commercial:linux": "node scripts/package-edition.mjs commercial linux",
+    "prebuild:commercial:linux": "npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:test && npm run ui:build",
     "ui:build": "npm --prefix apps/react-ui run build",
     "ui:test": "npm --prefix apps/react-ui test",
     "predesktop": "npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund && npm run ui:build",
@@ -24,6 +28,7 @@
   },
   "license": "MIT",
   "main": "apps/desktop/main.cjs",
+      "apps/desktop/edition-manifest.json",
   "devDependencies": {
     "electron": "45.3.4",
     "electron-builder": "26.18.0"
