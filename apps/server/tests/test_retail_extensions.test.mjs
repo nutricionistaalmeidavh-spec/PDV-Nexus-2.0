@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createApp } from '../src/server.mjs';
 import { decodeEan13, encodeEan13, decodeScaleLabel, parseScaleSerial } from '../src/retail-hardware.mjs';
+import { validatePrinterQueueName } from '../src/windows-raw-printer.mjs';
+import {allowedOperator} from '../src/operator-auth.mjs';
 
 let seq=0;
 const command=(body={})=>({commandId:'retail-test-'+(++seq),...body});
@@ -90,4 +92,34 @@ test('Impressora serial opt-in aceita caminho local restrito sem exigir dependê
   assert.equal((await api('GET','/api/printer')).data.profile.transport,'serial');
   const blocked=await api('POST','/api/printer',command({transport:'serial',devicePath:'../../etc/passwd',baudRate:9600}));
   assert.equal(blocked.status,400);
+});
+
+test('EAN-13 de produto é único e pode ser recuperado pelo leitor no caixa',async t=>{
+ const api=await fixture(t);
+ const barcode=encodeEan13('789123456789');
+ const created=await api('POST','/api/products',command({name:'Suco natural',priceCents:890,barcode}));
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ const lookup=await api('GET','/api/catalog/barcode?code='+barcode);
+ assert.equal(lookup.status,200);
+ assert.equal(lookup.data.product.id,created.data.product.id);
+ const invalid=await api('POST','/api/products',command({name:'Suco inválido',priceCents:890,barcode:barcode.slice(0,12)+'8'}));
+ assert.equal(invalid.status,400);
+ const duplicate=await api('POST','/api/products',command({name:'Suco duplicado',priceCents:900,barcode}));
+ assert.notEqual(duplicate.status,201);
+ assert.equal((await api('GET','/api/products')).data.products.length,1);
+});
+test('Windows RAW print queue e permissões permanecem restritos',async t=>{
+ assert.equal(validatePrinterQueueName('EPSON TM-T20'),true);
+ assert.equal(validatePrinterQueueName('..\\Desktop\\arquivo'),false);
+ assert.equal(validatePrinterQueueName('\\\\servidor\\impressora'),false);
+ assert.equal(allowedOperator('cashier','GET','/api/suppliers'),false);
+ assert.equal(allowedOperator('cashier','GET','/api/reports/financial'),false);
+ const api=await fixture(t);
+ const windows=await api('POST','/api/printer',command({transport:'windows',devicePath:'EPSON TM-T20'}));
+ assert.equal(windows.status,200,JSON.stringify(windows.data));
+ const profile=await api('GET','/api/printer');
+ assert.equal(profile.data.profile.transport,'windows');
+ assert.equal(profile.data.profile.devicePath,'EPSON TM-T20');
+ const invalid=await api('POST','/api/printer',command({transport:'windows',devicePath:'../arquivo'}));
+ assert.equal(invalid.status,400);
 });
