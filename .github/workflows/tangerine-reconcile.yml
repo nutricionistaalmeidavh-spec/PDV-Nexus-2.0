@@ -50,12 +50,12 @@ jobs:
               if path.endswith('/App.jsx'):
                   needle=' <AppShell.Main className="main-area">\n'
                   assert output.count(needle)==1
-                  banner='  {licenseInfo?.required&&<div className="notice" role="status">{licenseInfo.active?(licenseInfo.kind===\\'TRIAL\\'?\\'Avaliação de 3 dias\\':\\'Licença comercial\\')+\\' · \\'+(licenseInfo.expiresAt?\\'Válida até \\'+new Date(licenseInfo.expiresAt).toLocaleString(\\'pt-BR\\'):\\'Sem vencimento\\'):\\'Acesso somente leitura. Avaliação encerrada.\\'}{licenseInfo.active&&licenseInfo.kind===\\'TRIAL\\'&&licenseInfo.expiresAt&&Date.parse(licenseInfo.expiresAt)-Date.now()<=86400000?\\' · Seu teste termina em menos de 24 horas.\\':null}</div>}\n'
+                  banner="""  {licenseInfo?.required&&<div className="notice" role="status">{licenseInfo.active?(licenseInfo.kind==='TRIAL'?'Avaliação de 3 dias':'Licença comercial')+' · '+(licenseInfo.expiresAt?'Válida até '+new Date(licenseInfo.expiresAt).toLocaleString('pt-BR'):'Sem vencimento'):'Acesso somente leitura. Avaliação encerrada.'}{licenseInfo.active&&licenseInfo.kind==='TRIAL'&&licenseInfo.expiresAt&&Date.parse(licenseInfo.expiresAt)-Date.now()<=86400000?' · Seu teste termina em menos de 24 horas.':null}</div>}""" + "\n"
                   banner=banner.replace("\\'","'")
                   output=output.replace(needle,needle+banner)
                   needle=' </AppShell>\n'
                   assert output.count(needle)==1
-                  output=output.replace(needle,' {modal?.type===\\'refund-items\\'&&<PartialRefundDialog orderId={modal.orderId} api={api} onClose={()=>setModal(null)} onDone={()=>{setModal(null);void refresh();}}/>}\n'+needle)
+                  output=output.replace(needle,""" {modal?.type==='refund-items'&&<PartialRefundDialog orderId={modal.orderId} api={api} onClose={()=>setModal(null)} onDone={()=>{setModal(null);void refresh();}}/>}""" + "\n" + needle)
                   output=output.replace("\\'","'")
               assert '<<<<<<<' not in output and '>>>>>>>' not in output
               file.write_text(output)
