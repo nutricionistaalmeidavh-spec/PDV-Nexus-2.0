@@ -36,6 +36,13 @@ try {
  await page.locator('.product-form input').nth(1).fill('25,00');
  await page.locator('.product-form button.btn.primary').click();
  await page.locator('.product-list').getByText('X-QA-React').waitFor();
+ // ArtiSys #200: falha de consulta KDS não pode descartar cadastro de produto.
+ await page.route('**/api/kitchen/tickets',route=>route.abort('failed'));
+ await page.locator('.product-form input').nth(0).fill('X-QA-Sem-KDS');
+ await page.locator('.product-form input').nth(1).fill('10,00');
+ await page.locator('.product-form button.btn.primary').click();
+ await page.locator('.product-list').getByText('X-QA-Sem-KDS').waitFor();
+ await page.unroute('**/api/kitchen/tickets');
  await snap('react-01-cardapio');
  await clickNav('Controle de caixa');
  await page.locator('.cash-main input').fill('100,00');
@@ -51,6 +58,18 @@ try {
  await page.getByRole('button',{name:/Finalizar venda/}).waitFor();
  await page.getByRole('button',{name:/Finalizar venda/}).click();
  await page.getByRole('dialog',{name:'Finalizar venda'}).waitFor();
+ // ArtiSys #178: em três alturas/larguras, o botão permanece visível sem rolar a página.
+ for(const [width,height] of [[1366,768],[1024,600],[390,844]]){
+   await page.setViewportSize({width,height});
+   const action=await page.getByRole('button',{name:'Confirmar recebimento'}).boundingBox();
+   const modal=await page.getByRole('dialog',{name:'Finalizar venda'}).boundingBox();
+   assert.ok(action&&modal,'Diálogo e botão de pagamento devem estar presentes');
+   assert.ok(action.y>=0&&action.y+action.height<=height,
+     'Botão de pagamento fora da tela '+width+'x'+height+': '+JSON.stringify(action));
+   assert.ok(action.x>=0&&action.x+action.width<=width,'Pagamento cortado horizontalmente: '+width+'x'+height);
+   await snap('react-checkout-'+width+'x'+height);
+ }
+ await page.setViewportSize({width:1440,height:940});
  await page.getByRole('button',{name:'Confirmar recebimento'}).click();
  await page.getByText('Venda concluída!',{exact:true}).waitFor();
  await snap('react-03-venda-gravada');
