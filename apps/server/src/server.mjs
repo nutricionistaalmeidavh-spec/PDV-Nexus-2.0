@@ -9,6 +9,7 @@ import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, order
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
+import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
 import {financialRead} from './retail-finance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
@@ -452,13 +453,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         } else if(method==='POST'&&route==='/api/printer') {
           out=transactWithEvents(db,route,body,()=>{
             const transport=body.transport??'tcp';
-            if(!['tcp','serial'].includes(transport))bad('Transporte de impressão inválido');
+            if(!['tcp','serial','windows'].includes(transport))bad('Transporte de impressão inválido');
             const host=transport==='tcp'?requireString(body.host,'IP da impressora',64):'127.0.0.1';
             if(transport==='tcp'&&!isPrivateIPv4(host))bad('Use IPv4 da rede local');
             const port=transport==='tcp'?body.port:9100;
             if(!Number.isInteger(port)||port<1||port>65535)bad('Porta inválida');
-            const devicePath=transport==='serial'?body.devicePath:null;
+            const devicePath=transport==='serial'||transport==='windows'?body.devicePath:null;
             if(transport==='serial'&&!validateSerialDevicePath(devicePath))bad('Porta serial inválida: use COM1 ou /dev/ttyUSB0');
+            if(transport==='windows'&&!validatePrinterQueueName(devicePath))bad('Nome da impressora Windows inválido');
             const baudRate=transport==='serial'?(body.baudRate??9600):9600;
             if(![9600,19200,38400,57600,115200].includes(baudRate))bad('Baud rate inválido');
             db.prepare("INSERT INTO printer_profile(id,host,port,enabled,transport,device_path,baud_rate) VALUES('default',?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET host=excluded.host,port=excluded.port,enabled=1,transport=excluded.transport,device_path=excluded.device_path,baud_rate=excluded.baud_rate").run(host,port,transport,devicePath,baudRate);
@@ -475,6 +477,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           try {
             const bytes=receiptBytes(JSON.parse(job.payload_json));
             if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
+            else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
             else await transmit(printer.host,printer.port,bytes);
             db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
             auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio ao transporte concluído; impressão física não confirmada'}};
