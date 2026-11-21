@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <meta name="color-scheme" content="light">
+ <meta name="referrer" content="no-referrer">
+ <title>Pedido na mesa | PDV Nexus 2.0</title>
+ <link rel="stylesheet" href="/menu.css"><link rel="stylesheet" href="/table.css">
+</head>
+<body>
+<header class="menu-header"><div class="menu-brand"><div class="brand-symbol">N</div><div><strong>Pedido na mesa</strong><small>PDV Nexus 2.0 · atendimento no restaurante</small></div></div><span class="menu-tag" id="table-label">Validando mesa…</span></header>
+<main class="menu-container">
+ <section class="intro"><span class="eyebrow">PEDIDO DIRETO DA MESA</span><h1>Escolha o que deseja pedir</h1><p>Personalize cada item e acompanhe a aprovação. O pagamento será feito ao estabelecimento.</p></section>
+ <p id="table-alert" class="menu-alert" role="status" aria-live="polite" hidden></p>
+ <section class="menu-layout">
+  <div><h2>Cardápio</h2><div id="table-products" class="menu-items"><p>Carregando…</p></div></div>
+  <section class="order-panel">
+   <h2>Seu pedido</h2><div id="table-cart"></div>
+   <div class="menu-total"><span>Total</span><strong id="table-total">R$ 0,00</strong></div>
+   <form id="table-form"><label>Seu nome (opcional)<input name="guestName" maxlength="80" autocomplete="given-name" placeholder="Ex.: Ana"></label>
+    <button class="primary" id="table-send" type="submit" disabled>Enviar pedido da mesa</button>
+    <p class="muted">Não há pagamento online. A confirmação aparece nesta página.</p>
+   </form>
+   <div id="table-status" class="table-status" role="status" aria-live="polite"></div>
+  </section>
+ </section>
+ <dialog id="table-customize" class="table-dialog">
+  <form id="table-customize-form" method="dialog">
+   <h2 id="table-customize-title">Personalizar</h2>
+   <label>Quantidade<input id="table-qty" type="number" min="1" max="20" value="1" required></label>
+   <div id="table-modifiers" class="table-modifiers"></div>
+   <label>Observações para a cozinha<textarea id="table-note" maxlength="240" rows="3" placeholder="Ex.: sem cebola"></textarea></label>
+   <div class="table-dialog-actions"><button type="button" id="table-cancel" class="table-outline">Voltar</button><button type="submit" id="table-add" class="primary">Adicionar ao pedido</button></div>
+  </form>
+ </dialog>
+ <footer>Pedidos vinculados à mesa · Sem serviço externo ou assinatura.</footer>
+</main>
+<script src="/table.js" defer></script>
+</body></html>
