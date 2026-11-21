@@ -128,7 +128,8 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
    title={<Group gap="sm"><ThemeIcon color="orange" variant="light"><Wallet size={18}/></ThemeIcon><Text fw={800}>Finalizar venda</Text></Group>}
    classNames={{content:'nexus-modal-content nexus-checkout-modal',body:'nexus-modal-body'}}
    closeButtonProps={{'aria-label':'Fechar'}}>
-  <Stack gap="md">
+  <Stack gap={0} className="nexus-payment-container">
+   <Stack gap="md" className="nexus-payment-scroll">
    <Paper p="lg" radius="lg" className="nexus-payment-total">
     <Text size="xs" fw={800} tt="uppercase">Total a receber</Text>
     <Text className="hero-number" fw={800}>{money(total)}</Text>
@@ -158,6 +159,7 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
    </Group>
    <Text size="xs" c="dimmed">Pix e cartão são registrados somente após confirmação manual. Não há processamento automático ou dependência de gateway pago.</Text>
    {error&&<Group gap="xs" role="alert"><CircleAlert size={16} color="#B91C1C"/><Text c="red.8" size="sm">{error}</Text></Group>}
+   </Stack>
    <Group className="nexus-modal-actions" justify="space-between" align="center" wrap="nowrap">
     <Button variant="default" onClick={onClose}>Voltar</Button>
     <Button color="orange" onClick={submit} loading={busy} leftSection={<Check size={18}/>}>Confirmar recebimento</Button>
