@@ -77,7 +77,8 @@ export function createCommercialLicense(db,{required=false,endpoint='https://pdv
     const t=now();
     if(state.lastSeen&&t+ROLLBACK_MS<state.lastSeen)return {required:true,active:false,reason:'CLOCK_ROLLBACK'};
     const p=state.entitlement?.payload;
-    if(checkOnline&&p&&(t-state.checkedAt>CHECK_MS||(p.expiresAt&&issued(p.expiresAt)<=t)))await refresh();
+    const refreshInterval=p?.expiresAt&&issued(p.expiresAt)<=t?60_000:CHECK_MS;
+    if(checkOnline&&p&&t-state.checkedAt>refreshInterval)await refresh();
     const current=state.entitlement?.payload;
     const active=!!current&&!state.revoked&&(!current.expiresAt||issued(current.expiresAt)>now())&&verifyEntitlement(state.entitlement,installationId,key);
     if(t>state.lastSeen+60000){state.lastSeen=t;persist()}
