@@ -9,7 +9,11 @@ export function receiptBytes(payload) {
     const suffix='  '+subtotal;
     return (`${l.quantity}x ${clean(l.productName)}`).slice(0,Math.max(0,width-suffix.length))+suffix;
   };
-  const lines=['PDV NEXUS 2.0','RECIBO DE PEDIDO - NAO FISCAL','',`Pedido ${payload.id.slice(0,8)}`, '-'.repeat(width),
+  const type=payload.type||'ORDER';
+  const label={ORDER:'RECIBO DE PEDIDO - NAO FISCAL',PREBILL:'PRE-CONTA - NAO FISCAL',
+    KITCHEN:'COMPROVANTE DE COZINHA - NAO FISCAL',CLOSE:'FECHAMENTO - NAO FISCAL'}[type];
+  if(!label)throw new Error('Tipo de comprovante desconhecido');
+  const lines=['PDV NEXUS 2.0',label,'',`Pedido ${payload.id.slice(0,8)}`, '-'.repeat(width),
     ...payload.lines.flatMap(l=>[
       itemLine(l),
       `  Item #${clean(l.id??'').slice(-8)}`,
