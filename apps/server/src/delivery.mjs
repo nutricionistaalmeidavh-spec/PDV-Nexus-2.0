@@ -32,13 +32,12 @@ export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
     entry.count++;perIp.set(ip,entry);
     const customerName=requireText(body.customerName,2,100),address=requireText(body.address,10,240);
     const note=body.note===undefined?'':requireText(body.note,0,240);
-    if(!customerName||!address||note===null||!phoneValid(body.phone)||!Array.isArray(body.items)||body.items.length<1||body.items.length>15)
+    if(!customerName||!address||note===null||!phoneValid(body.phone)||!Array.isArray(body.items)||body.items.length<1||body.items.length>20)
       return {status:400,body:{code:'INVALID_DELIVERY',message:'Dados de entrega ou itens inválidos'}};
-    const unique=new Set(),lines=[];let totalCents=0;
+    const lines=[];let totalCents=0;
     for(const item of body.items){
-      if(typeof item?.productId!=='string'||!Number.isSafeInteger(item.quantity)||item.quantity<1||item.quantity>20||unique.has(item.productId))
+      if(typeof item?.productId!=='string'||!Number.isSafeInteger(item.quantity)||item.quantity<1||item.quantity>20)
         return {status:400,body:{code:'INVALID_ITEMS',message:'Itens inválidos, repetidos ou quantidade excessiva'}};
-      unique.add(item.productId);
       const product=db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents FROM menu_product p JOIN menu_category c ON c.id=p.category_id WHERE p.id=? AND p.active=1 AND c.active=1').get(item.productId);
       if(!product)return {status:400,body:{code:'PRODUCT_UNAVAILABLE',message:'Produto indisponível'}};
       const lineTotal=product.priceCents*item.quantity;
