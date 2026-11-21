@@ -35,7 +35,7 @@ test('nome comprido nunca corta subtotal no papel ESC/POS de 38 colunas',()=>{
    id:'linha-extensa',quantity:2,productName:'Hamburguer premium com queijo e molho especial',
    unitPriceCents:999999,note:'',modifiers:[]
  }],totalCents:1999998});
- const productLine=bytes.toString('ascii').split('\\n').find(line=>line.startsWith('2x '));
+ const productLine=bytes.toString('ascii').split('\n').find(line=>line.startsWith('2x '));
  assert.ok(productLine);
  assert.ok(productLine.length<=38);
  assert.ok(productLine.endsWith('19999.98'),productLine);
