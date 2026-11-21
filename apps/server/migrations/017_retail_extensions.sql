@@ -28,7 +28,7 @@ CREATE TABLE batch_consumption (
  created_at TEXT NOT NULL
 ) STRICT;
 CREATE INDEX idx_batch_consumption_order ON batch_consumption(order_id);
-ALTER TABLE printer_profile ADD COLUMN transport TEXT NOT NULL DEFAULT 'tcp' CHECK(transport IN ('tcp','serial'));
+ALTER TABLE printer_profile ADD COLUMN transport TEXT NOT NULL DEFAULT 'tcp' CHECK(transport IN ('tcp','serial','windows'));
 ALTER TABLE printer_profile ADD COLUMN device_path TEXT;
 ALTER TABLE printer_profile ADD COLUMN baud_rate INTEGER NOT NULL DEFAULT 9600;
 ALTER TABLE menu_product ADD COLUMN barcode TEXT;
