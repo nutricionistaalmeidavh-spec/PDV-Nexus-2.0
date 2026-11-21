@@ -319,7 +319,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           res.end(isCsv?salesToCsv(document):JSON.stringify(document));
           return;
         }
-        const restaurantResult=restaurantRead(db,method,route,{missing});
+        const restaurantResult=restaurantRead(db,method,route,{missing},url.searchParams);
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         const editedHistory=lineHistory(db,method,route,{missing});
         if(editedHistory)return response(res,editedHistory.status,editedHistory.body);
