@@ -103,6 +103,7 @@ export function tableQrWrite(db,method,route,body,h){
     if(!['https:',...(isLocal?['http:']:[])].includes(base.protocol)||base.username||base.password||base.search||base.hash||base.pathname!=='/')
       h.bad('Use a origem HTTPS do portal público (HTTP apenas para localhost)');
     if(body.autoAccept!==undefined&&typeof body.autoAccept!=='boolean')h.bad('Modo de aprovação inválido');
+    if(body.autoAccept===true&&!h.supervisor)h.conflict('Autoaprovação exige supervisor','SUPERVISOR_REQUIRED');
     const raw=randomBytes(32).toString('hex'),id=randomUUID(),now=h.stamp();
     const expiresAt=new Date(Date.now()+12*3600*1000).toISOString();
     db.prepare('UPDATE table_qr_session SET revoked_at=? WHERE order_id=? AND revoked_at IS NULL').run(now,table.orderId);
