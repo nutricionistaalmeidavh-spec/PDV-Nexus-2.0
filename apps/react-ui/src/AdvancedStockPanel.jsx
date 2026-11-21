@@ -89,7 +89,7 @@ export function AdvancedStockPanel({mode,api,onChanged,reloadKey}){
    <div className="row wrap compact">
      <label className="field">Ingrediente<select aria-label="Ingrediente" value={ingredientId} onChange={e=>setIngredientId(e.target.value)}><option value="">Selecionar</option>{ingredients.filter(i=>i.active).map(i=><option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}</select></label>
      <label className="field">Quantidade por produto<input type="number" step="0.001" min="0.001" value={qty} onChange={e=>setQty(e.target.value)}/></label>
-     <button className="btn secondary" type="button" disabled={!ingredientId||!productId} onClick={()=>{try{const quantityMilli=numeric(qty,1000);setRecipe(prev=>[...prev.filter(i=>i.ingredientId!==ingredientId),{ingredientId,quantityMilli}]);}catch(e){setError(e.message)}}}>Adicionar à ficha</button>
+     {productId&&ingredientId&&<button className="btn secondary" type="button" onClick={()=>{try{const quantityMilli=numeric(qty,1000);setRecipe(prev=>[...prev.filter(i=>i.ingredientId!==ingredientId),{ingredientId,quantityMilli}]);}catch(e){setError(e.message)}}}>Adicionar ingrediente</button>}
      <button className="btn primary" disabled={busy||!productId} onClick={()=>void call('/api/stock/recipes/'+encodeURIComponent(productId),{items:recipe})}>Salvar ficha técnica</button>
    </div>
    <p className="help">A ficha do combo é a soma das fichas dos seus componentes; vendas existentes preservam seus snapshots.</p>
