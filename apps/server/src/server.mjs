@@ -48,6 +48,7 @@ class HttpError extends Error {
 }
 const bad = (message, code='INVALID_INPUT') => { throw new HttpError(400,code,message); };
 const conflict = (message,code='CONFLICT') => { throw new HttpError(409,code,message); };
+const forbidden = (message,code='FORBIDDEN') => { throw new HttpError(403,code,message); };
 const missing = (what) => { throw new HttpError(404,'NOT_FOUND', `${what} não encontrado`); };
 const safeCents = (v, allowZero=true) => Number.isSafeInteger(v) && v>= (allowZero ? 0:1);
 const requireCents = (v,label='Valor',zero=true) => { if(!safeCents(v,zero)) bad(`${label} inválido`); return v; };
@@ -386,7 +387,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,supervisor:requestRole==='admin'||role==='manager'};
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,forbidden,supervisor:requestRole==='admin'||role==='manager'};
         const special=partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
         if(special){
           out=special;
@@ -606,7 +607,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
       fs.createReadStream(path.join(publicDir,file)).pipe(res);
     } catch(e) {
-      const status=e instanceof HttpError?e.status:400;
+      const status=e instanceof HttpError||(Number.isInteger(e?.status)&&e.status>=400&&e.status<=499)?e.status:400;
       return response(res,status,{code:e.code??'INVALID_OPERATION',message:e instanceof HttpError?e.message:e.message||'Erro interno'});
     }
   }
