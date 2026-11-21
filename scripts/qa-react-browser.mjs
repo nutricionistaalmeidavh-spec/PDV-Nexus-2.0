@@ -75,6 +75,13 @@ try {
    assert.ok(action.y>=0&&action.y+action.height<=height,
      'Botão de pagamento fora da tela '+width+'x'+height+': '+JSON.stringify(action));
    assert.ok(action.x>=0&&action.x+action.width<=width,'Pagamento cortado horizontalmente: '+width+'x'+height);
+   const confirmVisible=await page.getByRole('button',{name:'Confirmar recebimento'}).evaluate(el=>{
+     const bounds=el.getBoundingClientRect();
+     const cx=bounds.left+bounds.width/2,cy=bounds.top+bounds.height/2;
+     const top=document.elementFromPoint(cx,cy);
+     return Boolean(top&&(top===el||el.contains(top)));
+   });
+   assert.ok(confirmVisible,'Botão de confirmação está oculto/recortado pelo modal: '+width+'x'+height);
    await snap('react-checkout-'+width+'x'+height);
  }
  await page.setViewportSize({width:1440,height:940});
