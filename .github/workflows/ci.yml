@@ -13,15 +13,12 @@ jobs:
         with:
           node-version: '22.16.0'
       - name: Install minimal free runtime QR library
-        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Build offline React UI before host route integration tests
         run: |
-          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
           npm run ui:test
           npm run ui:build
-      - name: Emit temporary versioned npm lockfiles for deterministic dependency audit
-        run: |
-          node -e 'const fs=require("node:fs");for(const [key,file] of [["ROOT","package-lock.json"],["UI","apps/react-ui/package-lock.json"]]){const content=fs.readFileSync(file,"utf8");for(let i=0;i<content.length;i+=400){console.log("PDVLOCK_"+key+"_"+String(i/400).padStart(4,"0")+":"+JSON.stringify(content.slice(i,i+400)));}}'
       - name: Unit and SQLite schema tests
         run: npm test
       - name: JavaScript syntax checks
@@ -48,10 +45,10 @@ jobs:
         with:
           node-version: '22.16.0'
       - name: Install minimal free runtime QR library
-        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Build React UI on Windows
         run: |
-          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
           npm run ui:test
           npm run ui:build
       - name: API tests on Windows
