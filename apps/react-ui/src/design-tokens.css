@@ -1,0 +1,68 @@
+/*
+ * PDV Nexus 2.0 · Tangerine Light
+ * Tokens semânticos e escalas de interface para caixa, restaurante e gestão.
+ * R$ 0 · self-hosted · sem fontes ou serviços de temas externos.
+ *
+ * Cor da marca: --accent (destaques sem texto branco)
+ * Ações com texto branco: --primary (contraste 5.18:1 sobre #fff)
+ * Estados operacionais não reutilizam laranja: --success, --warning, --danger.
+ */
+:root {
+  color-scheme:light;
+  --canvas:#FFF9F4;
+  --surface:#FFFFFF;
+  --surface-soft:#FFF1E6;
+  --surface-subtle:#FFFBF8;
+  --text:#1F2937;
+  --text-strong:#292524;
+  --text-muted:#57534E;
+  --text-on-dark:#FFFFFF;
+  --primary:#C2410C;
+  --on-primary:#FFFFFF;
+  --primary-hover:#9A3412;
+  --primary-pressed:#7C2D12;
+  --primary-soft:#FFE8D6;
+  --accent:#FF7A1A;
+  --accent-ink:#7C2D12;
+  --border:#E9DDCF;
+  --border-strong:#D8C5B3;
+  --focus:#B45309;
+  --success:#166534;
+  --success-soft:#DCFCE7;
+  --warning:#92400E;
+  --warning-soft:#FEF3C7;
+  --danger:#B91C1C;
+  --danger-soft:#FEE2E2;
+  --info:#1D4ED8;
+  --info-soft:#DBEAFE;
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:20px;
+  --space-6:24px;
+  --space-8:32px;
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:18px;
+  --radius-xl:22px;
+  --radius-full:9999px;
+  --shadow-sm:0 2px 6px rgba(64,39,24,.05);
+  --shadow-md:0 8px 24px rgba(64,39,24,.08);
+  --shadow-lg:0 18px 50px rgba(64,39,24,.12);
+  --shadow-focus:0 0 0 3px rgba(194,65,12,.18);
+  --font-ui:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --font-size-xs:12px;
+  --font-size-sm:13px;
+  --font-size-md:14px;
+  --font-size-base:16px;
+  --font-size-lg:20px;
+  --font-size-xl:29px;
+  --motion-fast:140ms ease;
+  --motion-standard:180ms ease;
+}
+@media(prefers-reduced-motion:reduce) {
+  :root{--motion-fast:0ms;--motion-standard:0ms}
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
