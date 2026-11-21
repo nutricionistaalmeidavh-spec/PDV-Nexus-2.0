@@ -23,7 +23,21 @@ async function renderStock(){const [inv,report,prod,margin,supply]=await Promise
  fillSelect($('stock-recipe-product'),products,x=>x.id,x=>x.name);
  fillSelect($('stock-batches-ingredient'),ingredients,x=>x.id,x=>x.name);
  const supplierList=$('supplier-list');supplierList.replaceChildren();
- for(const sup of supply.suppliers)supplierList.append(node('div','data-row',sup.name+(sup.document?' · '+sup.document:'')));
+ for(const sup of supply.suppliers){
+  const row=node('div','data-row'),edit=node('input',''),save=node('button','button secondary','Salvar');
+  edit.value=sup.name;edit.maxLength=120;edit.setAttribute('aria-label','Nome do fornecedor '+sup.name);
+  save.onclick=()=>void run(async()=>{
+    await api('PATCH','/api/suppliers/'+encodeURIComponent(sup.id),{commandId:uid(),name:edit.value});
+    await renderStock();toast('Fornecedor atualizado');
+  });
+  const state=node('button','button ghost',sup.active?'Desativar':'Reativar');
+  state.onclick=()=>void run(async()=>{
+    await api('PATCH','/api/suppliers/'+encodeURIComponent(sup.id),{commandId:uid(),active:!sup.active});
+    await renderStock();toast('Situação do fornecedor atualizada');
+  });
+  row.append(edit,node('small','',sup.document||'Sem documento'),save,state);
+  supplierList.append(row);
+ }
  fillSelect($('stock-receive-supplier'),[{id:'',name:'Sem fornecedor'},...supply.suppliers.filter(x=>x.active)],x=>x.id,x=>x.name);
  await loadRecipe();await renderBatches();
 }
