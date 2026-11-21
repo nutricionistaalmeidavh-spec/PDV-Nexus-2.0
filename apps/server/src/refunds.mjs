@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 export function refundWrite(db,method,route,body,h) {
   const m=route.match(/^\/api\/orders\/([^/]+)\/refund$/);
   if(method!=='POST'||!m)return null;
-  const {transact,requireString,conflict,missing,databaseOrder,audit,stamp,cashSession,cashExpected}=h;
+  const {transact,requireString,conflict,missing,databaseOrder,audit,actor,stamp,cashSession,cashExpected}=h;
   return transact(db,route,body,()=>{
     const order=databaseOrder(db,m[1]);
     if(order.status!=='CLOSED')conflict('Apenas vendas encerradas podem ser devolvidas');
@@ -19,9 +19,9 @@ export function refundWrite(db,method,route,body,h) {
     if(cashCents>0&&cashExpected(db,session)<cashCents)conflict('Saldo em caixa insuficiente');
     const id=randomUUID(),now=stamp();
     db.prepare('INSERT INTO order_refund(id,order_id,amount_cents,cash_cents,reason,external_refund_confirmed,cash_session_id,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
-      .run(id,order.id,order.totalCents,cashCents,reason,externalCents>0?1:0,session?.id??null,'operator-local',now);
+      .run(id,order.id,order.totalCents,cashCents,reason,externalCents>0?1:0,session?.id??null,actor,now);
     if(cashCents>0)db.prepare('INSERT INTO cash_movement(id,session_id,kind,amount_cents,actor_id,created_at) VALUES(?,?,?,?,?,?)')
-      .run(randomUUID(),session.id,'WITHDRAWAL',cashCents,'operator-local',now);
+      .run(randomUUID(),session.id,'WITHDRAWAL',cashCents,actor,now);
     audit(db,order.id,'ORDER_REFUNDED',{refundId:id,reason,cashCents,externalCents});
     return {refund:{id,orderId:order.id,amountCents:order.totalCents,cashCents,externalCents,externalRefundManual:externalCents>0}};
   },201);
