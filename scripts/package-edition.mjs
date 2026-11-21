@@ -23,8 +23,9 @@ if(edition==='commercial'){
 }
 fs.writeFileSync(manifest,JSON.stringify(config),{mode:0o600,flag:'wx'});
 try{
-  const command=process.platform==='win32'?'npx.cmd':'npx';
-  const r=spawnSync(command,['--no-install','electron-builder','--'+platform,platform==='win'?'nsis':'AppImage','--x64','--publish','never'],{cwd:root,stdio:'inherit'});
+  const cli=path.join(root,'node_modules','electron-builder','cli.js');
+  if(!fs.existsSync(cli))throw Error('electron-builder nao instalado: execute npm ci antes do build');
+  const r=spawnSync(process.execPath,[cli,'--'+platform,platform==='win'?'nsis':'AppImage','--x64','--publish','never'],{cwd:root,stdio:'inherit'});
   if(r.error)throw r.error;
   if(r.status!==0)throw Error('Falha no empacotamento: '+r.status);
 }finally{
