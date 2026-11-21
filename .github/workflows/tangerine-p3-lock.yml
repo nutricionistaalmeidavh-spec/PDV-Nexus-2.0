@@ -1,10 +1,7 @@
 name: P3 Mantine data visualizations lockfile
 on:
-  pull_request:
-    branches: [feat/nexus-tangerine-p0-p1-20261121]
-    paths:
-      - apps/react-ui/package.json
-      - .github/workflows/tangerine-p3-lock.yml
+  push:
+    branches: [feat/nexus-tangerine-p2-p4-20261121]
   workflow_dispatch:
 jobs:
   resolve:
@@ -13,18 +10,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: feat/nexus-tangerine-p2-p4-20261121
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - name: Resolve dependencies offline at runtime, no install scripts
         run: npm install --package-lock-only --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
       - name: Commit lockfile to isolated head branch
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'push'
         run: |
           if git diff --quiet -- apps/react-ui/package-lock.json; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apps/react-ui/package-lock.json
           git commit -m "build(P3): lock DataTable, charts and Recharts packages"
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin HEAD:feat/nexus-tangerine-p2-p4-20261121
