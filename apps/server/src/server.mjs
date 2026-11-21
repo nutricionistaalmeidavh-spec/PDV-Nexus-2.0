@@ -572,10 +572,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       // Somente portal público do cliente e recursos de atualização dos PWAs antigos.
       // As páginas operacionais clássicas e scripts administrativos não são mais servidos.
       const file=route.slice(1);
-      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js'].includes(file))
+      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js,'pwa-192.png','pwa-512.png'].includes(file))
         return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
-      const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
+      const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
       fs.createReadStream(path.join(publicDir,file)).pipe(res);
     } catch(e) {
