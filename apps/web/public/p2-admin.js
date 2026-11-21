@@ -13,7 +13,7 @@ function drawRecipe(){const list=$('stock-recipe-lines');list.replaceChildren();
  for(const item of recipeDraft){const ing=ingredients.find(i=>i.id===item.ingredientId);const row=node('div','data-row');row.append(node('strong','',ing?.name??item.ingredientId),node('span','',(item.quantityMilli/1000).toLocaleString('pt-BR',{maximumFractionDigits:3})+' '+(ing?.unit??'')));
  const rm=node('button','button ghost','Remover');rm.onclick=()=>{recipeDraft=recipeDraft.filter(x=>x.ingredientId!==item.ingredientId);drawRecipe();};row.append(rm);list.append(row);}}
 async function loadRecipe(){const id=$('stock-recipe-product').value;if(!id){recipeDraft=[];drawRecipe();return;}const doc=await api('GET','/api/stock/recipes/'+encodeURIComponent(id));recipeDraft=doc.items.map(x=>({...x}));drawRecipe();}
-async function renderStock(){const [inv,report,prod,margin]=await Promise.all([api('GET','/api/stock/ingredients'),api('GET','/api/stock/report'),api('GET','/api/products'),api('GET','/api/reports/margin')]);ingredients=inv.ingredients;products=prod.products.filter(x=>!x.isCombo);
+async function renderStock(){const [inv,report,prod,margin,supply]=await Promise.all([api('GET','/api/stock/ingredients'),api('GET','/api/stock/report'),api('GET','/api/products'),api('GET','/api/reports/margin'),api('GET','/api/suppliers')]);ingredients=inv.ingredients;products=prod.products.filter(x=>!x.isCombo);
  $('stock-summary').textContent='Valor em estoque: '+money(report.totalValueCents)+' · Alertas de estoque baixo: '+report.lowStockCount;
  $('stock-margin').textContent='Vendas líquidas: '+money(margin.netSalesCents)+' · CMV: '+money(margin.cogsCents)+' · Margem bruta estimada: '+money(margin.grossMarginCents);
  const list=$('stock-ingredient-list');list.replaceChildren();if(!ingredients.length)list.append(node('p','note','Cadastre seu primeiro ingrediente.'));
@@ -21,13 +21,30 @@ async function renderStock(){const [inv,report,prod,margin]=await Promise.all([a
  const alert=ing.lowStockMilli>0&&ing.onHandMilli<=ing.lowStockMilli?node('span','','Estoque baixo'):node('span','','');row.append(info,alert);list.append(row);}
  for(const id of ['stock-receive-ingredient','stock-adjust-ingredient','stock-recipe-ingredient'])fillSelect($(id),ingredients,x=>x.id,x=>x.name+' ('+x.unit+')');
  fillSelect($('stock-recipe-product'),products,x=>x.id,x=>x.name);
- await loadRecipe();
+ fillSelect($('stock-batches-ingredient'),ingredients,x=>x.id,x=>x.name);
+ const supplierList=$('supplier-list');supplierList.replaceChildren();
+ for(const sup of supply.suppliers)supplierList.append(node('div','data-row',sup.name+(sup.document?' · '+sup.document:'')));
+ fillSelect($('stock-receive-supplier'),[{id:'',name:'Sem fornecedor'},...supply.suppliers.filter(x=>x.active)],x=>x.id,x=>x.name);
+ await loadRecipe();await renderBatches();
+}
+async function renderBatches(){
+ const id=$('stock-batches-ingredient').value,list=$('stock-batch-list');list.replaceChildren();
+ if(!id)return;
+ const data=await api('GET','/api/stock/batches?ingredientId='+encodeURIComponent(id));
+ for(const batch of data.batches){
+   const expired=batch.expiryDate<new Date().toISOString().slice(0,10);
+   list.append(node('div','data-row',batch.lotCode+' · '+batch.expiryDate+' · '+(batch.remainingMilli/1000).toLocaleString('pt-BR',{maximumFractionDigits:3})+(expired?' · VENCIDO':'')));
+ }
+ if(data.untrackedMilli)list.append(node('p','note','Saldo sem lote: '+(data.untrackedMilli/1000).toLocaleString('pt-BR',{maximumFractionDigits:3})));
+ if(!data.batches.length)list.append(node('p','note','Sem lotes vinculados a este ingrediente.'));
 }
 function bindStock(){
  $('stock-ingredient-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;void run(async()=>{
  const data=new FormData(form);await api('POST','/api/stock/ingredients',{commandId:uid(),name:data.get('name'),unit:data.get('unit'),lowStockMilli:toMilli(data.get('lowStock'))});form.reset();await renderStock();toast('Ingrediente cadastrado');});};
  $('stock-receive-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;void run(async()=>{
- const data=new FormData(form);await api('POST','/api/stock/ingredients/'+data.get('ingredientId')+'/receive',{commandId:uid(),quantityMilli:toMilli(data.get('quantity')),costCents:toCents(data.get('cost'))});form.reset();await renderStock();toast('Entrada registrada');});};
+ const data=new FormData(form);const lotCode=String(data.get('lotCode')||'').trim(),expiryDate=String(data.get('expiryDate')||''),supplierId=String(data.get('supplierId')||'');
+ if((lotCode&&!expiryDate)||(!lotCode&&expiryDate))throw Error('Informe lote e validade juntos');
+ await api('POST','/api/stock/ingredients/'+data.get('ingredientId')+'/receive',{commandId:uid(),quantityMilli:toMilli(data.get('quantity')),costCents:toCents(data.get('cost')),...(lotCode?{lotCode,expiryDate,...(supplierId?{supplierId}:{})}:{})});form.reset();await renderStock();toast('Entrada registrada');});};
  $('stock-adjust-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;void run(async()=>{
  const data=new FormData(form),quantityMilli=toMilli(data.get('quantity'));const cost=data.get('cost');
  await api('POST','/api/stock/ingredients/'+data.get('ingredientId')+'/adjust',{commandId:uid(),quantityMilli,costCents:quantityMilli>0?toCents(cost):undefined,reason:data.get('reason')});form.reset();await renderStock();toast('Ajuste registrado');});};
@@ -40,6 +57,11 @@ function bindStock(){
  const productId=$('stock-recipe-product').value;if(!productId)throw Error('Selecione um produto');
  await api('POST','/api/stock/recipes/'+productId,{commandId:uid(),items:recipeDraft});toast('Ficha técnica salva');await loadRecipe();});};
  $('stock-refresh').onclick=()=>{void run(renderStock);};
+ $('stock-batches-ingredient').onchange=()=>void run(renderBatches);
+ $('supplier-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;void run(async()=>{
+  const data=new FormData(form);await api('POST','/api/suppliers',{commandId:uid(),name:data.get('name'),document:data.get('document')||''});
+  form.reset();await renderStock();toast('Fornecedor cadastrado');
+ });};
 }
 async function renderDelivery(){
  const [settings,requests,orders,privacy]=await Promise.all([api('GET','/api/delivery/settings'),api('GET','/api/delivery/requests'),api('GET','/api/delivery/orders'),api('GET','/api/delivery/privacy/report')]);
@@ -134,6 +156,19 @@ function bindUnits(){
  });
 }
 
+async function renderFinance(){
+ const form=$('finance-filter'),values=new FormData(form),params=new URLSearchParams();
+ if(values.get('from'))params.set('from',values.get('from'));
+ if(values.get('to'))params.set('to',values.get('to'));
+ const data=await api('GET','/api/reports/financial?'+params);
+ $('finance-totals').textContent='Vendas: '+data.orders+' · Bruto: '+money(data.grossSalesCents)+' · Devoluções: '+money(data.refundedCents)+' · Líquido: '+money(data.netSalesCents)+' · CMV: '+money(data.cogsCents)+' · Margem bruta: '+money(data.grossMarginCents);
+ const methods=$('finance-methods');methods.replaceChildren();
+ for(const [method,amount] of Object.entries(data.methods))methods.append(node('div','data-row',method+': '+money(amount)));
+ const days=$('finance-days');days.replaceChildren();
+ for(const day of data.byDay)days.append(node('div','data-row',day.day+' · '+day.orders+' vendas · líquido '+money(day.netSalesCents)+' · CMV '+money(day.cogsCents)));
+ const cash=$('finance-cash');cash.replaceChildren();
+ for(const session of data.cashSessions)cash.append(node('div','data-row',session.openedAt.slice(0,10)+' · '+session.status+' · esperado '+money(session.expectedCents||0)+' · contado '+(session.countedCents===null?'pendente':money(session.countedCents))));
+}
 function bindDelivery(){
  $('delivery-setting-form').onsubmit=e=>{e.preventDefault();void run(async()=>{const enabled=$('public-menu-enabled').checked;await api('POST','/api/delivery/settings',{commandId:uid(),enabled});toast(enabled?'Cardápio público habilitado':'Cardápio público desabilitado');await renderDelivery();});};
  $('delivery-refresh').onclick=()=>{void run(renderDelivery);};
@@ -146,8 +181,10 @@ function bindDelivery(){
  });};
 }
 window.pdvAuth.ready().then(user=>{
- const manager=user?.role==='admin';for(const view of ['stock','delivery','units']){const b=document.querySelector('[data-view="'+view+'"]');if(b&&!manager)b.hidden=true;}
+ const manager=user?.role==='admin';for(const view of ['stock','delivery','units','finance-report']){const b=document.querySelector('[data-view="'+view+'"]');if(b&&!manager)b.hidden=true;}
  if(!manager)return;bindStock();bindDelivery();bindUnits();
+ $('finance-filter').onsubmit=e=>{e.preventDefault();void run(renderFinance);};
+ document.querySelector('[data-view="finance-report"]').addEventListener('click',()=>void run(renderFinance));
  document.querySelector('[data-view="stock"]').addEventListener('click',()=>{void run(renderStock);});
  document.querySelector('[data-view="delivery"]').addEventListener('click',()=>{void run(renderDelivery);});
  document.querySelector('[data-view="units"]').addEventListener('click',()=>{void run(renderUnits);});
