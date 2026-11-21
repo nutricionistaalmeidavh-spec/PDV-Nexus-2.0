@@ -1,5 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {formatMoney} from './model.mjs';
+import {GuestPayments,PizzaOrderPanel,WeighedOrderPanel} from './RestaurantExtensions.jsx';
+import {AdvancedOrderOperations} from './RestaurantAdvanced.jsx';
 const money=c=>formatMoney(Number.isSafeInteger(c)?c:0);
 const uuid=()=>crypto.randomUUID();
 function Panel({title,children}){return <section className="panel"><div className="sectiontitle"><h2>{title}</h2></div>{children}</section>}
@@ -119,7 +121,7 @@ function TableQrPanel({order,api,mode,run,busy,onError}){
  </div>;
 }
 
-export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,onCheckout,session}){
+export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,onCheckout,session,canManage=false}){
  const [productId,setProductId]=useState(''),[qty,setQty]=useState('1'),[note,setNote]=useState('');
  const [mods,setMods]=useState([]),[selectedMods,setSelectedMods]=useState([]);
  const [destination,setDestination]=useState('');
@@ -144,10 +146,10 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
    return result;
   }catch(e){setError(e.message);}finally{setBusy(false)}
  };
- const lineAllowed=order&&['DRAFT','OPEN'].includes(order.status);
+ const lineAllowed=order&&['DRAFT','OPEN'].includes(order.status)&&!order.suspended&&!(order.payments||[]).length;
  const canConfirm=order?.status==='DRAFT'&&order?.lines?.length>0;
- const canCheckout=order?.status==='OPEN'&&!!session;
- const safeProducts=products.filter(x=>x.active&&x.categoryActive!==0);
+ const canCheckout=order?.status==='OPEN'&&!!session&&!(order.payments||[]).length;
+ const safeProducts=products.filter(x=>x.active&&x.categoryActive!==0&&!x.isPizza&&x.saleUnit!=='kg');
  const total=order?.totalCents??0;
  const isTable=order?.serviceMode==='table';
  return <div className="page">
@@ -176,15 +178,18 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
        <label className="field">Observação<input value={note} maxLength="240" onChange={e=>setNote(e.target.value)}/></label>
        <button className="btn primary" disabled={!lineAllowed||!productId||busy}>Adicionar à comanda</button>
       </form>
-      <p className="help">Pedidos já confirmados podem receber itens adicionais: o KDS recebe tickets independentes.</p>
+      <p className="help">Pedidos já confirmados recebem novos tickets, desde que não tenham pagamentos parciais.</p>
      </Panel>
     </div>
+    {lineAllowed&&<PizzaOrderPanel order={order} products={products} api={api} mode={mode} onAction={run} busy={busy}/>}
+    {lineAllowed&&<WeighedOrderPanel order={order} products={products} api={api} mode={mode} onAction={run} busy={busy}/>}
     {isTable&&<TableQrPanel order={order} api={api} mode={mode} run={run} busy={busy} onError={setError}/>}
+    <AdvancedOrderOperations order={order} tables={tables} api={api} mode={mode} onAction={run} busy={busy} canManage={canManage&&!order.payments?.length}/>
     {isTable&&<Panel title="Transferir mesa">
       <div className="row wrap compact"><label className="field">Mesa de destino<select value={destination} onChange={e=>setDestination(e.target.value)}><option value="">Selecionar mesa livre</option>{tables.filter(t=>!t.orderId&&t.id!==order.tableId).map(t=><option value={t.id} key={t.id}>{t.label}</option>)}</select></label>
        <button className="btn secondary" disabled={!lineAllowed||!destination||busy} onClick={()=>void run('/api/orders/'+encodeURIComponent(order.id)+'/transfer-table',{tableId:destination}).then(result=>{if(result)setDestination('')})}>Transferir comanda</button></div>
      </Panel>}
-    <Panel title="Divisão da comanda por convidados">
+    {isTable&&<Panel title="Divisão da comanda por convidados">
       <p className="help">Distribua cada linha integralmente. Exemplo: Ana:1,Bruno:2. A divisão não duplica vendas nem gera pagamentos.</p>
       {(order.lines||[]).map(l=><label className="field" key={l.id}>{l.quantity} × {l.productName}<input value={alloc[l.id]??('Pessoa 1:'+l.quantity)} disabled={!lineAllowed||busy} onChange={e=>setAlloc(prev=>({...prev,[l.id]:e.target.value}))}/></label>)}
       <div className="row wrap compact">
@@ -192,7 +197,8 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
        <button className="btn secondary" disabled={!order?.id||mode!=='live'} onClick={()=>void api('/api/orders/'+encodeURIComponent(order.id)+'/split').then(x=>setSplits(x.split)).catch(e=>setError(e.message))}>Consultar divisão</button>
       </div>
       {splits&&<><p className="help">Alocação completa: {splits.fullyAssigned?'Sim':'Não'}</p>{(splits.guests||[]).map(g=><div className="list-row" key={g.guest}><span>{g.guest}</span><strong>{money(g.totalCents)}</strong></div>)}</>}
-    </Panel>
+    </Panel>}
+    {isTable&&<GuestPayments order={order} api={api} onAction={run} busy={busy} session={session} mode={mode}/>}
    </div>}
    {editing&&<LineEditDialog key={editing.id} line={editing} api={api} busy={busy} onClose={()=>setEditing(null)}
     onSave={changes=>run('/api/orders/'+encodeURIComponent(order.id)+'/lines/'+encodeURIComponent(editing.id)+'/edit',changes)}
