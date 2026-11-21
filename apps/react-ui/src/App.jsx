@@ -87,19 +87,27 @@ function Tables({tables,selected,onSelect,onNew,busy}){
  return <Frame eyebrow="ATENDIMENTO / SALÃO" title="Mapa do salão" description="Selecione uma mesa para visualizar e gerenciar sua comanda." action={<form onSubmit={e=>{e.preventDefault();onNew(newName).then(()=>setNewName('')).catch(()=>{});}} className="row compact"><input placeholder="Ex.: Mesa 13" value={newName} onChange={e=>setNewName(e.target.value)} required/><button className="btn primary" disabled={busy}>+ Nova mesa</button></form>}><div className="tabs"><Button kind={filter==='all'?'primary':'ghost'} onClick={()=>setFilter('all')}>Todas ({tables.length})</Button><Button kind={filter==='free'?'primary':'ghost'} onClick={()=>setFilter('free')}>Livres ({tables.filter(t=>!t.orderId).length})</Button><Button kind={filter==='occupied'?'primary':'ghost'} onClick={()=>setFilter('occupied')}>Ocupadas ({tables.filter(t=>t.orderId).length})</Button></div><div className="tables-layout"><Panel><div className="tables-grid">{filtered.map(t=><button type="button" className={'table-card '+(t.orderId?'occupied':'free')+' '+(selected?.id===t.id?'focused':'')} onClick={()=>onSelect(t)} disabled={busy} key={t.id}><span>▦</span><strong>{t.label}</strong><small>{t.orderId?'Ocupada':'Livre'}</small></button>)}</div></Panel><Panel title={selected?.label||'Selecione uma mesa'} className="table-detail">{selected?<><Pill tone={selected.orderId?'red':'green'}>{selected.orderId?'Ocupada':'Livre'}</Pill><div className="list-row"><span>Comanda</span><strong>{selected.orderId?.slice(-8)||'Nenhuma'}</strong></div><div className="list-row"><span>Estado</span><strong>{selected.orderStatus||'Disponível'}</strong></div><p className="help">O mapa indica disponibilidade da mesa; preparo da cozinha é independente do pedido.</p><Button kind="primary block" onClick={()=>onSelect(selected)} busy={busy}>Abrir comanda</Button></>:<Empty>Escolha uma mesa no mapa para continuar.</Empty>}</Panel></div></Frame>
 }
 function Kitchen({tickets,onUpdate,busy,onRefresh}){
+ const [stationFilter,setStationFilter]=useState('all');
+ const stations=[...new Map(tickets.filter(t=>t.stationId).map(t=>[t.stationId,t.stationName||t.stationId])).entries()];
+ const visible=tickets.filter(t=>stationFilter==='all'||(stationFilter==='general'?!t.stationId:t.stationId===stationFilter));
  const groups=[['PENDING','Novos','pink','Iniciar preparo','PREPARING'],['PREPARING','Em preparo','yellow','Marcar como pronto','READY'],['READY','Prontos','green','Entregar','SERVED']];
- const cancelled=tickets.filter(t=>t.status==='CANCELLED');
- return <Frame eyebrow="PRODUÇÃO / COZINHA" title="Painel KDS" description="Correções e cancelamentos são identificados sem apagar a identidade da linha." action={<Button onClick={onRefresh} busy={busy}>Atualizar</Button>}>
- <div className="kds-grid">{groups.map(([status,label,color,action,next])=><Panel className={'kds-column '+color} title={`${label} (${tickets.filter(t=>t.status===status).length})`} key={status}>
-  <div className="stack">{tickets.filter(t=>t.status===status).map(t=><article className="kds-ticket" key={t.id}>
+ const cancelled=visible.filter(t=>t.status==='CANCELLED');
+ return <Frame eyebrow="PRODUÇÃO / COZINHA" title="Painel KDS" description="Tickets por estação com correções e cancelamentos preservados." action={<Button onClick={onRefresh} busy={busy}>Atualizar</Button>}>
+ <label className="field">Setor da cozinha<select value={stationFilter} onChange={e=>setStationFilter(e.target.value)}>
+  <option value="all">Todos os setores</option><option value="general">Setor geral</option>
+  {stations.map(([id,name])=><option key={id} value={id}>{name}</option>)}
+ </select></label>
+ <div className="kds-grid">{groups.map(([status,label,color,action,next])=><Panel className={'kds-column '+color} title={label+' ('+visible.filter(t=>t.status===status).length+')'} key={status}>
+  <div className="stack">{visible.filter(t=>t.status===status).map(t=><article className="kds-ticket" key={t.id}>
    <div className="sectiontitle"><strong>#{t.orderId.slice(-6)}</strong><Pill>{t.tableLabel||'Balcão'}</Pill></div>
+   {t.stationName&&<p className="help">Setor: {t.stationName}</p>}
    <h3>{t.quantity} × {t.productName}</h3>
    {t.changeNote&&<p className="notice" role="alert">{t.changeNote}</p>}
    {t.note&&<p className="help">Obs.: {t.note}</p>}{t.modifiers&&<p className="help">Adicionais: {t.modifiers}</p>}
    <Button kind="primary block" onClick={()=>onUpdate(t,next)} busy={busy}>{action}</Button>
-  </article>)}{!tickets.some(t=>t.status===status)&&<Empty>Sem tickets nesta etapa.</Empty>}</div></Panel>)}</div>
+  </article>)}{!visible.some(t=>t.status===status)&&<Empty>Sem tickets nesta etapa.</Empty>}</div></Panel>)}</div>
  {cancelled.length>0&&<Panel title={'Cancelamentos recentes ('+cancelled.length+')'}>
-  <p className="help">Confira a retirada do preparo. Registros permanecem preservados no histórico.</p>
+  <p className="help">Confira a retirada do preparo. Registros preservados no histórico.</p>
   {cancelled.map(t=><div className="list-row" key={t.id}><div><strong>{t.productName} · {t.tableLabel||'Balcão'}</strong><small>{t.changeNote||'Item cancelado'}</small></div><Pill tone="red">Cancelado</Pill></div>)}
  </Panel>}
  </Frame>;
