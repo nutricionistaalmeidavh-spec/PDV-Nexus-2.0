@@ -100,8 +100,7 @@ test('QR de mesa permite solicitações múltiplas personalizadas, aprovação e
   assert.equal(accepted.order.totalCents,2*5000+1000);
   assert.equal(accepted.order.lines[0].note,'Sem cebola');
   assert.equal((await good(api,'GET',`/api/public/table/${token}/requests/${submitted.requestId}`,null,200,true)).statusText,'ACCEPTED');
-  const confirmed=await good(api,'POST',`/api/orders/${order.id}/confirm`,cmd({expectedRevision:accepted.order.revision}));
-  assert.equal(confirmed.order.status,'OPEN');
+  assert.equal(accepted.order.status,'OPEN'); // aprovação envia diretamente ao KDS
   assert.equal((await good(api,'GET','/api/kitchen/tickets')).tickets.length,2);
   const rotated=await good(api,'POST',`/api/tables/${table.id}/qr`,cmd({publicBaseUrl:publicOrigin}));
   assert.notEqual(rotated.url,qr.url);
