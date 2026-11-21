@@ -167,7 +167,10 @@ try{
    manifest.mobile.push({index:i+1,view:mobileTabs[i].trim(),file:'parity-'+name+'.png',metrics});
  }
  manifest.errors=errors.slice();
- fs.writeFileSync(path.join(output,'journey-manifest.json'),JSON.stringify(manifest,null,2)+'\\n');
+ fs.writeFileSync(path.join(output,'journey-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+ const persistedManifest=JSON.parse(fs.readFileSync(path.join(output,'journey-manifest.json'),'utf8'));
+ assert.equal(persistedManifest.desktop.length,manifest.desktop.length,'Inventário JSON válido: desktop');
+ assert.equal(persistedManifest.mobile.length,manifest.mobile.length,'Inventário JSON válido: mobile');
  assert.deepEqual(errors,[]);
  console.log('P4 VISUAL INVENTORY PASS:',manifest.desktop.length,'desktop screens;',manifest.mobile.length,'mobile screens');
  console.log('REACT PARITY E2E PASS: catalog, modifiers, stock, recipe, cash, table, split, payment, KDS, delivery, units, hardware, redirects.');
