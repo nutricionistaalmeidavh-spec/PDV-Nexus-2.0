@@ -375,7 +375,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,supervisor:requestRole==='admin'||role==='manager'};
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,forbidden:(message,code='FORBIDDEN')=>{throw new HttpError(403,code,message);},missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,supervisor:requestRole==='admin'||role==='manager'};
         const special=settlementWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kdsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??scaleWrite(db,method,route,body,h)??counterWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
         if(method==='POST'&&route==='/api/hardware/scale/capture'){
           if(!h.supervisor)throw new HttpError(403,'SUPERVISOR_REQUIRED','Captura da balança exige supervisor');
