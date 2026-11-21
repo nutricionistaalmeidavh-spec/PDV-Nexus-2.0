@@ -148,6 +148,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
+  const backupJobs=new Map();
   const kitchenListeners=new Set();
   function notifyKitchen() {
     const message='event: changed\ndata: {"changed":true}\n\n';
@@ -332,10 +333,19 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const commandId=requireString(body.commandId,'Identificador do backup',100);
           if(!/^[a-zA-Z0-9_-]{3,100}$/.test(commandId))bad('Identificador do backup inválido');
           const destination=path.join(path.dirname(dataPath),'backups','manual-'+commandId+'.sqlite');
-          const existed=fs.existsSync(destination);
-          if(!existed)await createBackup(db,destination);
-          if(!existed)auditForRequest(db,'r-local','BACKUP_CREATED',{file:path.basename(destination)});
-          return response(res,existed?200:201,{created:!existed,filename:path.basename(destination),path:destination,warning:'Para restaurar, feche o PDV e use o procedimento offline.'});
+          const existing=fs.existsSync(destination);
+          if(!existing&&!backupJobs.has(commandId)&&backupJobs.size)conflict('Backup já em andamento no host','BACKUP_BUSY');
+          if(!existing){
+            const ongoing=backupJobs.get(commandId);
+            if(ongoing)await ongoing;
+            else{
+              const operation=createBackup(db,destination);
+              backupJobs.set(commandId,operation);
+              try{await operation;auditForRequest(db,'r-local','BACKUP_CREATED',{file:path.basename(destination)});}
+              finally{backupJobs.delete(commandId);}
+            }
+          }
+          return response(res,existing||backupJobs.has(commandId)?200:201,{created:!existing,filename:path.basename(destination),path:destination,warning:'Para restaurar, feche o PDV e use o procedimento offline.'});
         }
         if(method==='POST'&&route==='/api/pairing/start'){
           try{return response(res,201,pairing.start(body));}
