@@ -130,7 +130,7 @@ export function ManagementOverview({orders=[],tables=[],session,onGo,api,mode}){
     </Paper>)}
   </SimpleGrid>
   {report.error&&<p className="errorbox" role="alert">{report.error}</p>}
-  {report.data&&<SimpleGrid cols={{base:1,lg:2}} spacing="lg" mt="lg">
+  {report.data&&<SimpleGrid className="nexus-overview-charts" cols={{base:1,lg:2}} spacing="lg" mt="lg">
    <Paper withBorder radius="lg" p="lg">
     <Group justify="space-between" mb="lg"><Text fw={800} component="h2">Receita e CMV</Text>
      <Text fw={700} c="orange.9">{money(report.data.netSalesCents)}</Text></Group>
@@ -149,8 +149,8 @@ export function ManagementOverview({orders=[],tables=[],session,onGo,api,mode}){
    <Grid records={orders.slice(0,30)} columns={[
     {accessor:'id',title:'Pedido',render:o=><Text fw={650} size="sm">#{o.id?.slice(-8)}</Text>},
     {accessor:'createdAt',title:'Data',render:o=>o.createdAt?.slice(0,16).replace('T',' ')||'—'},
-    {accessor:'status',title:'Situação',render:o=><Badge color={o.status==='CLOSED'?'green':o.status==='CANCELLED'?'red':'orange'} variant="light">{o.status}</Badge>},
-    {accessor:'serviceMode',title:'Atendimento',render:o=>o.serviceMode||'—'}
+    {accessor:'status',title:'Situação',render:o=><Badge color={o.status==='CLOSED'?'green':o.status==='CANCELLED'?'red':'orange'} variant="light">{({OPEN:'Em aberto',DRAFT:'Rascunho',CLOSED:'Concluído',CANCELLED:'Cancelado'})[o.status]||o.status}</Badge>},
+    {accessor:'serviceMode',title:'Atendimento',render:o=>({table:'Mesa',counter:'Balcão',takeaway:'Retirada',delivery:'Entrega'})[o.serviceMode]||o.serviceMode||'—'}
    ]}/>
   </Paper>
   <SimpleGrid cols={{base:1,sm:2,lg:3}} spacing="md" className="nexus-management-shortcuts" mt="lg">
