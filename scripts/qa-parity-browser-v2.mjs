@@ -9,6 +9,7 @@ import {createApp} from '../apps/server/src/server.mjs';
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-react-parity-'));
 const output=path.resolve('artifacts/qa');
 fs.mkdirSync(path.join(output,'videos'),{recursive:true});
+fs.mkdirSync(path.join(output,'traces'),{recursive:true});
 const app=createApp({dataPath:path.join(tmp,'parity.sqlite')});
 let browser,context,page,origin,mobileContext,mobilePage;
 const errors=[];
@@ -23,6 +24,7 @@ try{
  origin=await app.listen({port:0});
  browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  context=await browser.newContext({viewport:{width:1440,height:940},locale:'pt-BR',acceptDownloads:true,recordVideo:{dir:path.join(tmp,'recorded'),size:{width:1440,height:940}}});
+ await context.tracing.start({screenshots:true,snapshots:true,sources:true});
  page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  const legacy=await page.request.get(origin+'/',{maxRedirects:0});
  assert.equal(legacy.status(),302);
@@ -139,6 +141,7 @@ try{
    viewport:{width:390,height:844},locale:'pt-BR',
    recordVideo:{dir:path.join(tmp,'recorded-mobile'),size:{width:390,height:844}}
  });
+ await mobileContext.tracing.start({screenshots:true,snapshots:true,sources:true});
  mobilePage=await mobileContext.newPage();
  mobilePage.on('pageerror',e=>errors.push('mobile: '+e.message));
  await mobilePage.goto(origin+'/ui/?embedded=1');
@@ -167,8 +170,16 @@ try{
  console.error('REACT PARITY E2E FAIL',error);process.exitCode=1;
  if(page&&!page.isClosed())await shot('ERROR').catch(()=>{});
 }finally{
- if(mobileContext){const mobileVideo=mobilePage?.video();await mobileContext.close();if(mobileVideo)await mobileVideo.saveAs(path.join(output,'videos','mobile-all-screens.webm')).catch(()=>{});}
- if(context){const recording=page?.video();await context.close();if(recording)await recording.saveAs(path.join(output,'videos','parity-journey.webm')).catch(()=>{});}
+ if(mobileContext){
+  await mobileContext.tracing.stop(process.exitCode?{path:path.join(output,'traces','mobile-failure.zip')}:{ }).catch(e=>console.error('Mobile trace:',e));
+  const mobileVideo=mobilePage?.video();await mobileContext.close();
+  if(mobileVideo)await mobileVideo.saveAs(path.join(output,'videos','mobile-all-screens.webm')).catch(()=>{});
+ }
+ if(context){
+  await context.tracing.stop(process.exitCode?{path:path.join(output,'traces','desktop-failure.zip')}:{ }).catch(e=>console.error('Desktop trace:',e));
+  const recording=page?.video();await context.close();
+  if(recording)await recording.saveAs(path.join(output,'videos','parity-journey.webm')).catch(()=>{});
+ }
  if(browser)await browser.close();
  await app.close();
  fs.rmSync(tmp,{recursive:true,force:true});
