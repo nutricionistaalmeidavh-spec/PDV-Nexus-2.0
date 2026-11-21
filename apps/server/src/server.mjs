@@ -235,6 +235,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
+        if(method==='GET'&&route==='/api/system/config'){
+          const restaurant=db.prepare("SELECT id,display_name AS displayName FROM restaurant WHERE id='r-local'").get();
+          const terminal=db.prepare("SELECT id,label FROM terminal WHERE id='t-local'").get();
+          return response(res,200,{restaurant,terminal});
+        }
         if(method==='GET'&&route==='/api/system/version')return response(res,200,{version:currentVersion,offline:true,updateMode:'manual'});
         if(method==='GET'&&route==='/api/system/update/check'){
           if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','A verificação de atualização exige o supervisor no host local');
@@ -311,6 +316,17 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
+        if(method==='POST'&&route==='/api/system/config'){
+          const out=transactWithEvents(db,route,body,()=>{
+            const displayName=requireString(body.displayName,'Nome do estabelecimento',120);
+            const terminalLabel=requireString(body.terminalLabel,'Nome do terminal',80);
+            db.prepare("UPDATE restaurant SET display_name=? WHERE id='r-local'").run(displayName);
+            db.prepare("UPDATE terminal SET label=? WHERE id='t-local'").run(terminalLabel);
+            auditForRequest(db,'r-local','INSTALLATION_CONFIGURED',{displayName,terminalLabel});
+            return {restaurant:{id:'r-local',displayName},terminal:{id:'t-local',label:terminalLabel}};
+          });
+          return response(res,out.status,out.body);
+        }
         if(method==='POST'&&route==='/api/system/backup'){
           if(role!=='local')throw new HttpError(403,'LOCAL_ONLY','Backup manual somente no host local');
           const commandId=requireString(body.commandId,'Identificador do backup',100);
