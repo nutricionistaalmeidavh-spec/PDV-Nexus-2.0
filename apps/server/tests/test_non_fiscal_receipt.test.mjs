@@ -29,3 +29,14 @@ test('comprovante mostra referência persistente da linha e adicionais sem dupli
  assert.match(paper,/TOTAL R\$ 157\.00/);
  assert.doesNotMatch(paper,/164\.00/,'adicional já está no preço da linha, não pode ser somado outra vez');
 });
+
+test('nome comprido nunca corta subtotal no papel ESC/POS de 38 colunas',()=>{
+ const bytes=receiptBytes({id:'pedido-long',lines:[{
+   id:'linha-extensa',quantity:2,productName:'Hamburguer premium com queijo e molho especial',
+   unitPriceCents:999999,note:'',modifiers:[]
+ }],totalCents:1999998});
+ const productLine=bytes.toString('ascii').split('\\n').find(line=>line.startsWith('2x '));
+ assert.ok(productLine);
+ assert.ok(productLine.length<=38);
+ assert.ok(productLine.endsWith('19999.98'),productLine);
+});
