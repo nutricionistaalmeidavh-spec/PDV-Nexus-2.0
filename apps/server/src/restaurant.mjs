@@ -4,7 +4,7 @@ import { createOrder } from '../../../packages/core/src/order.ts';
 
 export function dispatchKitchenTickets(db,orderId,stamp) {
   // Uma linha de pedido gera um ticket, inclusive quando adicionada após confirmação.
-  const lines=db.prepare('SELECT id FROM order_line WHERE order_id=?').all(orderId);
+  const lines=db.prepare('SELECT id FROM order_line WHERE order_id=? AND cancelled_at IS NULL').all(orderId);
   const insert=db.prepare("INSERT OR IGNORE INTO kitchen_ticket(id,order_id,line_id,status,revision,created_at,updated_at) VALUES(?,?,?,'PENDING',0,?,?)");
   for(const line of lines) {
     const now=stamp();
@@ -28,13 +28,13 @@ export function restaurantRead(db,method,route,{missing}) {
   }
   if(route==='/api/kitchen/tickets') {
     const tickets=db.prepare(`SELECT kt.id,kt.order_id AS orderId,kt.line_id AS lineId,kt.status,kt.revision,
-      kt.created_at AS createdAt,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
+      kt.created_at AS createdAt,kt.change_note AS changeNote,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
       (SELECT group_concat(name_snapshot, ', ') FROM order_line_modifier WHERE line_id=kt.line_id) AS modifiers,
       (SELECT group_concat(quantity||'x '||product_name_snapshot, ', ') FROM order_line_combo_item WHERE line_id=kt.line_id) AS comboDetails,
       so.service_mode AS serviceMode,st.label AS tableLabel
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
       JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id
-      WHERE kt.status IN ('PENDING','PREPARING','READY') ORDER BY kt.created_at ASC LIMIT 200`).all();
+      WHERE kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.updated_at>=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString());
     return {status:200,body:{tickets}};
   }
   if(route==='/api/restaurant/summary') {
