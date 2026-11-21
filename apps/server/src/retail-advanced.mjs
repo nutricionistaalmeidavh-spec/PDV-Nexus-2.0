@@ -36,6 +36,7 @@ export function retailAdvancedWrite(db,method,route,body,h){
   const stored=body.measurementId?h.scaleReadings?.get(body.measurementId):null;
   if(body.measurementId&&!stored)h.conflict('Leitura de balança ausente, expirada ou utilizada','SCALE_READING_EXPIRED');
   if(stored&&Date.now()>stored.expiresAt)h.conflict('Leitura expirada','SCALE_READING_EXPIRED');
+  if(body.stable===false)h.bad('Peso instável: aguarde nova leitura');
   if(!stored&&!(h.supervisor&&body.manualConfirmed===true&&body.stable===true))
    h.conflict('Peso manual requer supervisor e confirmação explícita ou leitura serial estável','SCALE_CONFIRMATION_REQUIRED');
   const grams=stored?.weightGrams??body.weightGrams;
