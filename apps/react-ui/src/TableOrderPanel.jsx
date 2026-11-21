@@ -23,13 +23,13 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{setAlloc(Object.fromEntries((order?.lines||[]).map(l=>[l.id,'Pessoa 1:'+l.quantity])));setSplits(null);},[order?.id,order?.lines?.length]);
  useEffect(()=>{
-  if(!productId||mode!=='live'){setMods([]);return;}
+  if(!productId||mode!=='live'&&mode!=='paired'){setMods([]);return;}
   let live=true;
   api('/api/products/'+encodeURIComponent(productId)+'/modifiers').then(x=>{if(live)setMods((x.modifiers||[]).filter(m=>m.active))}).catch(e=>{if(live)setError(e.message)});
   return()=>{live=false;};
  },[api,mode,productId]);
  const run=async(route,body={})=>{
-  if(!order||mode!=='live'||busy)return;
+  if(!order||(mode!=='live'&&mode!=='paired')||busy)return;
   setBusy(true);setError('');setNotice('');
   try{
    const result=await api(route,{method:'POST',body:{commandId:uuid(),expectedRevision:order.revision,...body}});
