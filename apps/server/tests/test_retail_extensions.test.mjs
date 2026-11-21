@@ -35,7 +35,7 @@ test('EAN-13: checksum e PLU de balança não aceitam etiquetas adulteradas',()=
 test('Leitura serial: protocolos retornam peso estável ou erro verificável',()=>{
   assert.equal(parseScaleSerial('ST,GS,+0001.250kg',{brand:'generic'}).weightGrams,1250);
   assert.equal(parseScaleSerial('US,GS,+0001.250kg',{brand:'generic'}).stable,false);
-  assert.equal(parseScaleSerial('\u0002+001.250kg\u0003',{brand:'filizola'}).weightMilli,1250);
+  assert.equal(parseScaleSerial('\u0002+001.250kg\u0003',{brand:'filizola'}).weightGrams,1250);
   assert.throws(()=>parseScaleSerial('lixo',{brand:'generic'}),/Peso|quadro/);
 });
 test('Fornecedor, recebimento por lote e baixa FEFO são transacionais e idempotentes',async t=>{
