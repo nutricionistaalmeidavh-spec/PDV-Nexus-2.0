@@ -26,6 +26,8 @@ import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
 import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
+import {lineHistory,lineWrite} from './order-line-edits.mjs';
+import {tableQrRead,tableQrWrite,publicTableRead,publicTableSubmit} from './table-qr.mjs';
 import { cashWrite } from './cash-service.mjs';
 import { receiptBytes } from './non-fiscal-service.mjs';
 import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
@@ -50,7 +52,7 @@ const digest = (x) => createHash('sha256').update(JSON.stringify(canonical(x))).
 function databaseOrder(db, id) {
   const row=db.prepare('SELECT * FROM sales_order WHERE id=?').get(id);
   if (!row) missing('Pedido');
-  const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? ORDER BY rowid').all(id);
+  const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? AND cancelled_at IS NULL ORDER BY rowid').all(id);
   const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
   for(const line of lines){
     line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
@@ -309,6 +311,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         const restaurantResult=restaurantRead(db,method,route,{missing});
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
+        const editedHistory=lineHistory(db,method,route,{missing});
+        if(editedHistory)return response(res,editedHistory.status,editedHistory.body);
+        const qrQueue=tableQrRead(db,method,route,{missing});
+        if(qrQueue)return response(res,qrQueue.status,qrQueue.body);
         if(!['POST','PATCH'].includes(method)) return response(res,405,{code:'METHOD_NOT_ALLOWED',message:'Método não permitido'});
         const body=await readJson(req,route==='/api/sync/operational/import'?4500000:route==='/api/sync/import'?524288:32768);
         if(method==='POST'&&route==='/api/system/config'){
@@ -351,9 +357,15 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe};
-        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
-        if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,supervisor:requestRole==='admin'||role==='manager'};
+        const special=lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
+        if(special){
+          out=special;
+          if(method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route)&&out.body?.url){
+            const qrModule=await import('qr');
+            out={...out,body:{...out.body,qrSvg:qrModule.default(out.body.url,'svg',{ecc:'medium',border:3,scale:7})}};
+          }
+        } else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
@@ -578,11 +590,19 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(parsed.host!==req.headers.host||!['http:','https:'].includes(parsed.protocol))
           throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       }
-      if(method==='GET'&&['/menu.html','/menu.js','/menu.css'].includes(route)){
+      if(method==='GET'&&['/menu.html','/menu.js','/menu.css','/table.html','/table.js','/table.css'].includes(route)){
         const kind=route.endsWith('.html')?'text/html':route.endsWith('.js')?'text/javascript':'text/css';
         res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','cross-origin-resource-policy':'same-origin',
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
         fs.createReadStream(path.join(publicDir,route.slice(1))).pipe(res);return;
+      }
+      const tablePage=publicTableRead(db,method,route);
+      if(tablePage)return response(res,tablePage.status,tablePage.body);
+      if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
+        const payload=await readJson(req);
+        const out=publicTableSubmit(db,route,payload,{stamp,databaseOrder,snapshotLineRecipe,
+          audit:(db,id,kind,details)=>audit(db,id,kind,details,'qr-guest'),notifyKitchen});
+        return response(res,out.status,out.body);
       }
       if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio indisponível'});
       const found=publicRead(db,method,route);
