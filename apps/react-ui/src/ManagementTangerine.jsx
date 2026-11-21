@@ -1,8 +1,8 @@
-import React,{useMemo} from 'react';
-import {Badge,Button,Group,Stack,Text,ThemeIcon} from '@mantine/core';
+import React,{useMemo,useState,useEffect} from 'react';
+import {Badge,Button,Group,Paper,SimpleGrid,Stack,Text,ThemeIcon} from '@mantine/core';
 import {AreaChart,DonutChart} from '@mantine/charts';
 import {DataTable} from 'mantine-datatable';
-import {BarChart3,Wallet} from 'lucide-react';
+import {BarChart3,Wallet,Boxes,ClipboardList,LayoutDashboard,ArrowRight,RefreshCw} from 'lucide-react';
 import {formatMoney} from './model.mjs';
 
 const cents=value=>Number.isSafeInteger(value)?value:0;
@@ -95,4 +95,75 @@ export function FinancialSessions({cashSessions=[]}){
     {accessor:'status',title:'Status',render:s=><Badge color={s.status==='OPEN'?'green':'gray'} variant="light">{s.status}</Badge>},
     {accessor:'expectedCents',title:'Valor esperado',textAlign:'right',render:s=>s.expectedCents===null?'Aberto':money(s.expectedCents)}
    ]}/>;
+}
+
+
+export function ManagementOverview({orders=[],tables=[],session,onGo,api,mode}){
+ const [report,setReport]=useState({loading:false,data:null,error:''});
+ const [refresh,setRefresh]=useState(0);
+ useEffect(()=>{
+  if(mode!=='live'){setReport({loading:false,data:null,error:''});return;}
+  let active=true;setReport(v=>({...v,loading:true,error:''}));
+  api('/api/reports/financial').then(data=>{if(active)setReport({loading:false,data,error:''})})
+   .catch(error=>{if(active)setReport({loading:false,data:null,error:error.message})});
+  return()=>{active=false};
+ },[api,mode,refresh]);
+ const closed=orders.filter(o=>o.status==='CLOSED').length;
+ const occupied=tables.filter(t=>t.orderId).length;
+ return <div className="page nexus-management nexus-overview">
+  <div className="pageheading">
+   <div><p className="eyebrow">ADMINISTRAÇÃO / VISÃO GERAL</p>
+    <h1>Gestão e relatórios</h1>
+    <p className="subtext">Indicadores do host local; resumo de pedidos carregados e financeiro confirmado.</p></div>
+   <Button variant="default" leftSection={<RefreshCw size={16}/>} loading={report.loading} onClick={()=>setRefresh(n=>n+1)}>Atualizar</Button>
+  </div>
+  <SimpleGrid cols={{base:2,md:4}} spacing="md" className="nexus-overview-kpis">
+   {[
+    ['Pedidos carregados',orders.length,'Últimos registros consultados'],
+    ['Pedidos abertos',orders.filter(o=>o.status==='OPEN').length,'No conjunto consultado'],
+    ['Mesas ocupadas',occupied,'Atualização local'],
+    ['Dinheiro no caixa (esperado)',money(session?.expectedCents||0),session?'Sessão aberta':'Sem sessão ativa']
+   ].map(([label,value,description])=><Paper withBorder p="md" radius="lg" key={label}>
+     <Text c="dimmed" size="xs">{label}</Text>
+     <Text fw={800} size="xl" mt="xs">{value}</Text>
+     <Text size="xs" c="dimmed">{description}</Text>
+    </Paper>)}
+  </SimpleGrid>
+  {report.error&&<p className="errorbox" role="alert">{report.error}</p>}
+  {report.data&&<SimpleGrid cols={{base:1,lg:2}} spacing="lg" mt="lg">
+   <Paper withBorder radius="lg" p="lg">
+    <Group justify="space-between" mb="lg"><Text fw={800} component="h2">Receita e CMV</Text>
+     <Text fw={700} c="orange.9">{money(report.data.netSalesCents)}</Text></Group>
+    <FinancialTrend byDay={report.data.byDay||[]}/>
+   </Paper>
+   <Paper withBorder radius="lg" p="lg">
+    <Text fw={800} component="h2" mb="lg">Pagamentos confirmados</Text>
+    <FinancialPayments methods={report.data.methods||{}}/>
+   </Paper>
+  </SimpleGrid>}
+  {!report.data&&mode!=='live'&&<Paper p="md" mt="lg" withBorder>
+    <Text c="dimmed" size="sm">Dados financeiros reais exigem conexão com o host local.</Text>
+   </Paper>}
+  <Paper withBorder radius="lg" p="lg" mt="lg">
+   <Text fw={800} component="h2" mb="md">Pedidos recentes</Text>
+   <Grid records={orders.slice(0,30)} columns={[
+    {accessor:'id',title:'Pedido',render:o=><Text fw={650} size="sm">#{o.id?.slice(-8)}</Text>},
+    {accessor:'createdAt',title:'Data',render:o=>o.createdAt?.slice(0,16).replace('T',' ')||'—'},
+    {accessor:'status',title:'Situação',render:o=><Badge color={o.status==='CLOSED'?'green':o.status==='CANCELLED'?'red':'orange'} variant="light">{o.status}</Badge>},
+    {accessor:'serviceMode',title:'Atendimento',render:o=>o.serviceMode||'—'}
+   ]}/>
+  </Paper>
+  <SimpleGrid cols={{base:1,sm:2,lg:3}} spacing="md" className="nexus-management-shortcuts" mt="lg">
+   {[
+    ['estoque','Estoque','Saldos e movimentações',Boxes],
+    ['financeiro','Financeiro','Recebimentos confirmados',Wallet],
+    ['relatorios','Relatórios','Vendas, CMV e desempenho',BarChart3],
+    ['usuarios','Usuários','Acessos e permissões',LayoutDashboard],
+    ['integracoes','Integrações','Periféricos e serviços opcionais',ClipboardList]
+   ].map(([id,label,description,Icon])=><Button key={id} variant="default" className="nexus-management-shortcut"
+     onClick={()=>onGo(id)} leftSection={<Icon size={18}/>}>
+     <Stack gap={1} align="start"><Text fw={700}>{label}</Text><Text size="xs" c="dimmed">{description}</Text></Stack>
+     <ArrowRight size={14}/></Button>)}
+  </SimpleGrid>
+ </div>;
 }
