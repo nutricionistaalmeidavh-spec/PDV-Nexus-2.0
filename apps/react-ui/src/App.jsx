@@ -9,12 +9,13 @@ import {DeliveryPanel,UnitsPanel} from './OperationalPanels.jsx';
 import {AdvancedStockPanel} from './AdvancedStockPanel.jsx';
 import {CatalogToolsPanel,HardwareToolsPanel} from './CatalogToolsPanel.jsx';
 import {TableOrderPanel} from './TableOrderPanel.jsx';
+import {RestaurantGrowthPanel} from './RestaurantGrowthPanel.jsx';
 import {PairDevice} from './PairDevice.jsx';
 import {PairedDevicesPanel} from './PairedDevicesPanel.jsx';
 
 const links=[
  ['venda','▣','Nova venda','Operação'],['pedidos','≡','Pedidos','Operação'],['produtos','◇','Produtos e cardápio','Operação'],
- ['mesas','▦','Mesas e comandas','Restaurante'],['delivery','▤','Delivery','Restaurante'],['kds','♨','Cozinha (KDS)','Restaurante'],['garcom','♙','Garçom mobile','Restaurante'],['divisao','⊞','Fechamento de mesa','Restaurante'],
+ ['mesas','▦','Mesas e comandas','Restaurante'],['producao','⚙','Pizzaria e produção','Restaurante'],['delivery','▤','Delivery','Restaurante'],['kds','♨','Cozinha (KDS)','Restaurante'],['garcom','♙','Garçom mobile','Restaurante'],['divisao','⊞','Fechamento de mesa','Restaurante'],
  ['caixa','▤','Controle de caixa','Gestão'],['geral','▥','Gestão geral','Gestão'],['estoque','⬡','Estoque','Gestão'],
  ['financeiro','▥','Financeiro','Gestão'],['relatorios','▤','Relatórios','Gestão'],['unidades','⇄','Unidades','Gestão'],['privacidade','◇','Privacidade delivery','Gestão'],['usuarios','♙','Usuários','Configuração'],
  ['integracoes','⇄','Integrações','Configuração'],['dispositivos','▦','Dispositivos LAN','Configuração'],
@@ -85,18 +86,21 @@ function Tables({tables,selected,onSelect,onNew,busy}){
  const [filter,setFilter]=useState('all');const [newName,setNewName]=useState('');const filtered=tables.filter(t=>filter==='all'||(filter==='occupied'?t.orderId:!t.orderId));
  return <Frame eyebrow="ATENDIMENTO / SALÃO" title="Mapa do salão" description="Selecione uma mesa para visualizar e gerenciar sua comanda." action={<form onSubmit={e=>{e.preventDefault();onNew(newName).then(()=>setNewName('')).catch(()=>{});}} className="row compact"><input placeholder="Ex.: Mesa 13" value={newName} onChange={e=>setNewName(e.target.value)} required/><button className="btn primary" disabled={busy}>+ Nova mesa</button></form>}><div className="tabs"><Button kind={filter==='all'?'primary':'ghost'} onClick={()=>setFilter('all')}>Todas ({tables.length})</Button><Button kind={filter==='free'?'primary':'ghost'} onClick={()=>setFilter('free')}>Livres ({tables.filter(t=>!t.orderId).length})</Button><Button kind={filter==='occupied'?'primary':'ghost'} onClick={()=>setFilter('occupied')}>Ocupadas ({tables.filter(t=>t.orderId).length})</Button></div><div className="tables-layout"><Panel><div className="tables-grid">{filtered.map(t=><button type="button" className={'table-card '+(t.orderId?'occupied':'free')+' '+(selected?.id===t.id?'focused':'')} onClick={()=>onSelect(t)} disabled={busy} key={t.id}><span>▦</span><strong>{t.label}</strong><small>{t.orderId?'Ocupada':'Livre'}</small></button>)}</div></Panel><Panel title={selected?.label||'Selecione uma mesa'} className="table-detail">{selected?<><Pill tone={selected.orderId?'red':'green'}>{selected.orderId?'Ocupada':'Livre'}</Pill><div className="list-row"><span>Comanda</span><strong>{selected.orderId?.slice(-8)||'Nenhuma'}</strong></div><div className="list-row"><span>Estado</span><strong>{selected.orderStatus||'Disponível'}</strong></div><p className="help">O mapa indica disponibilidade da mesa; preparo da cozinha é independente do pedido.</p><Button kind="primary block" onClick={()=>onSelect(selected)} busy={busy}>Abrir comanda</Button></>:<Empty>Escolha uma mesa no mapa para continuar.</Empty>}</Panel></div></Frame>
 }
-function Kitchen({tickets,onUpdate,busy,onRefresh}){
+function Kitchen({tickets,onUpdate,busy,onRefresh,api}){
+ const [stations,setStations]=useState([]),[stationId,setStationId]=useState('');
+ useEffect(()=>{let alive=true;api('/api/kitchen/stations').then(x=>{if(alive)setStations(x.stations||[])}).catch(()=>{});return()=>{alive=false}},[api]);
+ const filtered=stationId?tickets.filter(t=>t.stationId===stationId):tickets;
  const groups=[['PENDING','Novos','pink','Iniciar preparo','PREPARING'],['PREPARING','Em preparo','yellow','Marcar como pronto','READY'],['READY','Prontos','green','Entregar','SERVED']];
- const cancelled=tickets.filter(t=>t.status==='CANCELLED');
+ const cancelled=filtered.filter(t=>t.status==='CANCELLED');
  return <Frame eyebrow="PRODUÇÃO / COZINHA" title="Painel KDS" description="Correções e cancelamentos são identificados sem apagar a identidade da linha." action={<Button onClick={onRefresh} busy={busy}>Atualizar</Button>}>
- <div className="kds-grid">{groups.map(([status,label,color,action,next])=><Panel className={'kds-column '+color} title={`${label} (${tickets.filter(t=>t.status===status).length})`} key={status}>
-  <div className="stack">{tickets.filter(t=>t.status===status).map(t=><article className="kds-ticket" key={t.id}>
+ <div className="row wrap" style={{marginBottom:16}}><label className="field">Filtrar estação<select value={stationId} onChange={e=>setStationId(e.target.value)}><option value="">Todas as estações</option>{stations.filter(s=>s.active).map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></label></div><div className="kds-grid">{groups.map(([status,label,color,action,next])=><Panel className={'kds-column '+color} title={`${label} (${filtered.filter(t=>t.status===status).length})`} key={status}>
+  <div className="stack">{filtered.filter(t=>t.status===status).map(t=><article className="kds-ticket" key={t.id}>
    <div className="sectiontitle"><strong>#{t.orderId.slice(-6)}</strong><Pill>{t.tableLabel||'Balcão'}</Pill></div>
    <h3>{t.quantity} × {t.productName}</h3>
    {t.changeNote&&<p className="notice" role="alert">{t.changeNote}</p>}
    {t.note&&<p className="help">Obs.: {t.note}</p>}{t.modifiers&&<p className="help">Adicionais: {t.modifiers}</p>}
    <Button kind="primary block" onClick={()=>onUpdate(t,next)} busy={busy}>{action}</Button>
-  </article>)}{!tickets.some(t=>t.status===status)&&<Empty>Sem tickets nesta etapa.</Empty>}</div></Panel>)}</div>
+  </article>)}{!filtered.some(t=>t.status===status)&&<Empty>Sem tickets nesta etapa.</Empty>}</div></Panel>)}</div>
  {cancelled.length>0&&<Panel title={'Cancelamentos recentes ('+cancelled.length+')'}>
   <p className="help">Confira a retirada do preparo. Registros permanecem preservados no histórico.</p>
   {cancelled.map(t=><div className="list-row" key={t.id}><div><strong>{t.productName} · {t.tableLabel||'Balcão'}</strong><small>{t.changeNote||'Item cancelado'}</small></div><Pill tone="red">Cancelado</Pill></div>)}
@@ -233,7 +237,7 @@ function App(){
  if(mode==='offline')return <main className="authpage"><section className="authcard" role="alert"><h1>Caixa indisponível</h1><p>O host SQLite local não respondeu. Nenhuma venda foi registrada. O aplicativo não entra em modo demonstrativo no Electron.</p><Button kind="primary" onClick={boot}>Tentar novamente</Button></section></main>;
  if(mode==='auth')return <Login setup={needsSetup} onSubmit={login} busy={busy} error={loginError}/>;
  if(mode==='pairing')return <PairDevice role={deviceRole} onPaired={(nextToken,role)=>{setToken(nextToken);setPairedRole(role);setUser({role});setView(role==='kitchen'?'kds':'garcom');setMode('paired');}}/>;
- const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','delivery','usuarios','integracoes','dispositivos','impressao','sistema','exportacao','primeiro-acesso']);
+ const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','relatorios','unidades','privacidade','delivery','usuarios','integracoes','dispositivos','impressao','sistema','exportacao','primeiro-acesso','producao']);
  const canEdit=mode!=='paired'&&isAdmin(user);const allowedLinks=mode==='paired'?links.filter(([id])=>pairedRole==='kitchen'?id==='kds':['garcom','divisao'].includes(id)):links.filter(([id])=>!restricted.has(id)||canEdit);
  const page=()=>{switch(view){
  case 'venda':return <Sale products={products} categories={categories} order={order} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>{if(!session&&!isDemo){setError('Abra o caixa antes de receber pagamento');setView('caixa');}else setModal({type:'payment'})}} onNew={()=>{setOrder(null);setView('venda')}} busy={busy} mode={mode}/>;
@@ -242,7 +246,8 @@ function App(){
  case 'produtos':return <div className="stack"><Products products={products} categories={categories} onAddProduct={addCatalogProduct} onAddCategory={addCategory} onToggle={toggleProduct} busy={busy} canEdit={canEdit}/><CatalogToolsPanel mode={mode} api={api} categories={categories} products={products} onRefresh={refresh}/></div>;
  case 'caixa':return <Cash session={session} onAction={cashAction} busy={busy}/>;
  case 'mesas':return <Tables tables={tables} selected={selected} onSelect={openTable} onNew={createTable} busy={busy}/>;
- case 'kds':return <Kitchen tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
+ case 'producao':return <RestaurantGrowthPanel mode={mode} api={api} products={products} orders={orders}/>;
+ case 'kds':return <Kitchen api={api} tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
  case 'garcom':return <Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/>;
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':'mesas');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
