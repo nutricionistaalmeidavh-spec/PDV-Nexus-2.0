@@ -4,7 +4,12 @@ export function receiptBytes(payload) {
   const clean=x=>String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'?');
   const width=38;
   const lines=['PDV NEXUS 2.0','RECIBO DE PEDIDO - NAO FISCAL','',`Pedido ${payload.id.slice(0,8)}`, '-'.repeat(width),
-    ...payload.lines.map(l=>`${l.quantity}x ${clean(l.productName).slice(0,24)}  ${(l.unitPriceCents*l.quantity/100).toFixed(2)}`),
+    ...payload.lines.flatMap(l=>[
+      `${l.quantity}x ${clean(l.productName).slice(0,24)}  ${(l.unitPriceCents*l.quantity/100).toFixed(2)}`.slice(0,width),
+      `  Item #${clean(l.id??'').slice(-8)}`,
+      ...(l.modifiers??[]).map(m=>`  + ${clean(m.name).slice(0,width-4)}`),
+      ...(l.note?[`  Obs: ${clean(l.note).slice(0,width-7)}`]:[])
+    ]),
     '-'.repeat(width),`TOTAL R$ ${(payload.totalCents/100).toFixed(2)}`,'','NAO SUBSTITUI DOCUMENTO FISCAL',''];
   return Buffer.concat([Buffer.from([0x1b,0x40]),Buffer.from(lines.join('\n')+'\n\n\n','ascii'),Buffer.from([0x1d,0x56,0x01])]);
 }
