@@ -438,6 +438,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           out=transactWithEvents(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             if(order.suspendedAt)conflict('Retome a venda antes de adicionar produtos','ORDER_SUSPENDED');
+            if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Não acrescente itens após um recebimento parcial','ORDER_ALREADY_PAID');
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
             const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
             if(note===null||note.length>240)bad('Observação inválida');
