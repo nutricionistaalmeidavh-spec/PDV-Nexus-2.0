@@ -61,6 +61,9 @@ export function lineWrite(db,method,route,body,h){
       if(!Number.isSafeInteger(base)||base<0)h.conflict('Preço histórico inconsistente');
       const mods=[];
       for(const id of ids){
+        // Modificador já vendido conserva seu preço/nome congelados, mesmo após edição do cardápio.
+        const historical=before.modifiers.find(m=>m.id===id);
+        if(historical){mods.push({id,name:historical.name,priceCents:historical.priceCents});continue;}
         const m=db.prepare('SELECT id,name,price_cents AS priceCents FROM product_modifier WHERE id=? AND product_id=? AND active=1').get(id,before.productId);
         if(!m)h.bad('Adicional não disponível para este produto');
         mods.push(m);
