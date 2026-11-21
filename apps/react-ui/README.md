@@ -1,6 +1,6 @@
 # PDV Nexus 2.0 — UI React (direção visual v1)
 
-Front-end React 19 + Vite 8, **R$ 0 / self-hosted**, com dependências open source e código React sob licença MIT. **A licença da raiz ainda é `UNLICENSED` e deve ser definida antes de declarar todo o produto como open source.** Implementação separada das telas existentes. Não altera rotas públicas, SQLite, Electron, backend ou fiscal existente.
+Front-end React 19 + Vite 8, **R$ 0 / self-hosted**, com dependências open source e código React sob licença MIT. **O núcleo e a interface React são distribuídos sob licença MIT; dependências externas mantêm suas licenças próprias.** Implementação separada das telas existentes. Não altera rotas públicas, SQLite, Electron, backend ou fiscal existente.
 
 ## Rodar localmente
 
