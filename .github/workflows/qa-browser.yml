@@ -14,8 +14,8 @@ jobs:
           node-version: '22.16.0'
       - name: Install local open-source QA dependencies
         run: |
-          npm install --omit=dev --ignore-scripts --no-audit --no-fund
-          npm install --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/react-ui --ignore-scripts --no-audit --no-fund
           npm run ui:test
           npm run ui:build
           npm install --no-save --omit=dev --ignore-scripts --no-audit --no-fund playwright@1.57.0
