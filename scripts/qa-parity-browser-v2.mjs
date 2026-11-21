@@ -175,6 +175,14 @@ try{
  const navHidden=await page.locator('.sidebar').isVisible();
  assert.equal(navHidden,false,'Menu deve iniciar recolhido no celular, sem sobrepor formulários');
  await shot('p4-01-gestao-mobile');
+ const stockHeading=page.getByRole('heading',{name:'Estoque, fornecedores e compras'});
+ const headingWrapped=await stockHeading.evaluate(el=>el.scrollWidth<=el.clientWidth+1);
+ assert.ok(headingWrapped,'Título de estoque deve quebrar sem corte horizontal em 390px');
+ const addStockButton=page.getByPlaceholder('Novo ingrediente').locator('..').getByRole('button',{name:'Adicionar ingrediente'});
+ await addStockButton.scrollIntoViewIfNeeded();
+ const addStockBounds=await addStockButton.boundingBox();
+ assert.ok(addStockBounds&&addStockBounds.x>=0&&addStockBounds.x+addStockBounds.width<=390,
+  'Ação de ingrediente deve ser totalmente acessível em 390px: '+JSON.stringify(addStockBounds));
  await page.getByRole('button',{name:'Abrir ou fechar o menu'}).click();
  await page.locator('.sidebar .nav-item').first().waitFor({state:'visible'});
  await shot('p4-02-menu-mobile-aberto');
