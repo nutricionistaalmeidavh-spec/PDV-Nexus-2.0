@@ -1,7 +1,7 @@
 /** Canonical order lifecycle: create, confirm, close and cancel within caller transaction. */
 import {randomUUID} from 'node:crypto';
 import {createOrder,confirmOrder,closeOrder,cancelOrder} from '../../../packages/core/src/order.ts';
-import {HttpError,bad,conflict,missing,requireString,requireCents,safeCents,assertRevision} from './request-validation.mjs';
+import {bad,conflict,missing,requireString,requireCents,safeCents,assertRevision,requireSupervisorForConfirmed} from './request-validation.mjs';
 import {databaseOrder,writeOrder} from './order-read.mjs';
 import {dispatchKitchenTickets} from './restaurant.mjs';
 import {assertSplitConsistent} from './restaurant-extras.mjs';
@@ -64,8 +64,7 @@ export function orderLifecycleWrite(db,method,route,body,h){
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             const reason=requireString(body.reason,'Motivo do cancelamento',240);
             // Após confirmar, só supervisor local ou gerente LAN pode cancelar.
-            if(order.status==='OPEN'&&operatorRole!=='admin'&&deviceRole!=='manager')
-              throw new HttpError(403,'SUPERVISOR_REQUIRED','Cancelamento de comanda confirmada exige supervisor');
+            requireSupervisorForConfirmed(order,operatorRole,deviceRole);
             const production=db.prepare("SELECT 1 FROM kitchen_ticket WHERE order_id=? AND status IN ('PREPARING','READY','SERVED') LIMIT 1").get(id);
             if(production)conflict('Produção já iniciada: faça o procedimento gerencial de ocorrência, sem apagar a comanda','KITCHEN_ALREADY_STARTED');
             if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))
