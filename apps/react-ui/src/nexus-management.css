@@ -76,3 +76,24 @@
  .nexus-management .panel{min-width:0;overflow:visible}
  .nexus-management .form-grid{grid-template-columns:minmax(0,1fr);min-width:0}
 }
+
+/* P4 responsive containment: nested grid intrinsic widths must not expand the 
+   whole host page to accommodate a wide stock DataTable. */
+.mantine-AppShell-main.main-area > .stack{
+ grid-template-columns:minmax(0,1fr)!important;min-width:0;max-width:100%;
+}
+.nexus-management,.nexus-management .panel,.nexus-management .tablewrap,
+.nexus-management .nexus-management-table{
+ width:100%;max-width:100%;min-width:0;box-sizing:border-box
+}
+.nexus-management .panel{overflow:hidden}
+.nexus-management .form-grid{min-width:0;max-width:100%}
+@media(max-width:570px){
+ .nexus-management .pageheading,.nexus-management .metric-grid{min-width:0;max-width:100%}
+ .nexus-management .row.wrap.compact{
+  grid-template-columns:minmax(0,1fr)!important;width:100%!important;
+  max-width:100%!important;min-width:0!important
+ }
+ .nexus-management .row.wrap.compact > *{box-sizing:border-box;min-width:0;max-width:100%!important}
+ .nexus-management .tablewrap{overflow-x:auto!important}
+}
