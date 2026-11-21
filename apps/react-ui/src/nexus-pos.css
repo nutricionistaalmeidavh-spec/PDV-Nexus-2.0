@@ -42,7 +42,7 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
 .sidebar-foot span{color:#9A3412}
 .mantine-AppShell-main.main-area{
  background:#FFF9F4;min-height:100dvh;padding:calc(72px + 24px) 26px 38px;
- padding-inline-start:calc(var(--app-shell-navbar-offset, 0px) + 26px);
+ padding-inline-start:258px!important; /* 232px navbar + 26px content gutter */
  min-width:0;overflow-x:hidden
 }
 .page{max-width:1540px}
@@ -166,6 +166,7 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
 .nexus-checkout-modal .nexus-modal-actions{padding:12px 0;z-index:2}
 .nexus-product-preview{width:112px;flex:0 0 112px}
 .nexus-product-preview .nexus-food-illustration{border-radius:12px}
+@media(min-width:768px){.mantine-AppShell-main.main-area{padding-inline-start:258px!important}}
 @media(max-width:1250px){
  .nexus-pos .sale-layout{grid-template-columns:minmax(0,1.3fr) minmax(300px,.9fr)}
  .nexus-pos .order-pane{min-height:540px}
@@ -193,7 +194,7 @@ html,body,#root{min-height:100%;background:#FFF9F4;color:#1F2937}
  .sidebar nav{display:flex;flex-direction:column;min-width:0;gap:2px}
  .sidebar .nav-group{display:block}
  .sidebar-foot{display:block}
- .mantine-AppShell-main.main-area{padding:calc(72px + 15px) 13px 26px;padding-inline-start:13px}
+ .mantine-AppShell-main.main-area{padding:calc(72px + 15px) 13px 26px;padding-inline-start:13px!important}
  .nexus-pos .catalog-pane,.nexus-pos .order-pane{padding:13px;border-radius:15px}
  .nexus-pos .pageheading h1{font-size:25px}
  .nexus-pos .product-grid{gap:10px}
