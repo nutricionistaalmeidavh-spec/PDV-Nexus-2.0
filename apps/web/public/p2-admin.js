@@ -39,7 +39,34 @@ async function renderStock(){const [inv,report,prod,margin,supply]=await Promise
   supplierList.append(row);
  }
  fillSelect($('stock-receive-supplier'),[{id:'',name:'Sem fornecedor'},...supply.suppliers.filter(x=>x.active)],x=>x.id,x=>x.name);
- await loadRecipe();await renderBatches();
+ fillSelect($('purchase-supplier'),supply.suppliers.filter(x=>x.active),x=>x.id,x=>x.name);
+ fillSelect($('purchase-ingredient'),ingredients.filter(x=>x.active),x=>x.id,x=>x.name+' ('+x.unit+')');
+ await loadRecipe();await renderBatches();await renderPurchases();
+}
+async function renderPurchases(){
+ const list=$('purchase-list'),data=await api('GET','/api/purchases');list.replaceChildren();
+ for(const item of data.purchases){
+   const row=node('div','data-row'),description=node('span','',item.supplierName+' · '+item.status+' · '+new Date(item.createdAt).toLocaleDateString('pt-BR'));
+   row.append(description);
+   if(item.status==='DRAFT'){
+     const receive=node('button','button primary','Confirmar recebimento');
+     receive.onclick=()=>void run(async()=>{
+       if(!confirm('Confirmar a entrada dos ingredientes desta compra no estoque?'))return;
+       await api('POST','/api/purchases/'+encodeURIComponent(item.id)+'/receive',{commandId:uid()});
+       await renderStock();toast('Compra recebida; estoque atualizado');
+     });
+     const cancel=node('button','button ghost','Cancelar compra');
+     cancel.onclick=()=>void run(async()=>{
+       const reason=prompt('Motivo do cancelamento da compra');
+       if(!reason?.trim())return;
+       await api('POST','/api/purchases/'+encodeURIComponent(item.id)+'/cancel',{commandId:uid(),reason});
+       await renderPurchases();toast('Compra cancelada');
+     });
+     row.append(receive,cancel);
+   }
+   list.append(row);
+ }
+ if(!data.purchases.length)list.append(node('p','note','Nenhuma compra registrada.'));
 }
 async function renderBatches(){
  const id=$('stock-batches-ingredient').value,list=$('stock-batch-list');list.replaceChildren();
@@ -72,6 +99,14 @@ function bindStock(){
  await api('POST','/api/stock/recipes/'+productId,{commandId:uid(),items:recipeDraft});toast('Ficha técnica salva');await loadRecipe();});};
  $('stock-refresh').onclick=()=>{void run(renderStock);};
  $('stock-batches-ingredient').onchange=()=>void run(renderBatches);
+ $('purchase-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;void run(async()=>{
+   const data=new FormData(form),lotCode=String(data.get('lotCode')||'').trim(),expiryDate=String(data.get('expiryDate')||'');
+   if(Boolean(lotCode)!==Boolean(expiryDate))throw Error('Preencha lote e validade juntos');
+   const items=[{ingredientId:data.get('ingredientId'),quantityMilli:toMilli(data.get('quantity')),costCents:toCents(data.get('cost')),
+     ...(lotCode?{lotCode,expiryDate}:{})}];
+   await api('POST','/api/purchases',{commandId:uid(),supplierId:data.get('supplierId'),items});
+   form.reset();await renderPurchases();toast('Compra criada. Confirme recebimento quando chegar.');
+ });};
  $('supplier-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;void run(async()=>{
   const data=new FormData(form);await api('POST','/api/suppliers',{commandId:uid(),name:data.get('name'),document:data.get('document')||''});
   form.reset();await renderStock();toast('Fornecedor cadastrado');
