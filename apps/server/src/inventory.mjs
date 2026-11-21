@@ -175,3 +175,11 @@ export function inventoryWrite(db,method,route,body,h){
   });
   return null;
 }
+
+/** Purchase receipts must use the same average-cost ledger as manual stock entries. */
+export function receiveIngredientMovement(db,ingredientId,quantityMilli,costCents,actor,purchaseId,missing){
+ const ing=ingredient(db,ingredientId,missing);
+ if(!ing.active)throw new Error('Ingrediente inativo');
+ if(!positive(quantityMilli)||!nonneg(costCents))throw new Error('Quantidade ou custo inválidos');
+ return applyMovement(db,ing,quantityMilli,costCents,'RECEIVE','Compra recebida '+purchaseId,actor);
+}
