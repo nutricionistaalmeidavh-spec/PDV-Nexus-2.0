@@ -334,6 +334,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           if(!/^[a-zA-Z0-9_-]{3,100}$/.test(commandId))bad('Identificador do backup inválido');
           const destination=path.join(path.dirname(dataPath),'backups','manual-'+commandId+'.sqlite');
           const existing=fs.existsSync(destination);
+          let created=false;
           if(!existing&&!backupJobs.has(commandId)&&backupJobs.size)conflict('Backup já em andamento no host','BACKUP_BUSY');
           if(!existing){
             const ongoing=backupJobs.get(commandId);
@@ -341,11 +342,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             else{
               const operation=createBackup(db,destination);
               backupJobs.set(commandId,operation);
-              try{await operation;auditForRequest(db,'r-local','BACKUP_CREATED',{file:path.basename(destination)});}
+              try{await operation;created=true;auditForRequest(db,'r-local','BACKUP_CREATED',{file:path.basename(destination)});}
               finally{backupJobs.delete(commandId);}
             }
           }
-          return response(res,existing||backupJobs.has(commandId)?200:201,{created:!existing,filename:path.basename(destination),path:destination,warning:'Para restaurar, feche o PDV e use o procedimento offline.'});
+          return response(res,created?201:200,{created,filename:path.basename(destination),path:destination,warning:'Para restaurar, feche o PDV e use o procedimento offline.'});
         }
         if(method==='POST'&&route==='/api/pairing/start'){
           try{return response(res,201,pairing.start(body));}
