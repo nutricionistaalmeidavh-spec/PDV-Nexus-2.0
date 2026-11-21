@@ -75,3 +75,23 @@ test('commercial activation works without reinstall, but requires signed central
   assert.equal(r.expiresAt,null);
   assert.equal(r.kind,'COMMERCIAL');
 });
+
+test('expired commercial entitlement throttles offline refresh attempts instead of retrying on every action',async t=>{
+ let clock=Date.now(),attempts=0;
+ const {db,options}=fixture(t,{now:()=>clock});
+ const realFetch=options.fetchImpl;
+ options.fetchImpl=async(url,init)=>{
+   if(url.endsWith('/v1/nexus/entitlement/refresh')){attempts++;throw Error('offline')}
+   return realFetch(url,init);
+ };
+ const service=createCommercialLicense(db,options);
+ await service.confirm('client@example.org','123456');
+ clock+=73*60*60*1000;
+ assert.equal((await service.status(true)).reason,'EXPIRED');
+ assert.equal(attempts,1);
+ assert.equal((await service.status(true)).reason,'EXPIRED');
+ assert.equal(attempts,1,'must not call central again for every blocked sale');
+ clock+=61_000;
+ assert.equal((await service.status(true)).reason,'EXPIRED');
+ assert.equal(attempts,2);
+});
