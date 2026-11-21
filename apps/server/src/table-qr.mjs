@@ -80,7 +80,17 @@ export function tableQrRead(db,method,route,h){
 export function tableQrWrite(db,method,route,body,h){
   if(method!=='POST')return null;
   const qr=route.match(/^\/api\/tables\/([^/]+)\/qr$/);
-  if(qr)return h.transact(db,route,body,()=>{
+  if(qr){
+    // Não persistir token bearer em command_receipt: somente o hash fica no SQLite.
+    // Replay do comando não reemite nem invalida silenciosamente um QR previamente mostrado.
+    const commandId=h.requireString(body.commandId,'Identificador do comando',128);
+    if(!/^[a-zA-Z0-9_-]{3,128}$/.test(commandId))h.bad('Identificador inválido');
+    db.exec('BEGIN IMMEDIATE');
+    try{
+      if(db.prepare('SELECT 1 FROM command_receipt WHERE command_id=?').get(commandId))
+        h.conflict('QR já emitido; gere um novo QR se necessário','QR_ISSUE_REPLAY');
+      const result=(()=>{
+
     const table=db.prepare(`SELECT st.id,st.label,so.id AS orderId
       FROM service_table st LEFT JOIN sales_order so ON so.service_table_id=st.id AND so.status IN ('DRAFT','OPEN')
       WHERE st.id=?`).get(qr[1]);
@@ -101,7 +111,13 @@ export function tableQrWrite(db,method,route,body,h){
     const url=new URL('table.html?token='+raw,base).toString();
     h.audit(db,table.orderId,'TABLE_QR_ROTATED',{tableId:table.id,sessionId:id,expiresAt,autoAccept:!!body.autoAccept});
     return {url,tableLabel:table.label,expiresAt,autoAccept:!!body.autoAccept};
-  });
+      })();
+      db.prepare('INSERT INTO command_receipt(command_id,request_hash,response_json,created_at) VALUES(?,?,?,?)')
+        .run(commandId,sha(JSON.stringify({route,body})),JSON.stringify({status:200,body:{issued:true}}),h.stamp());
+      db.exec('COMMIT');
+      return {status:200,body:result};
+    }catch(e){db.exec('ROLLBACK');throw e;}
+  }
   const decision=route.match(/^\/api\/table-requests\/([^/]+)\/(accept|reject)$/);
   if(!decision)return null;
   return h.transact(db,route,body,()=>{
