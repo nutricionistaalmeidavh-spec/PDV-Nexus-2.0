@@ -50,14 +50,22 @@ try {
  await page.getByText('Caixa aberto',{exact:true}).waitFor();
  await snap('react-02-caixa');
  await clickNav('Nova venda');
- await page.locator('.product-card').filter({hasText:'X-QA-React'}).click();
+ await page.getByRole('heading',{name:'Nova venda'}).waitFor();
+ await page.getByRole('button',{name:'Todos'}).first().waitFor();
+ const firstProduct=page.locator('.product-card').filter({hasText:'X-QA-React'});
+ const productLeft=await firstProduct.evaluate(el=>el.getBoundingClientRect().left);
+ assert.ok(productLeft>=230,'Catálogo não pode ficar coberto pela sidebar AppShell: x='+productLeft);
+ await snap('react-tangerine-00-caixa-catalogo');
+ await firstProduct.click();
  await page.getByRole('dialog',{name:'Personalizar produto'}).waitFor();
+ await snap('react-tangerine-01-personalizacao');
  await page.getByRole('button',{name:/Adicionar ao pedido/}).click();
  await page.locator('.order-lines').getByText('X-QA-React').waitFor();
  await page.getByRole('button',{name:'Confirmar pedido'}).click();
  await page.getByRole('button',{name:/Finalizar venda/}).waitFor();
  await page.getByRole('button',{name:/Finalizar venda/}).click();
  await page.getByRole('dialog',{name:'Finalizar venda'}).waitFor();
+ await snap('react-tangerine-02-pagamento');
  // ArtiSys #178: em três alturas/larguras, o botão permanece visível sem rolar a página.
  for(const [width,height] of [[1366,768],[1024,600],[390,844]]){
    await page.setViewportSize({width,height});
