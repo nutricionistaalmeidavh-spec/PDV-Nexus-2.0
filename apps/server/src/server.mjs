@@ -8,6 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
+import {supplyRead,supplyWrite} from './retail-supply.mjs';
+import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
+import {financialRead} from './retail-finance.mjs';
+import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
 import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
 import {inventoryRead,inventoryWrite,snapshotLineRecipe,consumeStockForOrder} from './inventory.mjs';
@@ -229,7 +233,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         if(method==='GET'&&route==='/api/pairing/devices')return response(res,200,{devices:pairing.list()});
         if(method==='GET'&&route==='/api/health') return response(res,200,{ok:true,mode:operationMode,sqlite:db.prepare('PRAGMA integrity_check').get().integrity_check});
-        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
         if(method==='POST'&&route==='/api/sync/operational/pull')return response(res,200,await peerPoller.syncOnce());
@@ -241,6 +245,25 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(privacyResult)return response(res,privacyResult.status,privacyResult.body);
         const deliveryResult=deliveryRead(db,method,route);
         if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
+        const financeResult=financialRead(db,method,route,url.searchParams);
+        if(financeResult)return response(res,financeResult.status,financeResult.body);
+        const suppliersResult=supplyRead(db,method,route,url.searchParams);
+        if(suppliersResult)return response(res,suppliersResult.status,suppliersResult.body);
+        if(method==='GET'&&route==='/api/catalog/barcode'){
+          const code=url.searchParams.get('code')??'';
+          if(!decodeEan13(code).valid)bad('EAN-13 inválido');
+          const product=db.prepare('SELECT id,name,price_cents AS priceCents,active FROM menu_product WHERE barcode=?').get(code);
+          return response(res,200,{barcode:code,product:product??null});
+        }
+        if(method==='GET'&&route==='/api/hardware/scale/parse'){
+          const raw=url.searchParams.get('raw')??'',brand=url.searchParams.get('brand')??'generic';
+          const parsed=parseScaleSerial(raw,{brand});
+          return response(res,200,{reading:parsed,warning:'Leitura por texto; confirme estabilidade e homologação antes de vender'});
+        }
+        if(method==='GET'&&route==='/api/hardware/scale/label'){
+          const code=url.searchParams.get('code')??'',mode=url.searchParams.get('mode')??'weight';
+          return response(res,200,{label:decodeScaleLabel(code,{mode})});
+        }
         const stockResult=inventoryRead(db,method,route,url.searchParams,{missing,bad});
         if(stockResult)return response(res,stockResult.status,stockResult.body);
         const cats=categoryRead(db,method,route);
@@ -252,7 +275,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
         if(method==='GET'&&route==='/api/print/jobs') return response(res,200,{jobs:db.prepare("SELECT id,aggregate_id AS orderId,status,attempts,created_at AS createdAt FROM outbox_event WHERE kind='PRINT_RECEIPT' ORDER BY created_at DESC LIMIT 100").all()});
-        if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled FROM printer_profile WHERE id='default'").get()??null});
+        if(method==='GET'&&route==='/api/printer') return response(res,200,{profile:db.prepare("SELECT host,port,enabled,transport,device_path AS devicePath,baud_rate AS baudRate FROM printer_profile WHERE id='default'").get()??null});
         if(method==='GET'&&route==='/api/exports/status') return response(res,200,{emissionAvailable:false,exportAvailable:true,emissionScope:'external-only',mode:operationMode,warning:'Comprovantes nao fiscais. Exporte as vendas para processamento fiscal externo.'});
         if(method==='GET'&&/^\/api\/exports\/sales\.(?:csv|json)$/.test(route)){
           const isCsv=route.endsWith('.csv');
@@ -281,15 +304,17 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         let out;
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,snapshotLineRecipe};
-        const special=operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
+        const special=supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
             const categoryId=body.categoryId||'c-default';
             if(!activeCategory(db,categoryId)) bad('Categoria inexistente ou arquivada');
-            const product={id:randomUUID(),name,priceCents,categoryId};
-            db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents) VALUES(?,?,?,?)').run(product.id,categoryId,name,priceCents);
+            const barcode=body.barcode===undefined||body.barcode===null||body.barcode===''?null:String(body.barcode);
+            if(barcode&&!decodeEan13(barcode).valid)bad('EAN-13 inválido');
+            const product={id:randomUUID(),name,priceCents,categoryId,barcode};
+            db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents,barcode) VALUES(?,?,?,?,?)').run(product.id,categoryId,name,priceCents,barcode);
             auditForRequest(db,product.id,'PRODUCT_CREATED',product);return {product};
           },201);
         } else if(method==='PATCH'&&route.match(/^\/api\/products\/[^/]+$/)) {
@@ -302,9 +327,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             if(!activeCategory(db,categoryId))bad('Categoria inexistente ou arquivada');
             const active=body.active===undefined?record.active:typeof body.active==='boolean'?(body.active?1:0):null;
             if(active===null)bad('Ativo deve ser verdadeiro ou falso');
-            db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=? WHERE id=?').run(name,priceCents,categoryId,active,id);
-            auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active});
-            return {product:{id,name,priceCents,categoryId,active}};
+            const barcode=body.barcode===undefined?record.barcode:(body.barcode===null||body.barcode===''?null:String(body.barcode));
+            if(barcode&&!decodeEan13(barcode).valid)bad('EAN-13 inválido');
+            db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=?,barcode=? WHERE id=?').run(name,priceCents,categoryId,active,barcode,id);
+            auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active,barcode});
+            return {product:{id,name,priceCents,categoryId,active,barcode}};
           });
         } else if(method==='POST'&&route==='/api/orders') {
           out=transactWithEvents(db,route,body,()=>{
@@ -425,11 +452,19 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           });
         } else if(method==='POST'&&route==='/api/printer') {
           out=transactWithEvents(db,route,body,()=>{
-            const host=requireString(body.host,'IP da impressora',64);
-            if(!isPrivateIPv4(host))bad('Use IPv4 da rede local');
-            const port=body.port;if(!Number.isInteger(port)||port<1||port>65535)bad('Porta inválida');
-            db.prepare("INSERT INTO printer_profile(id,host,port,enabled) VALUES('default',?,?,1) ON CONFLICT(id) DO UPDATE SET host=excluded.host,port=excluded.port,enabled=1").run(host,port);
-            return {profile:{host,port,enabled:1}};
+            const transport=body.transport??'tcp';
+            if(!['tcp','serial','windows'].includes(transport))bad('Transporte de impressão inválido');
+            const host=transport==='tcp'?requireString(body.host,'IP da impressora',64):'127.0.0.1';
+            if(transport==='tcp'&&!isPrivateIPv4(host))bad('Use IPv4 da rede local');
+            const port=transport==='tcp'?body.port:9100;
+            if(!Number.isInteger(port)||port<1||port>65535)bad('Porta inválida');
+            const devicePath=transport==='serial'||transport==='windows'?body.devicePath:null;
+            if(transport==='serial'&&!validateSerialDevicePath(devicePath))bad('Porta serial inválida: use COM1 ou /dev/ttyUSB0');
+            if(transport==='windows'&&!validatePrinterQueueName(devicePath))bad('Nome da impressora Windows inválido');
+            const baudRate=transport==='serial'?(body.baudRate??9600):9600;
+            if(![9600,19200,38400,57600,115200].includes(baudRate))bad('Baud rate inválido');
+            db.prepare("INSERT INTO printer_profile(id,host,port,enabled,transport,device_path,baud_rate) VALUES('default',?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET host=excluded.host,port=excluded.port,enabled=1,transport=excluded.transport,device_path=excluded.device_path,baud_rate=excluded.baud_rate").run(host,port,transport,devicePath,baudRate);
+            return {profile:{host,port,enabled:1,transport,devicePath,baudRate}};
           });
         } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
           const id=route.split('/')[4];
@@ -440,9 +475,12 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
           sendingPrintJobs.add(id);
           try {
-            await transmit(printer.host,printer.port,receiptBytes(JSON.parse(job.payload_json)));
+            const bytes=receiptBytes(JSON.parse(job.payload_json));
+            if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
+            else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
+            else await transmit(printer.host,printer.port,bytes);
             db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
-            auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio TCP concluído; impressão física não confirmada'}};
+            auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio ao transporte concluído; impressão física não confirmada'}};
           } catch(e) {
             db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
             out={status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};

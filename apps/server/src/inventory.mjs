@@ -1,3 +1,4 @@
+import {recordReceivedBatch,allocateFefo} from './retail-supply.mjs';
 /** Single-writer inventory ledger; no parallel balance/cost store. Quantities: thousandths of g/ml/unit. */
 import {randomUUID} from 'node:crypto';
 const isInteger=x=>Number.isSafeInteger(x);
@@ -73,6 +74,7 @@ export function consumeStockForOrder(db,orderId,actor,conflict){
   }
   let cogsCents=0;
   for(const {ing,qty} of plans){
+    allocateFefo(db,ing.id,qty,actor,orderId,conflict);
     const movement=applyMovement(db,ing,-qty,0,'SALE','Consumo da venda '+orderId,actor,orderId);
     cogsCents=safeAdd(cogsCents,-movement.valueDeltaCents);
   }
@@ -133,9 +135,10 @@ export function inventoryWrite(db,method,route,body,h){
   if(method==='POST'&&receive)return transact(db,route,body,()=>{
     const ing=ingredient(db,receive[1],missing);
     if(!positive(body.quantityMilli)||!nonneg(body.costCents))bad('Quantidade ou custo inválidos');
+    const batchId=recordReceivedBatch(db,ing.id,body,body.quantityMilli,stamp,bad,missing);
     const movement=applyMovement(db,ing,body.quantityMilli,body.costCents,'RECEIVE','Entrada de estoque',h.actor);
-    audit(db,ing.id,'STOCK_RECEIVED',movement);
-    return {movement};
+    audit(db,ing.id,'STOCK_RECEIVED',{...movement,batchId});
+    return {movement,batchId};
   },201);
   const adjust=route.match(/^\/api\/stock\/ingredients\/([^/]+)\/adjust$/);
   if(method==='POST'&&adjust)return transact(db,route,body,()=>{
@@ -144,6 +147,8 @@ export function inventoryWrite(db,method,route,body,h){
     const reason=requireString(body.reason,'Motivo',240);
     if(qty>0&&!nonneg(body.costCents))bad('Informe custo de entrada no ajuste positivo');
     if(qty<0&&qty*-1>ing.on_hand_milli)conflict('Estoque insuficiente','STOCK_INSUFFICIENT');
+    const batchId=qty>0?recordReceivedBatch(db,ing.id,body,qty,stamp,bad,missing):null;
+    if(qty<0)allocateFefo(db,ing.id,-qty,h.actor,null,conflict,{allowExpired:true});
     const movement=applyMovement(db,ing,qty,qty>0?body.costCents:0,qty>0?'ADJUST_IN':'ADJUST_OUT',reason,h.actor);
     audit(db,ing.id,'STOCK_ADJUSTED',movement);
     return {movement};
