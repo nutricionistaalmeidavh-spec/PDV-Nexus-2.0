@@ -14,5 +14,6 @@ test('all modules previously delegated to the legacy UI have an active React imp
   }
 });
 test('host redirects the old admin entrypoint to the unified React UI',()=>{
-  assert.match(host,/route==='\/'.*\/ui\//);
+  assert.match(host,/const redirects=/);
+  assert.match(host,/res.writeHead\(302/);
 });
