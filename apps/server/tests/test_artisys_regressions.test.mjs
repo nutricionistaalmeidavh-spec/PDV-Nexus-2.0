@@ -137,3 +137,52 @@ test('P1: devolução e movimentos do caixa registram usuário real e não alter
   assert.deepEqual(previous,{status:'CLOSED',expected_amount_cents:10300,counted_amount_cents:10200});
  }finally{db2.close();}
 });
+
+test('P0: pagamento pendente ou parcial impede cancelar comanda e mantém auditoria intocada',async t=>{
+ const f=await setup(t),product=await createProduct(f,'Pedido pré-pago',1700);
+ const {table,order}=await createTableOrder(f,'Mesa com sinal');
+ const open=await confirm(f,await withProduct(f,order,product));
+ const db=openDatabase(f.dataPath);
+ try{
+  db.prepare("INSERT INTO payment(id,order_id,method,amount_cents,state,created_at) VALUES(?,?,'pix',100,'PENDING',?)")
+   .run(randomUUID(),open.id,new Date().toISOString());
+ }finally{db.close();}
+ const cancelled=await f.api('admin','POST',`/api/orders/${open.id}/cancel`,cmd('partial-payment-cancel',{expectedRevision:open.revision,reason:'Sinal pendente'}));
+ assert.equal(cancelled.status,409,JSON.stringify(cancelled.body));
+ assert.equal((await f.api('admin','GET',`/api/orders/${open.id}`)).body.order.status,'OPEN');
+ assert.equal((await f.api('admin','GET','/api/tables')).body.tables.find(x=>x.id===table.id).orderId,open.id);
+ assert.equal((await f.api('admin','GET','/api/kitchen/tickets')).body.tickets.filter(x=>x.orderId===open.id).length,1);
+ const db2=openDatabase(f.dataPath);
+ try{
+  assert.equal(db2.prepare('SELECT COUNT(*) AS n FROM payment WHERE order_id=?').get(open.id).n,1);
+  assert.equal(db2.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE aggregate_id=? AND action='ORDER_CANCELLED'").get(open.id).n,0);
+ }finally{db2.close();}
+});
+
+test('P0: comprovante não fiscal usa snapshots e IDs de linhas, não posição ou preço atualizado do cardápio',async t=>{
+ const f=await setup(t),product=await createProduct(f,'Pizza especial',5000);
+ const modifier=f.expect(await f.api('admin','POST',`/api/products/${product.id}/modifiers`,cmd('pizza-border',{name:'Borda',priceCents:700})),201).modifier;
+ let order=f.expect(await f.api('admin','POST','/api/orders',cmd('receipt-order',{serviceMode:'counter'})),201).order;
+ order=f.expect(await f.api('admin','POST',`/api/orders/${order.id}/lines`,cmd('receipt-modified',{
+  expectedRevision:order.revision,productId:product.id,quantity:1,modifierIds:[modifier.id],note:'Sem cebola'})),200).order;
+ order=f.expect(await f.api('admin','POST',`/api/orders/${order.id}/lines`,cmd('receipt-plain',{
+  expectedRevision:order.revision,productId:product.id,quantity:2,modifierIds:[],note:'Bem passada'})),200).order;
+ const lineIds=order.lines.map(x=>x.id);
+ assert.equal(new Set(lineIds).size,2);
+ assert.deepEqual(order.lines.map(x=>x.unitPriceCents),[5700,5000]);
+ const confirmed=await confirm(f,order);
+ f.expect(await f.api('admin','POST','/api/cash/open',cmd('receipt-open-cash',{openingCents:0})),201);
+ f.expect(await f.api('admin','POST',`/api/orders/${order.id}/close`,cmd('receipt-close',{
+  expectedRevision:confirmed.revision,payments:[{method:'pix',amountCents:15700}]})),200);
+ const db=openDatabase(f.dataPath);
+ try{
+  const job=db.prepare("SELECT payload_json FROM outbox_event WHERE aggregate_id=? AND kind='PRINT_RECEIPT'").get(order.id);
+  assert.ok(job,'comprovante não fiscal deve entrar na fila transacional');
+  const payload=JSON.parse(job.payload_json);
+  assert.deepEqual(payload.lines.map(line=>line.id),lineIds);
+  assert.deepEqual(payload.lines.map(line=>line.unitPriceCents),[5700,5000]);
+  assert.deepEqual(payload.lines.map(line=>line.quantity),[1,2]);
+  assert.equal(payload.totalCents,15700);
+  assert.deepEqual(payload.lines.map(line=>line.note),['Sem cebola','Bem passada']);
+ }finally{db.close();}
+});
