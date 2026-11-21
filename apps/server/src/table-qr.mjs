@@ -32,6 +32,7 @@ function catalog(db){
 function acceptedOrder(db,request,h){
   const current=h.databaseOrder(db,request.order_id);
   if(db.prepare('SELECT 1 FROM payment WHERE order_id=?').get(current.id))throw new GuestError(409,'TABLE_ALREADY_PAID','Após o primeiro recebimento, novas solicitações exigem outra comanda');
+  if(current.suspendedAt)throw new GuestError(409,'TABLE_SUSPENDED','A comanda foi suspensa');
   if(!['DRAFT','OPEN'].includes(current.status))throw new GuestError(409,'TABLE_CLOSED','Mesa já encerrada');
   const session=db.prepare('SELECT table_id FROM table_qr_session WHERE id=?').get(request.session_id);
   if(current.tableId!==session?.table_id)throw new GuestError(409,'TABLE_MOVED','Mesa transferida: solicitação requer revisão');
