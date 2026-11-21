@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
+import {createCommercialLicense} from './commercial-license.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
 import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
@@ -129,12 +130,18 @@ async function readJson(req,maxLength=32768) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
   const operatorAuth=createOperatorAuth(db);
+  const licenseControl=createCommercialLicense(db,commercialLicense||{
+    required:process.env.NEXUS_REQUIRE_COMMERCIAL_ACTIVATION==='true',
+    endpoint:process.env.NEXUS_LICENSE_ENDPOINT||'https://pdv-artisys.sistema-artisys.workers.dev',
+    publicJwk:process.env.NEXUS_LICENSE_PUBLIC_JWK||null,
+    storagePath:dataPath+'.license.json'
+  });
   const pairing=createDevicePairing(db);
   const peerPoller=createOperationalPoller(db,operationalSync);
   const publicRequests=createPublicRequests(db);
@@ -170,6 +177,22 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
+        if(route==='/api/license/status'&&method==='GET')return response(res,200,await licenseControl.status());
+        if(route.startsWith('/api/license/')){
+          if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))throw new HttpError(403,'LOCAL_ONLY','Licenciamento somente no host local');
+          if(method!=='POST')return response(res,405,{code:'METHOD_NOT_ALLOWED'});
+          if(!licenseControl.required)return response(res,404,{code:'OPEN_SOURCE_EDITION'});
+          const payload=await readJson(req,4096);
+          try{
+            const result=route==='/api/license/trial/request'?await licenseControl.request(payload.email):
+              route==='/api/license/trial/confirm'?await licenseControl.confirm(payload.email,payload.code):
+              route==='/api/license/activate'?await licenseControl.activate(payload.email,payload.code):null;
+            if(!result)return response(res,404,{code:'NOT_FOUND'});
+            return response(res,route==='/api/license/trial/request'?202:200,result);
+          }catch(e){throw new HttpError(e.status>=400&&e.status<600?e.status:400,'LICENSE_ERROR',e.message)}
+        }
+        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!(await licenseControl.status()).active)
+          throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
         if(route.startsWith('/api/public/')){
           if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
           const found=publicRead(db,method,route);
