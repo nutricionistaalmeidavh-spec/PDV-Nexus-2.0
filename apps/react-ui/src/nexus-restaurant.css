@@ -1,0 +1,84 @@
+/* P2 | Restaurante Tangerine: uses Mantine surfaces and keeps functional selectors */
+.nexus-restaurant .pageheading{align-items:center}
+.nexus-restaurant .mantine-Paper-root{border-color:#E9DDCF}
+.nexus-room-summary{margin-bottom:18px}
+.nexus-room-summary .mantine-Paper-root{box-shadow:0 3px 13px rgba(64,39,24,.035)}
+.nexus-room-surface{box-shadow:0 4px 16px rgba(64,39,24,.04)}
+.nexus-room-toolbar{display:flex;align-items:center;margin-bottom:20px}
+.nexus-room-toolbar .mantine-SegmentedControl-root{background:#FFF7ED}
+.nexus-room-toolbar .mantine-SegmentedControl-label[data-active=true]{color:#7C2D12}
+.nexus-room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;min-width:0}
+.nexus-restaurant .tables-layout{display:grid;grid-template-columns:minmax(0,1fr) 275px;gap:18px;align-items:start}
+.nexus-restaurant .tables-layout:not(:has(.table-detail)){grid-template-columns:minmax(0,1fr)}
+.nexus-restaurant .table-card{
+ text-align:left;display:flex;flex-direction:column;gap:12px;padding:17px;background:#fff!important;
+ min-height:180px;border:1px solid #E9DDCF!important;border-radius:16px;
+ box-shadow:0 2px 8px rgba(64,39,24,.035);width:100%;height:auto;
+ color:#292524!important;cursor:pointer;transition:box-shadow 140ms,border-color 140ms
+}
+.nexus-restaurant .table-card:hover:not(:disabled),.nexus-restaurant .table-card.focused{
+ border-color:#C2410C!important;box-shadow:0 7px 18px rgba(194,65,12,.10)
+}
+.nexus-restaurant .table-card.occupied{background:#FFFBF7!important}
+.nexus-restaurant .table-card .nexus-table-label{font-size:17px;line-height:1.3}
+.nexus-restaurant .table-card .mantine-ThemeIcon-root{flex-shrink:0}
+.nexus-room-detail{position:sticky;top:95px;box-shadow:none}
+.nexus-restaurant-empty{padding:27px 14px;border:1px dashed #E9DDCF;background:#FFFCF9;border-radius:13px;color:#A16207;min-height:120px;justify-content:center}
+.nexus-kds-toolbar{margin-bottom:18px}
+.nexus-kitchen .kds-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;align-items:start}
+.nexus-kitchen .kds-column{padding:15px;min-width:0;min-height:320px;background:#FFFCF9!important}
+.nexus-kitchen .kds-column.orange{border-top:3px solid #EA580C}
+.nexus-kitchen .kds-column.blue{border-top:3px solid #2563EB}
+.nexus-kitchen .kds-column.green{border-top:3px solid #16A34A}
+.nexus-kitchen .kds-ticket{background:white;border:1px solid #E9DDCF;border-radius:13px;box-shadow:0 3px 11px rgba(64,39,24,.045);padding:16px;min-height:0}
+.nexus-kitchen .nexus-kds-note{background:#FFF7ED;color:#7C2D12;border-radius:8px;padding:8px 10px;font-weight:650}
+.nexus-waiter .phone-preview{max-width:520px;width:100%;margin:0 auto;box-shadow:0 12px 26px rgba(64,39,24,.09);background:#fff;border-color:#E9DDCF!important}
+.nexus-waiter .phone-header{background:#fff;color:#292524;border-bottom:1px solid #E9DDCF;padding:0 0 15px;margin-bottom:14px}
+.nexus-waiter .phone-body{background:#fff;padding:0}
+.nexus-waiter .phone-products{max-height:365px}
+.nexus-waiter-product{background:#FFFCF9}
+.nexus-split-line{border-bottom:1px solid #F1E7DA;padding:10px 0}
+.nexus-table-order .dashboard-grid.nexus-table-order-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px}
+.nexus-table-order-panel{background:#fff;box-shadow:0 2px 11px rgba(64,39,24,.04);min-width:0}
+.nexus-table-order-panel .form-grid{gap:12px}
+.nexus-table-order-panel .list-row{padding:12px 6px;border-bottom:1px solid #F1E7DA}
+.nexus-table-order-panel .list-row small{display:block;color:#78716C;margin-top:3px}
+.nexus-table-order-panel :is(select,input:not([type=checkbox]),textarea){
+ border:1px solid #E9DDCF;background:#FFFCF9;min-height:43px;border-radius:11px;padding:8px 11px;
+ color:#292524;max-width:100%
+}
+.nexus-table-order-panel :is(select,input,textarea):focus-visible{outline:2px solid #C2410C;outline-offset:2px}
+.nexus-table-order-panel .field{min-width:0}
+.nexus-table-order-panel input[type=checkbox]{accent-color:#C2410C}
+.nexus-table-order .nexus-table-total{background:#FFF1E6;color:#7C2D12;border-radius:14px}
+.nexus-restaurant .mantine-Button-root[data-variant=filled][data-color=orange],
+.nexus-table-order .btn.primary{background:#C2410C!important;color:white!important;border-color:#C2410C}
+.nexus-restaurant .mantine-Button-root[data-variant=filled][data-color=orange]:hover:not(:disabled),
+.nexus-table-order .btn.primary:hover:not(:disabled){background:#9A3412!important}
+@media(max-width:1150px){
+ .nexus-restaurant .tables-layout{grid-template-columns:1fr}
+ .nexus-room-detail{position:static}
+ .nexus-kitchen .kds-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:767px){
+ .nexus-restaurant .pageheading{align-items:flex-start}
+ .nexus-table-create{width:100%;display:flex;flex-wrap:wrap}
+ .nexus-table-create .mantine-InputWrapper-root{flex:1 1 190px}
+ .nexus-room-toolbar{flex-direction:column;align-items:stretch}
+ .nexus-room-toolbar .mantine-SegmentedControl-root{max-width:100%;overflow-x:auto}
+ .nexus-room-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .nexus-restaurant .table-card{min-height:160px;padding:12px}
+ .nexus-kitchen .kds-grid,.nexus-table-order .dashboard-grid.nexus-table-order-grid{grid-template-columns:1fr}
+ .nexus-kitchen .kds-column{min-height:0}
+ .nexus-restaurant .pageheading .heading-action{width:100%}
+ .nexus-restaurant .pageheading .heading-action .mantine-Button-root{width:100%}
+ .nexus-table-order-panel{padding:14px}
+}
+@media(max-width:390px){
+ .nexus-room-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .nexus-restaurant .table-card .mantine-Badge-root{font-size:9px}
+ .nexus-restaurant .table-card .mantine-ThemeIcon-root{width:35px;height:35px}
+}
+@media(prefers-reduced-motion:reduce){
+ .nexus-restaurant .table-card{transition:none}
+}
