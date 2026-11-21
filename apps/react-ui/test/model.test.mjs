@@ -36,3 +36,19 @@ test('ilustrações são arquivos locais e produtos desconhecidos usam fallback'
   assert.equal(foodAsset({id:'xburger',name:'X-Burger'}),'/ui/assets/xburger.png');
   assert.equal(foodAsset({id:'outro',name:'Produto novo'}),null);
 });
+
+test('identidade de linha demonstrativa não reutiliza posição após exclusão ou reordenação', () => {
+  const product={id:'pizza',name:'Pizza',priceCents:5000};
+  const first=appendDemoLine({...DEMO_ORDER,lines:[]},product,1,{note:'Original'});
+  const second=appendDemoLine(first,product,2,{note:'Com borda',modifierPriceCents:700,modifiers:[{id:'border',name:'Borda recheada',priceCents:700}]});
+  assert.notEqual(first.lines[0].id,second.lines[1].id);
+  const remaining={...second,lines:second.lines.slice(1)};
+  const reordered=appendDemoLine(remaining,product,1,{note:'Sem borda'});
+  assert.equal(new Set(reordered.lines.map(line=>line.id)).size,2,'IDs de linhas devem permanecer únicos após excluir outra linha');
+  assert.equal(reordered.lines[0].id,second.lines[1].id,'linha existente mantém identidade');
+  assert.equal(reordered.lines[0].note,'Com borda');
+  assert.equal(reordered.lines[0].unitPriceCents,5700);
+  assert.equal(reordered.lines[1].unitPriceCents,5000);
+  assert.equal(reordered.lines[1].note,'Sem borda');
+  assert.equal(second.lines[0].id,first.lines[0].id,'snapshot anterior nunca é modificado');
+});
