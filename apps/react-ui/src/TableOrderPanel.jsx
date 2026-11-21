@@ -184,7 +184,7 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
     <PizzaComposer order={order} api={api} products={products} run={run} busy={busy} mode={mode}/>
     {mode==='live'&&<ScaleSalePanel order={order} api={api} products={products} run={run} busy={busy} mode={mode}/>}
     {mode==='live'&&<AdvancedCounterPanel order={order} api={api} tables={tables} run={run} busy={busy}/>}
-    {isTable&&<TableQrPanel order={order} api={api} mode={mode} run={run} busy={busy} onError={setError}/>
+    {isTable&&<TableQrPanel order={order} api={api} mode={mode} run={run} busy={busy} onError={setError}/>}
     {isTable&&<Panel title="Transferir mesa">
       <div className="row wrap compact"><label className="field">Mesa de destino<select value={destination} onChange={e=>setDestination(e.target.value)}><option value="">Selecionar mesa livre</option>{tables.filter(t=>!t.orderId&&t.id!==order.tableId).map(t=><option value={t.id} key={t.id}>{t.label}</option>)}</select></label>
        <button className="btn secondary" disabled={!lineAllowed||!destination||busy} onClick={()=>void run('/api/orders/'+encodeURIComponent(order.id)+'/transfer-table',{tableId:destination}).then(result=>{if(result)setDestination('')})}>Transferir comanda</button></div>
