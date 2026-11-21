@@ -266,7 +266,7 @@ export function PosSale({products,categories,order,onChoose,onConfirm,onCancel,o
      {['CLOSED','CANCELLED'].includes(status)&&<Button fullWidth color="orange" onClick={onNew}>Iniciar nova venda</Button>}
      {['DRAFT','OPEN'].includes(status)&&<Button fullWidth variant="light" color="gray" loading={busy}
        onClick={onCancel} leftSection={<Trash2 size={16}/>}>Cancelar pedido</Button>}
-     <Text size="xs" c="dimmed" ta="center">Pagamento confirmado no host · comprovante não fiscal</Text>
+     <Text size="xs" c="dimmed" ta="center">Pagamento confirmado no host · Comprovante não fiscal</Text>
     </Stack>
    </Paper>
   </div>
