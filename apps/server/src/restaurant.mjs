@@ -4,11 +4,11 @@ import { createOrder } from '../../../packages/core/src/order.ts';
 
 export function dispatchKitchenTickets(db,orderId,stamp) {
   // Uma linha de pedido gera um ticket, inclusive quando adicionada após confirmação.
-  const lines=db.prepare('SELECT id FROM order_line WHERE order_id=? AND cancelled_at IS NULL').all(orderId);
-  const insert=db.prepare("INSERT OR IGNORE INTO kitchen_ticket(id,order_id,line_id,status,revision,created_at,updated_at) VALUES(?,?,?,'PENDING',0,?,?)");
+  const lines=db.prepare('SELECT l.id,p.kitchen_station_id AS stationId FROM order_line l LEFT JOIN menu_product p ON p.id=l.product_id WHERE l.order_id=? AND l.cancelled_at IS NULL').all(orderId);
+  const insert=db.prepare("INSERT OR IGNORE INTO kitchen_ticket(id,order_id,line_id,status,revision,created_at,updated_at,kitchen_station_id) VALUES(?,?,?,'PENDING',0,?,?,?)");
   for(const line of lines) {
     const now=stamp();
-    insert.run(randomUUID(),orderId,line.id,now,now);
+    insert.run(randomUUID(),orderId,line.id,now,now,line.stationId??null);
   }
 }
 
@@ -28,12 +28,12 @@ export function restaurantRead(db,method,route,{missing}) {
   }
   if(route==='/api/kitchen/tickets') {
     const tickets=db.prepare(`SELECT kt.id,kt.order_id AS orderId,kt.line_id AS lineId,kt.status,kt.revision,
-      kt.created_at AS createdAt,kt.change_note AS changeNote,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
+      kt.created_at AS createdAt,kt.change_note AS changeNote,kt.kitchen_station_id AS stationId,ks.name AS stationName,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
       (SELECT group_concat(name_snapshot, ', ') FROM order_line_modifier WHERE line_id=kt.line_id) AS modifiers,
       (SELECT group_concat(quantity||'x '||product_name_snapshot, ', ') FROM order_line_combo_item WHERE line_id=kt.line_id) AS comboDetails,
       so.service_mode AS serviceMode,st.label AS tableLabel
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
-      JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id
+      JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id LEFT JOIN kitchen_station ks ON ks.id=kt.kitchen_station_id
       WHERE kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.change_note IS NOT NULL AND kt.updated_at>=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString());
     return {status:200,body:{tickets}};
   }
@@ -86,6 +86,7 @@ export function restaurantWrite(db,method,route,body,h) {
   const move=route.match(/^\/api\/orders\/([^/]+)\/transfer-table$/);
   if(method==='POST'&&move)return transact(db,route,body,()=>{
     const id=move[1],order=databaseOrder(db,id);
+    if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Transfira a mesa antes de começar pagamentos','ORDER_HAS_PAYMENT');
     assertRevision(order,body.expectedRevision);
     if(order.serviceMode!=='table'|| !['DRAFT','OPEN'].includes(order.status))conflict('Transferência exige comanda de mesa aberta');
     const tableId=requireString(body.tableId,'Mesa de destino',128);
