@@ -32,6 +32,7 @@ function catalog(db){
 function acceptedOrder(db,request,h){
   const current=h.databaseOrder(db,request.order_id);
   if(!['DRAFT','OPEN'].includes(current.status))throw new GuestError(409,'TABLE_CLOSED','Mesa já encerrada');
+  if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(current.id))guestConflict('Pagamento iniciado; chame o atendente','TABLE_PAYMENT_STARTED');
   const session=db.prepare('SELECT table_id FROM table_qr_session WHERE id=?').get(request.session_id);
   if(current.tableId!==session?.table_id)throw new GuestError(409,'TABLE_MOVED','Mesa transferida: solicitação requer revisão');
   const items=db.prepare('SELECT * FROM table_order_request_line WHERE request_id=? ORDER BY rowid').all(request.id);
