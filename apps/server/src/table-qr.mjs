@@ -133,7 +133,9 @@ export function tableQrWrite(db,method,route,body,h){
       h.audit(db,request.order_id,'TABLE_QR_REQUEST_REJECTED',{requestId:request.id,reason});
       return {requestId:request.id,statusText:'REJECTED'};
     }
-    const order=acceptedOrder(db,request,h);
+    let order;
+    try{order=acceptedOrder(db,request,h);}
+    catch(e){if(e?.status===409)h.conflict(e.message,e.code);throw e;}
     return {requestId:request.id,statusText:'ACCEPTED',order};
   });
 }

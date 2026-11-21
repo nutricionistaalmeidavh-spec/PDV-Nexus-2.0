@@ -13,7 +13,11 @@ export function orderLinesWrite(db,method,route,body,h){
           const id=route.split('/')[3];
           return transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
+            if(order.suspended)conflict('Venda suspensa: retome a venda','ORDER_SUSPENDED');
+            if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Pagamento já iniciado; novos itens exigem outra comanda','PAYMENT_STARTED');
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
+            if(product.sale_unit==='kg'||db.prepare('SELECT 1 FROM pizza_product WHERE product_id=?').get(product.id))
+              bad('Produto requer fluxo de pesagem ou montagem de pizza','SPECIAL_PRODUCT_ROUTE');
             const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
             if(note===null||note.length>240)bad('Observação inválida');
             const ids=body.modifierIds??[];
