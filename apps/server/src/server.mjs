@@ -260,7 +260,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             .sort((a,b)=>b.modifiedAt.localeCompare(a.modifiedAt)).slice(0,100):[];
           return response(res,200,{backups});
         }
-        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
+        if(method==='GET'&&route==='/api/products') return response(res,200,{products:db.prepare('SELECT p.id,p.name,p.price_cents AS priceCents,p.active,p.is_combo AS isCombo,p.category_id AS categoryId,p.barcode,p.sale_unit AS saleUnit,c.active AS categoryActive FROM menu_product p JOIN menu_category c ON c.id=p.category_id ORDER BY p.name').all()});
         const identity=installationRead(db,method,route);
         if(identity)return response(res,identity.status,identity.body);
         if(method==='POST'&&route==='/api/sync/operational/pull')return response(res,200,await peerPoller.syncOnce());
@@ -400,8 +400,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             if(!activeCategory(db,categoryId)) bad('Categoria inexistente ou arquivada');
             const barcode=body.barcode===undefined||body.barcode===null||body.barcode===''?null:String(body.barcode);
             if(barcode&&!decodeEan13(barcode).valid)bad('EAN-13 inválido');
-            const product={id:randomUUID(),name,priceCents,categoryId,barcode};
-            db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents,barcode) VALUES(?,?,?,?,?)').run(product.id,categoryId,name,priceCents,barcode);
+            const saleUnit=body.saleUnit??'unit';
+            if(!['unit','kg'].includes(saleUnit))bad('Unidade de venda inválida');
+            const product={id:randomUUID(),name,priceCents,categoryId,barcode,saleUnit};
+            db.prepare('INSERT INTO menu_product(id,category_id,name,price_cents,barcode,sale_unit) VALUES(?,?,?,?,?,?)').run(product.id,categoryId,name,priceCents,barcode,saleUnit);
             auditForRequest(db,product.id,'PRODUCT_CREATED',product);return {product};
           },201);
         } else if(method==='PATCH'&&route.match(/^\/api\/products\/[^/]+$/)) {
@@ -416,9 +418,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             if(active===null)bad('Ativo deve ser verdadeiro ou falso');
             const barcode=body.barcode===undefined?record.barcode:(body.barcode===null||body.barcode===''?null:String(body.barcode));
             if(barcode&&!decodeEan13(barcode).valid)bad('EAN-13 inválido');
-            db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=?,barcode=? WHERE id=?').run(name,priceCents,categoryId,active,barcode,id);
-            auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active,barcode});
-            return {product:{id,name,priceCents,categoryId,active,barcode}};
+            const saleUnit=body.saleUnit??record.sale_unit;
+            if(!['unit','kg'].includes(saleUnit))bad('Unidade de venda inválida');
+            if(saleUnit!==record.sale_unit&&db.prepare('SELECT 1 FROM order_line WHERE product_id=? LIMIT 1').get(id))
+              conflict('Tipo de venda de produto vendido anteriormente não pode ser alterado');
+            db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=?,barcode=?,sale_unit=? WHERE id=?').run(name,priceCents,categoryId,active,barcode,saleUnit,id);
+            auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active,barcode,saleUnit});
+            return {product:{id,name,priceCents,categoryId,active,barcode,saleUnit}};
           });
         } else if(method==='POST'&&route==='/api/orders') {
           out=transactWithEvents(db,route,body,()=>{
@@ -439,7 +445,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             if(order.suspendedAt)conflict('Retome a venda antes de adicionar produtos','ORDER_SUSPENDED');
             if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Não acrescente itens após um recebimento parcial','ORDER_ALREADY_PAID');
-            const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
+            const product=db.prepare("SELECT * FROM menu_product WHERE id=? AND active=1 AND sale_unit='unit'").get(body.productId);if(!product)missing('Produto por unidade');
             const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
             if(note===null||note.length>240)bad('Observação inválida');
             const ids=body.modifierIds??[];
