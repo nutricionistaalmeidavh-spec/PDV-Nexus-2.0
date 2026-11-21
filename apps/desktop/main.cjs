@@ -1,12 +1,20 @@
 'use strict';
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
 let server;
 let appUrl;
 app.whenReady().then(async () => {
   // Sem credenciais, cookies ou configuração externa: servidor local do usuário.
   ({ createApp: server } = await import('../server/src/server.mjs'));
-  const pos=server({dataPath:path.join(app.getPath('userData'),'nexus.db'),operationMode:'demo'});
+  const manifestPath=path.join(__dirname,'edition-manifest.json');
+  const edition=fs.existsSync(manifestPath)?JSON.parse(fs.readFileSync(manifestPath,'utf8')):{commercialActivation:false};
+  const dataPath=path.join(app.getPath('userData'),'nexus.db');
+  const commercialLicense=edition.commercialActivation===true?{
+    required:true,publicJwk:edition.publicJwk,endpoint:edition.endpoint,
+    storagePath:dataPath+'.license.json'
+  }:{required:false};
+  const pos=server({dataPath,operationMode:'demo',commercialLicense});
   server=pos;
   appUrl=await pos.listen({port:0});
   const window=new BrowserWindow({width:1370,height:880,minWidth:800,minHeight:650,show:false,
