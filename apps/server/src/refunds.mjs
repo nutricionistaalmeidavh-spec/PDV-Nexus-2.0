@@ -7,6 +7,7 @@ export function refundWrite(db,method,route,body,h) {
   return transact(db,route,body,()=>{
     const order=databaseOrder(db,m[1]);
     if(order.status!=='CLOSED')conflict('Apenas vendas encerradas podem ser devolvidas');
+    if(db.prepare('SELECT 1 FROM order_item_refund WHERE order_id=? LIMIT 1').get(order.id))conflict('Venda possui devoluções parciais; finalize por item','PARTIAL_REFUND_EXISTS');
     if(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(order.id))conflict('Venda já devolvida','ALREADY_REFUNDED');
     const reason=requireString(body.reason,'Motivo da devolução',240);
     const payments=db.prepare("SELECT method,amount_cents FROM payment WHERE order_id=? AND state='CONFIRMED'").all(order.id);
