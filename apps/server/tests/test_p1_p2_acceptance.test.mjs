@@ -111,3 +111,19 @@ test('P2 preço por peso exige leitura estável e evita overflow',async t=>{
  const rejected=await api('POST',`/api/orders/${order.id}/weight-lines`,cmd({expectedRevision:result.order.revision,productId:p.id,weightGrams:1000,stable:false}));
  assert.equal(rejected.status,400);
 });
+
+test('P2 desconto por item é calculado em centavos, auditado e exige supervisor acima do limite',async t=>{
+ const api=await fixture(t);
+ const {order,lineId}=await orderWithLines(api);
+ const body=cmd({expectedRevision:order.revision,discountBps:1000,reason:'Promoção balcão'});
+ const discounted=await ok(api,'POST',`/api/orders/${order.id}/lines/${lineId}/discount`,body);
+ assert.equal(discounted.order.totalCents,2700);
+ assert.equal(discounted.discountCents,300);
+ assert.deepEqual((await ok(api,'POST',`/api/orders/${order.id}/lines/${lineId}/discount`,body)).order,discounted.order);
+ const changes=await ok(api,'GET',`/api/orders/${order.id}/price-history`);
+ assert.equal(changes.changes.length,1);
+ assert.equal(changes.changes[0].afterCents,1350);
+ const conflict=await api('POST',`/api/orders/${order.id}/lines/${lineId}/discount`,
+  cmd({expectedRevision:discounted.order.revision,discountBps:500,reason:'Repetição'}));
+ assert.equal(conflict.status,409);
+});
