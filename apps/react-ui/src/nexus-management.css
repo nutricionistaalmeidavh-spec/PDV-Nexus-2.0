@@ -54,3 +54,11 @@
  .nexus-overview-kpis .mantine-Paper-root{padding:12px}
  .nexus-management-shortcuts{grid-template-columns:1fr}
 }
+
+/* Visual QA: explicit desktop grids prevent full-width stacked KPI cards. */
+.nexus-overview .nexus-overview-kpis{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:13px!important}
+.nexus-overview .nexus-overview-charts{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px!important;align-items:start}
+.nexus-overview .nexus-management-shortcuts{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:14px!important}
+@media(max-width:1180px){.nexus-overview .nexus-overview-charts{grid-template-columns:1fr!important}}
+@media(max-width:850px){.nexus-overview .nexus-overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}.nexus-overview .nexus-management-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:520px){.nexus-overview .nexus-overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}.nexus-overview .nexus-management-shortcuts{grid-template-columns:1fr!important}}
