@@ -67,6 +67,8 @@ try {
  await page.getByRole('button',{name:/Finalizar venda/}).waitFor();
  await page.getByRole('button',{name:/Finalizar venda/}).click();
  await page.getByRole('dialog',{name:'Finalizar venda'}).waitFor();
+ const primaryBackground=await page.getByRole('button',{name:'Confirmar recebimento'}).evaluate(el=>getComputedStyle(el).backgroundColor);
+ assert.equal(primaryBackground,'rgb(194, 65, 12)','Botão primário do checkout deve ter contraste AA com texto branco');
  await snap('react-tangerine-02-pagamento');
  // ArtiSys #178: em três alturas/larguras, o botão permanece visível sem rolar a página.
  for(const [width,height] of [[1366,768],[1024,600],[390,844]]){
