@@ -75,6 +75,33 @@ export function retailAdvancedWrite(db,method,route,body,h){
   h.audit(db,order.id,suspend[2]==='suspend'?'ORDER_SUSPENDED':'ORDER_RESUMED');
   return {order:h.databaseOrder(db,order.id)};
  });
+ const discount=route.match(/^\/api\/orders\/([^/]+)\/lines\/([^/]+)\/discount$/);
+ if(discount)return h.transact(db,route,body,()=>{
+  const order=h.databaseOrder(db,discount[1]);h.assertRevision(order,body.expectedRevision);
+  if(!['DRAFT','OPEN'].includes(order.status)||order.suspended)h.conflict('Comanda indisponível');
+  if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(order.id))
+   h.conflict('Venda com pagamento não permite desconto','ORDER_HAS_PAYMENT');
+  const bps=body.discountBps;
+  if(!Number.isSafeInteger(bps)||bps<1||bps>10000)h.bad('Percentual de desconto inválido: use 1 a 10000 pontos-base');
+  // Política conservadora: operador de caixa até 10%, acima disso somente supervisor.
+  if(bps>1000&&!h.supervisor)h.conflict('Desconto acima de 10% exige supervisor','DISCOUNT_SUPERVISOR_REQUIRED');
+  const reason=h.requireString(body.reason,'Justificativa do desconto',240);
+  const line=db.prepare(`SELECT id,unit_price_cents AS unitPriceCents,quantity
+    FROM order_line WHERE id=? AND order_id=? AND cancelled_at IS NULL`).get(discount[2],order.id);
+  if(!line)h.missing('Linha da comanda');
+  if(db.prepare('SELECT 1 FROM order_line_price_change WHERE line_id=? LIMIT 1').get(line.id))
+   h.conflict('Item já teve ajuste de preço; reverta com supervisor em procedimento separado','DISCOUNT_ALREADY_APPLIED');
+  const discountCents=Number((BigInt(line.unitPriceCents)*BigInt(bps)+5000n)/10000n);
+  const nextPrice=line.unitPriceCents-discountCents;
+  if(!safe(nextPrice)||!safe(nextPrice*line.quantity))h.bad('Valor excede limite monetário');
+  db.prepare('UPDATE order_line SET unit_price_cents=? WHERE id=?').run(nextPrice,line.id);
+  db.prepare('UPDATE sales_order SET revision=revision+1 WHERE id=?').run(order.id);
+  db.prepare(`INSERT INTO order_line_price_change
+   (id,line_id,order_id,previous_unit_price_cents,new_unit_price_cents,reason,actor_id,created_at)
+   VALUES(?,?,?,?,?,?,?,?)`).run(randomUUID(),line.id,order.id,line.unitPriceCents,nextPrice,reason,h.actor,h.stamp());
+  h.audit(db,order.id,'ORDER_LINE_DISCOUNT_APPLIED',{lineId:line.id,discountBps:bps,unitDiscountCents:discountCents,reason});
+  return {order:h.databaseOrder(db,order.id),discountCents:discountCents*line.quantity,discountBps:bps};
+ });
  const price=route.match(/^\/api\/orders\/([^/]+)\/lines\/([^/]+)\/override-price$/);
  if(price)return h.transact(db,route,body,()=>{
   if(!h.supervisor)h.conflict('Alteração de preço exige supervisor','SUPERVISOR_REQUIRED');
