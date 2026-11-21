@@ -26,7 +26,7 @@ class P2MigrationTests(unittest.TestCase):
             db.execute("INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES('l','o','p','X-Burger',1200,2)")
             self.apply(db,FILES[8:])
             versions=[r[0] for r in db.execute('SELECT version FROM schema_migrations ORDER BY version')]
-            self.assertEqual(versions,list(range(1,19)))
+            self.assertEqual(versions,list(range(1,22)))
             self.assertEqual(db.execute("SELECT product_name_snapshot,unit_price_cents FROM order_line WHERE id='l'").fetchone(),('X-Burger',1200))
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
         finally: db.close()

@@ -111,7 +111,7 @@ export function allowedOperator(role,method,route){
   if(/^\/api\/products/.test(route)&&method!=='GET')return false;
   if(/^\/api\/categories/.test(route)&&method!=='GET')return false;
   if(/^\/api\/tables/.test(route)&&method==='PATCH')return false;
-  if(/^\/api\/orders\/[^/]+\/refund$/.test(route))return false;
+  if(/^\/api\/orders\/[^/]+\/(refund|refund-items)$/.test(route))return false;
   if(/^\/api\/kitchen/.test(route)&&method==='POST')return false;
   if(/^\/api\/pairing/.test(route))return false;
   return true;

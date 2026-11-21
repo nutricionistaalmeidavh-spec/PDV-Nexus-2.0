@@ -13,13 +13,13 @@ export function financialRead(db,method,route,params){
   if(from&&to&&from>to)throw new Error('Data inicial maior que a final');
   const orders=db.prepare("SELECT o.id,substr(o.closed_at,1,10) AS day,COALESCE(r.amount_cents,0) AS refund FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id WHERE o.status='CLOSED' AND o.closed_at IS NOT NULL AND (? IS NULL OR substr(o.closed_at,1,10)>=?) AND (? IS NULL OR substr(o.closed_at,1,10)<=?) ORDER BY o.closed_at,o.id LIMIT 10001").all(from,from,to,to);
   if(orders.length>10000)throw new Error('Selecione período menor: relatório limitado a 10 mil vendas');
-  const grossQuery=db.prepare('SELECT COALESCE(SUM(unit_price_cents*quantity),0) AS amount FROM order_line WHERE order_id=?');
+  const grossQuery=db.prepare('SELECT COALESCE(SUM(unit_price_cents*quantity),0) AS amount FROM order_line WHERE order_id=? AND cancelled_at IS NULL');
   const costQuery=db.prepare("SELECT COALESCE(SUM(-value_delta_cents),0) AS amount FROM stock_movement WHERE kind='SALE' AND source_order_id=?");
   const methodsQuery=db.prepare("SELECT method,amount_cents FROM payment WHERE order_id=? AND state='CONFIRMED'");
   const byDay=new Map(),methods={cash:0,pix:0,credit:0,debit:0,other:0};
   let grossSalesCents=0,refundedCents=0,cogsCents=0;
   for(const order of orders){
-    const gross=grossQuery.get(order.id).amount,cost=costQuery.get(order.id).amount,refunded=order.refund;
+    const gross=grossQuery.get(order.id).amount,cost=costQuery.get(order.id).amount,refunded=order.refund+db.prepare('SELECT COALESCE(SUM(amount_cents),0) AS amount FROM order_line_refund WHERE order_id=?').get(order.id).amount;
     grossSalesCents=add(grossSalesCents,gross);
     refundedCents=add(refundedCents,refunded);
     cogsCents=add(cogsCents,cost);
