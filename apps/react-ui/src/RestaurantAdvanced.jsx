@@ -44,7 +44,7 @@ export function AdvancedOrderOperations({order,tables,api,onAction,busy,mode,can
  const applyDiscount=async e=>{
   e.preventDefault();setError('');setNotice('');
   const percent=discountPercent.trim().replace(',','.');
-  if(!/^(?:\\d{1,3})(?:\\.\\d{1,2})?$/.test(percent))return setError('Informe percentual de 0,01% a 100,00%');
+  if(!/^(?:\d{1,3})(?:\.\d{1,2})?$/.test(percent))return setError('Informe percentual de 0,01% a 100,00%');
   const bps=Math.round(Number(percent)*100);
   if(!Number.isSafeInteger(bps)||bps<1||bps>10000)return setError('Percentual fora do limite');
   const result=await onAction('/api/orders/'+encodeURIComponent(order.id)+'/lines/'+encodeURIComponent(discountLine)+'/discount',{
