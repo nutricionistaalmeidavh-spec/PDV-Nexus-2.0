@@ -9,7 +9,7 @@ export function RestaurantGrowthPanel({api,mode,products,orders}){
  const [stations,setStations]=useState([]),[profiles,setProfiles]=useState([]),[pizza,setPizza]=useState({sizes:[],flavors:[],borders:[]});
  const [scale,setScale]=useState(null),[stationName,setStationName]=useState(''),[stationId,setStationId]=useState(''),[productId,setProductId]=useState('');
  const [profileLabel,setProfileLabel]=useState(''),[transport,setTransport]=useState('tcp'),[transportHost,setTransportHost]=useState(''),[transportPort,setTransportPort]=useState('9100'),[devicePath,setDevicePath]=useState(''),[baudRate,setBaudRate]=useState('9600');
- const [pizzaKind,setPizzaKind]=useState('sizes'),[pizzaName,setPizzaName]=useState(''),[pizzaPrice,setPizzaPrice]=useState('');
+ const [pizzaKind,setPizzaKind]=useState('sizes'),[pizzaName,setPizzaName]=useState(''),[pizzaPrice,setPizzaPrice]=useState(''),[pizzaProductId,setPizzaProductId]=useState('');
  const [scalePath,setScalePath]=useState(''),[scaleBrand,setScaleBrand]=useState('generic'),[scaleBaud,setScaleBaud]=useState('9600');
  const [refundOrderId,setRefundOrderId]=useState(''),[refundOrder,setRefundOrder]=useState(null),[refundLineId,setRefundLineId]=useState(''),[refundQty,setRefundQty]=useState('1'),[refundCash,setRefundCash]=useState('0,00'),[refundReason,setRefundReason]=useState(''),[refundExternal,setRefundExternal]=useState(false),[restock,setRestock]=useState(false);
  const [printOrderId,setPrintOrderId]=useState(''),[printType,setPrintType]=useState('prebill'),[printStation,setPrintStation]=useState(''),[printProfile,setPrintProfile]=useState('');
@@ -73,8 +73,9 @@ export function RestaurantGrowthPanel({api,mode,products,orders}){
     <div className="form-grid">
      <Select label="Cadastro" value={pizzaKind} onChange={e=>setPizzaKind(e.target.value)}><option value="sizes">Tamanho</option><option value="flavors">Sabor</option><option value="borders">Borda</option></Select>
      <Name label="Nome" maxLength="80" value={pizzaName} onChange={e=>setPizzaName(e.target.value)} placeholder="Grande, Calabresa..."/>
-     <Name label={pizzaKind==='sizes'?'Base do tamanho (R$)':'Preço adicional (R$)'} value={pizzaPrice} onChange={e=>setPizzaPrice(e.target.value)} inputMode="decimal" placeholder="0,00"/>
-     <button className="btn primary" disabled={!enabled||busy||!pizzaName.trim()||!pizzaPrice.trim()} onClick={()=>{try{const data=pizzaKind==='sizes'?{name:pizzaName,basePriceCents:parseMoney(pizzaPrice)}:{name:pizzaName,priceCents:parseMoney(pizzaPrice)};void submit('/api/pizza/'+pizzaKind,data).then(v=>{if(v){setPizzaName('');setPizzaPrice('')}});}catch(e){setError(e.message)}}}>Adicionar</button>
+     <Name label={pizzaKind==='sizes'?'Base do tamanho (R$)':'Preço do sabor/borda (R$)'} value={pizzaPrice} onChange={e=>setPizzaPrice(e.target.value)} inputMode="decimal" placeholder="0,00"/>
+     {pizzaKind!=='sizes'&&<Select label="Produto da ficha técnica (opcional)" value={pizzaProductId} onChange={e=>setPizzaProductId(e.target.value)}><option value="">Sem ficha técnica vinculada</option>{products.filter(p=>p.active&&p.saleUnit!=='kg').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>}
+     <button className="btn primary" disabled={!enabled||busy||!pizzaName.trim()||!pizzaPrice.trim()} onClick={()=>{try{const data=pizzaKind==='sizes'?{name:pizzaName,basePriceCents:parseMoney(pizzaPrice)}:{name:pizzaName,priceCents:parseMoney(pizzaPrice),...(pizzaProductId?{productId:pizzaProductId}:{})};void submit('/api/pizza/'+pizzaKind,data).then(v=>{if(v){setPizzaName('');setPizzaPrice('');setPizzaProductId('')}});}catch(e){setError(e.message)}}}>Adicionar</button>
     </div>
     <div className="stack">{[['sizes','Tamanhos'],['flavors','Sabores'],['borders','Bordas']].map(([key,label])=><div key={key}><strong>{label}</strong>{(pizza[key]||[]).map(x=><div className="list-row" key={x.id}><span>{x.name}</span><strong>{money(x.priceCents??x.basePriceCents)}</strong></div>)}</div>)}</div>
     <p className="help">O preço é calculado na comanda; fichas técnicas dos sabores podem ser vinculadas pelo identificador de produto na API.</p>
