@@ -72,8 +72,8 @@ export function scaleWrite(db,method,route,body,h){
   const reading=db.prepare('SELECT * FROM scale_reading WHERE id=?').get(body.readingId);
   if(!reading||reading.stable!==1||reading.consumed_line_id||Date.parse(reading.expires_at)<=Date.now())
     h.conflict('Peso expirado, instável ou já utilizado','INVALID_WEIGHT_READING');
-  const product=db.prepare('SELECT id,name,price_cents AS pricePerKgCents FROM menu_product WHERE id=? AND active=1').get(body.productId);
-  if(!product)h.missing('Produto vendido por kg');
+  const product=db.prepare("SELECT id,name,price_cents AS pricePerKgCents FROM menu_product WHERE id=? AND active=1 AND sale_unit='kg'").get(body.productId);
+  if(!product)h.missing('Produto ativo configurado para venda por kg');
   const price=weightedPriceCents(product.pricePerKgCents,reading.weight_grams);
   const label='Peso '+(reading.weight_grams/1000).toFixed(3)+' kg';
   const next=addOrderLine(order,{id:randomUUID(),productId:product.id,productName:product.name,unitPriceCents:price,quantity:1});
