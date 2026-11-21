@@ -58,7 +58,7 @@ export function snapshotLineRecipe(db,lineId,productId){
 }
 export function consumeStockForOrder(db,orderId,actor,conflict){
   const rows=db.prepare('SELECT s.ingredient_id AS ingredientId,s.quantity_milli AS quantityMilli,l.quantity '+
-    'FROM order_line_recipe_snapshot s JOIN order_line l ON l.id=s.line_id WHERE l.order_id=?').all(orderId);
+    'FROM order_line_recipe_snapshot s JOIN order_line l ON l.id=s.line_id WHERE l.order_id=? AND l.cancelled_at IS NULL').all(orderId);
   const usage=new Map();
   for(const x of rows){
     const qty=x.quantityMilli*x.quantity;
@@ -107,7 +107,7 @@ export function inventoryRead(db,method,route,params,h){
     const start=date(from),end=date(to);
     if((from&&start===null)||(to&&end===null)||(start&&end&&start>end))h.bad('Período inválido');
     const orders=db.prepare("SELECT o.id,o.closed_at AS closedAt,r.amount_cents AS refundCents FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id WHERE o.status='CLOSED' AND (? IS NULL OR substr(o.closed_at,1,10)>=?) AND (? IS NULL OR substr(o.closed_at,1,10)<=?)").all(start,start,end,end);
-    const lines=db.prepare('SELECT COALESCE(SUM(unit_price_cents*quantity),0) AS gross FROM order_line WHERE order_id=?');
+    const lines=db.prepare('SELECT COALESCE(SUM(unit_price_cents*quantity),0) AS gross FROM order_line WHERE order_id=? AND cancelled_at IS NULL');
     const cogs=db.prepare("SELECT COALESCE(SUM(-value_delta_cents),0) AS cost FROM stock_movement WHERE source_order_id=? AND kind='SALE'");
     let grossSalesCents=0,refundedCents=0,cogsCents=0;
     for(const order of orders){
