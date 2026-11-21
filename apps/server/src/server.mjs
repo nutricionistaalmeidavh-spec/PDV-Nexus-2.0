@@ -177,7 +177,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       if(route.startsWith('/api/')) {
-        if(route==='/api/license/status'&&method==='GET')return response(res,200,await licenseControl.status());
+        if(route==='/api/license/status'&&method==='GET'){
+          if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))throw new HttpError(403,'LOCAL_ONLY','Status da licenca somente no host');
+          return response(res,200,await licenseControl.status());
+        }
         if(route.startsWith('/api/license/')){
           if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))throw new HttpError(403,'LOCAL_ONLY','Licenciamento somente no host local');
           if(method!=='POST')return response(res,405,{code:'METHOD_NOT_ALLOWED'});
