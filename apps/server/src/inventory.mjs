@@ -80,6 +80,29 @@ export function consumeStockForOrder(db,orderId,actor,conflict){
   }
   return {cogsCents,ingredients:plans.length};
 }
+/** Return previously consumed ingredients as untracked stock; never edits historical FEFO lots. */
+export function returnStockForRefund(db,lineId,quantity,refundId,actor,stamp){
+ const line=db.prepare('SELECT order_id AS orderId,quantity FROM order_line WHERE id=?').get(lineId);
+ if(!line||!positive(quantity)||quantity>line.quantity)throw new Error('Devolução de estoque inválida');
+ const components=db.prepare('SELECT ingredient_id AS ingredientId,quantity_milli AS quantityMilli FROM order_line_recipe_snapshot WHERE line_id=?').all(lineId);
+ for(const x of components){
+  const amount=x.quantityMilli*quantity;
+  if(!positive(amount))throw new Error('Estoque devolvido excede precisão');
+  const ing=db.prepare('SELECT * FROM stock_ingredient WHERE id=?').get(x.ingredientId);
+  if(!ing)throw new Error('Ingrediente não encontrado');
+  const original=db.prepare(`SELECT COALESCE(SUM(-value_delta_cents),0) AS cost
+    FROM stock_movement WHERE kind='SALE' AND source_order_id=? AND ingredient_id=?`).get(line.orderId,x.ingredientId).cost;
+  const entire=db.prepare(`SELECT COALESCE(SUM(s.quantity_milli*l.quantity),0) AS qty
+    FROM order_line_recipe_snapshot s JOIN order_line l ON l.id=s.line_id
+    WHERE l.order_id=? AND s.ingredient_id=? AND l.cancelled_at IS NULL`).get(line.orderId,x.ingredientId).qty;
+  if(!positive(entire)||!nonneg(original))throw new Error('Movimentação original de estoque inválida');
+  const cost=Number((BigInt(original)*BigInt(amount)+BigInt(entire)/2n)/BigInt(entire));
+  if(!nonneg(cost))throw new Error('Valor devolvido excede precisão');
+  // Devolução física é opção explícita: saldo canônico aumenta, sem inventar lote/validade.
+  applyMovement(db,ing,amount,cost,'ADJUST_IN','Devolução vendida '+refundId,actor);
+ }
+}
+
 export function inventoryRead(db,method,route,params,h){
   if(method!=='GET')return null;
   if(route==='/api/stock/ingredients'){
