@@ -16,7 +16,7 @@ export function itemRefundWrite(db,method,route,body,h){
  const m=route.match(/^\/api\/orders\/([^/]+)\/refund-items$/);
  if(method!=='POST'||!m)return null;
  return h.transact(db,route,body,()=>{
-  if(!h.supervisor)h.conflict('Devolução por item exige supervisor','SUPERVISOR_REQUIRED');
+  if(!h.supervisor)h.forbidden('Devolução por item exige supervisor','SUPERVISOR_REQUIRED');
   const order=h.databaseOrder(db,m[1]);
   if(order.status!=='CLOSED')h.conflict('Devoluções exigem venda encerrada');
   if(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(order.id))h.conflict('Venda integralmente devolvida','ALREADY_REFUNDED');
