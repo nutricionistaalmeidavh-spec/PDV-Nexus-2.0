@@ -25,7 +25,7 @@ jobs:
       - name: Run full browser flow against SQLite
         run: |
           node --experimental-strip-types scripts/qa-react-browser.mjs
-          node --experimental-strip-types scripts/qa-parity-browser.mjs
+          node --experimental-strip-types scripts/qa-parity-browser-v2.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
