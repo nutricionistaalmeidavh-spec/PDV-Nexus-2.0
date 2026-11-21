@@ -3,9 +3,13 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createOrder, addOrderLine, confirmOrder, closeOrder, cancelOrder, orderTotalCents } from '../../../packages/core/src/order.ts';
+import { databaseOrder } from './order-read.mjs';
+import { orderWrite } from './order-router.mjs';
+import { HttpError,bad,conflict,missing,safeCents,requireCents,requireString,assertRevision } from './request-validation.mjs';
+import { transact } from './command-service.mjs';
+import { audit } from './audit-service.mjs';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
@@ -15,8 +19,8 @@ import {financialRead} from './retail-finance.mjs';
 import {checkUpdates,currentVersion} from './system-maintenance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
-import {comboRead,comboWrite,assertSplitConsistent} from './restaurant-extras.mjs';
-import {inventoryRead,inventoryWrite,snapshotLineRecipe,consumeStockForOrder} from './inventory.mjs';
+import {comboRead,comboWrite} from './restaurant-extras.mjs';
+import {inventoryRead,inventoryWrite,snapshotLineRecipe} from './inventory.mjs';
 import {publicRead,createPublicRequests,deliveryRead,deliveryWrite} from './delivery.mjs';
 import {installationRead} from './install-identity.mjs';
 import {syncRead,syncWrite} from './multiunit-sync.mjs';
@@ -24,7 +28,7 @@ import {operationalRead,operationalWrite,createOperationalPoller} from './operat
 import {privacyRead,privacyWrite} from './delivery-privacy.mjs';
 import {categoryRead,categoryWrite,activeCategory} from './categories.mjs';
 import {buildSalesDocument,salesToCsv} from './sales-export.mjs';
-import { restaurantRead,restaurantWrite,dispatchKitchenTickets } from './restaurant.mjs';
+import { restaurantRead,restaurantWrite } from './restaurant.mjs';
 import { refundWrite } from './refunds.mjs';
 import { cashWrite } from './cash-service.mjs';
 import { receiptBytes } from './non-fiscal-service.mjs';
@@ -32,65 +36,8 @@ import { validateLanConfig,lanRole,roleAllows } from './lan-security.mjs';
 
 const publicDir = fileURLToPath(new URL('../../web/public/', import.meta.url));
 const reactDistDir = fileURLToPath(new URL('../../react-ui/dist/', import.meta.url));
-const actorId = 'operator-local';
 const stamp = () => new Date().toISOString();
 
-class HttpError extends Error {
-  constructor(status, code, message) { super(message); this.status=status; this.code=code; }
-}
-const bad = (message, code='INVALID_INPUT') => { throw new HttpError(400,code,message); };
-const conflict = (message,code='CONFLICT') => { throw new HttpError(409,code,message); };
-const missing = (what) => { throw new HttpError(404,'NOT_FOUND', `${what} não encontrado`); };
-const safeCents = (v, allowZero=true) => Number.isSafeInteger(v) && v>= (allowZero ? 0:1);
-const requireCents = (v,label='Valor',zero=true) => { if(!safeCents(v,zero)) bad(`${label} inválido`); return v; };
-const requireString = (v,label,max=120) => { if(typeof v!=='string' || !v.trim() || v.length>max) bad(`${label} inválido`); return v.trim(); };
-const canonical = (x) => Array.isArray(x) ? x.map(canonical) : x && typeof x==='object' ? Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])) : x;
-const digest = (x) => createHash('sha256').update(JSON.stringify(canonical(x))).digest('hex');
-
-function databaseOrder(db, id) {
-  const row=db.prepare('SELECT * FROM sales_order WHERE id=?').get(id);
-  if (!row) missing('Pedido');
-  const lines=db.prepare('SELECT id,product_id AS productId,product_name_snapshot AS productName,unit_price_cents AS unitPriceCents,quantity,note_snapshot AS note FROM order_line WHERE order_id=? ORDER BY rowid').all(id);
-  const payments=db.prepare('SELECT id,method,amount_cents AS amountCents,state,created_at AS createdAt FROM payment WHERE order_id=? ORDER BY rowid').all(id);
-  for(const line of lines){
-    line.modifiers=db.prepare('SELECT name_snapshot AS name,price_cents_snapshot AS priceCents FROM order_line_modifier WHERE line_id=?').all(line.id);
-    line.comboComponents=db.prepare('SELECT product_id AS productId,product_name_snapshot AS productName,quantity FROM order_line_combo_item WHERE line_id=? ORDER BY rowid').all(line.id);
-  }
-  const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
-  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,lines,payments,refunded,totalCents:0};
-  order.totalCents=orderTotalCents(order);
-  return order;
-}
-function audit(db,aggregateId,action,payload={},currentActor=actorId) {
-  db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
-    .run(randomUUID(),aggregateId,action,currentActor,JSON.stringify(payload),stamp());
-}
-function transact(db, route, body, handler, status=200) {
-  const commandId = requireString(body.commandId,'Identificador do comando',128);
-  if (!/^[a-zA-Z0-9_-]{3,128}$/.test(commandId)) bad('Identificador do comando inválido');
-  const hash = digest({route,body});
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const previous=db.prepare('SELECT request_hash,response_json FROM command_receipt WHERE command_id=?').get(commandId);
-    if (previous) {
-      if(previous.request_hash!==hash) conflict('Identificador reutilizado com dados diferentes','IDEMPOTENCY_CONFLICT');
-      const result=JSON.parse(previous.response_json);db.exec('COMMIT');return result;
-    }
-    const data=handler();
-    const response={status,body:data};
-    db.prepare('INSERT INTO command_receipt(command_id,request_hash,response_json,created_at) VALUES (?,?,?,?)')
-      .run(commandId,hash,JSON.stringify(response),stamp());
-    db.exec('COMMIT');return response;
-  } catch(e) { db.exec('ROLLBACK');throw e; }
-}
-function assertRevision(order, revision) {
-  if (!Number.isSafeInteger(revision)||revision<0) bad('Revisão obrigatória');
-  if (order.revision !== revision) conflict('Pedido alterado em outro terminal','REVISION_CONFLICT');
-}
-function writeOrder(db,order) {
-  db.prepare('UPDATE sales_order SET status=?,revision=?,closed_at=? WHERE id=?')
-    .run(order.status,order.revision,order.status==='CLOSED'?stamp():null,order.id);
-}
 function cashSession(db) {
   return db.prepare("SELECT * FROM cash_session WHERE terminal_id='t-local' AND status='OPEN'").get();
 }
@@ -351,8 +298,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe};
-        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h);
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe};
+        const special=purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
         if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
@@ -380,105 +327,6 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             db.prepare('UPDATE menu_product SET name=?,price_cents=?,category_id=?,active=?,barcode=? WHERE id=?').run(name,priceCents,categoryId,active,barcode,id);
             auditForRequest(db,id,'PRODUCT_UPDATED',{name,priceCents,categoryId,active,barcode});
             return {product:{id,name,priceCents,categoryId,active,barcode}};
-          });
-        } else if(method==='POST'&&route==='/api/orders') {
-          out=transactWithEvents(db,route,body,()=>{
-            if(body.serviceMode==='table') {
-              if(!body.tableId)bad('Mesa obrigatória');
-              if(!db.prepare("SELECT 1 FROM service_table WHERE id=? AND restaurant_id='r-local'").get(body.tableId))missing('Mesa');
-              if(db.prepare("SELECT 1 FROM sales_order WHERE service_table_id=? AND status IN ('DRAFT','OPEN')").get(body.tableId))conflict('Mesa ocupada','TABLE_OCCUPIED');
-            } else if(body.tableId!==undefined)bad('Mesa apenas para atendimento em mesa');
-            const order=createOrder({id:randomUUID(),serviceMode:body.serviceMode,createdAt:stamp()});
-            db.prepare('INSERT INTO sales_order(id,restaurant_id,terminal_id,service_table_id,service_mode,status,revision,created_at) VALUES(?,?,?,?,?,?,?,?)')
-              .run(order.id,'r-local','t-local',body.serviceMode==='table'?body.tableId:null,order.serviceMode,order.status,order.revision,order.createdAt);
-            auditForRequest(db,order.id,'ORDER_CREATED',{serviceMode:order.serviceMode});
-            return {order:databaseOrder(db,order.id)};
-          },201);
-        } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/lines$/)) {
-          const id=route.split('/')[3];
-          out=transactWithEvents(db,route,body,()=>{
-            const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
-            const note=body.note===undefined?'':typeof body.note==='string'?body.note.trim():null;
-            if(note===null||note.length>240)bad('Observação inválida');
-            const ids=body.modifierIds??[];
-            if(!Array.isArray(ids)||ids.length>10||new Set(ids).size!==ids.length)bad('Adicionais inválidos');
-            const modifiers=[];let extraCents=0;
-            for(const modifierId of ids) {
-              if(typeof modifierId!=='string')bad('Adicional inválido');
-              const mod=db.prepare('SELECT * FROM product_modifier WHERE id=? AND product_id=? AND active=1').get(modifierId,product.id);
-              if(!mod)bad('Adicional indisponível para este produto');
-              extraCents+=mod.price_cents;if(!safeCents(extraCents))bad('Adicionais excedem limite seguro');
-              modifiers.push(mod);
-            }
-            const unitPriceCents=product.price_cents+extraCents;if(!safeCents(unitPriceCents))bad('Preço excede limite seguro');
-            const next=addOrderLine(order,{id:randomUUID(),productId:product.id,productName:product.name,unitPriceCents,quantity:body.quantity});
-            const line=next.lines.at(-1);
-            db.prepare('INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES (?,?,?,?,?,?)').run(line.id,id,line.productId,line.productName,line.unitPriceCents,line.quantity);
-            db.prepare('UPDATE order_line SET note_snapshot=? WHERE id=?').run(note,line.id);
-            if(product.is_combo){
-              const items=db.prepare('SELECT c.product_id AS productId,c.quantity,p.name FROM menu_combo_item c JOIN menu_product p ON p.id=c.product_id WHERE c.combo_id=?').all(product.id);
-              if(!items.length)conflict('Combo sem componentes cadastrados');
-              const save=db.prepare('INSERT INTO order_line_combo_item(id,line_id,product_id,product_name_snapshot,quantity) VALUES(?,?,?,?,?)');
-              for(const item of items)save.run(randomUUID(),line.id,item.productId,item.name,item.quantity);
-            }
-            snapshotLineRecipe(db,line.id,product.id);
-            for(const mod of modifiers)db.prepare('INSERT INTO order_line_modifier(id,line_id,modifier_id,name_snapshot,price_cents_snapshot) VALUES (?,?,?,?,?)').run(randomUUID(),line.id,mod.id,mod.name,mod.price_cents);
-            writeOrder(db,next);
-            if(next.status==='OPEN')dispatchKitchenTickets(db,id,stamp);
-            auditForRequest(db,id,'ORDER_ITEM_ADDED',{...line,modifierIds:ids});
-            return {order:databaseOrder(db,id)};
-          });
-        } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/confirm$/)) {
-          const id=route.split('/')[3];
-          out=transactWithEvents(db,route,body,()=>{
-            const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const next=confirmOrder(order);writeOrder(db,next);dispatchKitchenTickets(db,id,stamp);auditForRequest(db,id,'ORDER_CONFIRMED');return {order:databaseOrder(db,id)};
-          });
-        } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/close$/)) {
-          const id=route.split('/')[3];
-          out=transactWithEvents(db,route,body,()=>{
-            const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
-            const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
-            const payments=body.payments;if(!Array.isArray(payments)||payments.length===0||payments.length>10)bad('Pagamentos inválidos');
-            let amount=0,change=0;
-            for(const p of payments) {
-              if(!['cash','pix','credit','debit','other'].includes(p.method))bad('Meio de pagamento inválido');
-              requireCents(p.amountCents,'Pagamento',false);
-              if(p.method==='cash') {
-                requireCents(p.tenderedCents??p.amountCents,'Valor recebido');
-                if((p.tenderedCents??p.amountCents)<p.amountCents)bad('Dinheiro recebido inferior ao pagamento');
-                change+= (p.tenderedCents??p.amountCents)-p.amountCents;
-              } else if(p.tenderedCents!==undefined) bad('Troco somente para dinheiro');
-              amount+=p.amountCents;
-              if(!safeCents(amount)||!safeCents(change))bad('Valor excedeu limite seguro');
-            }
-            let next;try{next=closeOrder(order,amount);}catch(e){bad(e.message);}
-            const stock=consumeStockForOrder(db,id,requestActor,conflict);
-            for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id) VALUES(?,?,?,?,?,?,?)')
-              .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id);
-            writeOrder(db,next);
-            db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
-              .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
-            auditForRequest(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents});
-            return {order:databaseOrder(db,id),changeCents:change};
-          });
-        } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/cancel$/)) {
-          const id=route.split('/')[3];
-          out=transactWithEvents(db,route,body,()=>{
-            const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
-            const reason=requireString(body.reason,'Motivo do cancelamento',240);
-            // Após confirmar, só supervisor local ou gerente LAN pode cancelar.
-            if(order.status==='OPEN'&&requestRole!=='admin'&&role!=='manager')
-              throw new HttpError(403,'SUPERVISOR_REQUIRED','Cancelamento de comanda confirmada exige supervisor');
-            const production=db.prepare("SELECT 1 FROM kitchen_ticket WHERE order_id=? AND status IN ('PREPARING','READY','SERVED') LIMIT 1").get(id);
-            if(production)conflict('Produção já iniciada: faça o procedimento gerencial de ocorrência, sem apagar a comanda','KITCHEN_ALREADY_STARTED');
-            if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))
-              conflict('Comanda possui pagamento registrado; utilize o fluxo financeiro de devolução','ORDER_HAS_PAYMENT');
-            const next=cancelOrder(order);writeOrder(db,next);
-            db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status NOT IN ('SERVED','CANCELLED')").run(stamp(),id);
-            auditForRequest(db,id,'ORDER_CANCELLED',{reason});return {order:databaseOrder(db,id)};
           });
         } else if(method==='POST'&&route==='/api/printer') {
           out=transactWithEvents(db,route,body,()=>{
