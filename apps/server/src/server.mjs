@@ -156,6 +156,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
         }
         if(route.startsWith('/api/public/')){
+          const qrPage=publicTableRead(db,method,route);
+          if(qrPage)return response(res,qrPage.status,qrPage.body);
+          if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
+            const payload=await readJson(req);
+            const out=publicTableSubmit(db,route,payload,{stamp,databaseOrder,snapshotLineRecipe,
+              audit:(db,id,kind,details)=>audit(db,id,kind,details,'qr-guest'),notifyKitchen});
+            return response(res,out.status,out.body);
+          }
           if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio digital desativado'});
           const found=publicRead(db,method,route);
           if(found)return response(res,found.status,found.body);
@@ -360,7 +368,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           forbidden:(message,code='FORBIDDEN')=>{throw new HttpError(403,code,message);},
           supervisor:requestRole==='admin'||role==='manager'};
         const special=partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
-        if(special){out=special;} else if(method==='POST'&&route==='/api/products') {
+        if(special){
+          out=special;
+          if(method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route)&&out.body?.url){
+            const qrModule=await import('qr');
+            out={...out,body:{...out.body,qrSvg:qrModule.default(out.body.url,'svg',{ecc:'medium',border:3,scale:7})}};
+          }
+        } else if(method==='POST'&&route==='/api/products') {
           out=transactWithEvents(db,route,body,()=>{
             const name=requireString(body.name,'Nome do produto');
             const priceCents=requireCents(body.priceCents,'Preço');
@@ -406,14 +420,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           });
         } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
           const id=route.split('/')[4];
-          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind='PRINT_RECEIPT'").get(id);if(!job)missing('Impressão');
+          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);if(!job)missing('Impressão');
           if(job.status==='DONE'||sendingPrintJobs.has(id)) conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
-          const printer=db.prepare("SELECT * FROM printer_profile WHERE id='default' AND enabled=1").get();
+          const jobPayload=JSON.parse(job.payload_json);
+          const profileId=jobPayload.profileId??'default';
+          const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(profileId);
           if(!printer)conflict('Impressora não configurada');
           // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
           sendingPrintJobs.add(id);
           try {
-            const bytes=receiptBytes(JSON.parse(job.payload_json));
+            const bytes=receiptBytes(jobPayload);
             if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
             else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
             else await transmit(printer.host,printer.port,bytes);
@@ -456,7 +472,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       // Somente portal público do cliente e recursos de atualização dos PWAs antigos.
       // As páginas operacionais clássicas e scripts administrativos não são mais servidos.
       const file=route.slice(1);
-      if(!['menu.html','menu.js','menu.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
+      if(!['menu.html','menu.js','menu.css','table.html','table.js','table.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
         return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';
@@ -486,7 +502,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(parsed.host!==req.headers.host||!['http:','https:'].includes(parsed.protocol))
           throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
       }
-      if(method==='GET'&&['/menu.html','/menu.js','/menu.css'].includes(route)){
+      if(method==='GET'&&['/menu.html','/menu.js','/menu.css','/table.html','/table.js','/table.css'].includes(route)){
         const kind=route.endsWith('.html')?'text/html':route.endsWith('.js')?'text/javascript':'text/css';
         res.writeHead(200,{'content-type':kind+'; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','cross-origin-resource-policy':'same-origin',
           'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"});
@@ -495,6 +511,14 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       if(licenseControl.required&&method!=='GET'&&!(await licenseControl.status()).active){
         req.resume();res.shouldKeepAlive=false;
         throw new HttpError(402,'LICENSE_REQUIRED','Avaliação comercial encerrada: novos pedidos estão indisponíveis. Consulte os dados existentes no host.');
+      }
+      const tablePage=publicTableRead(db,method,route);
+      if(tablePage)return response(res,tablePage.status,tablePage.body);
+      if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
+        const payload=await readJson(req);
+        const out=publicTableSubmit(db,route,payload,{stamp,databaseOrder,snapshotLineRecipe,
+          audit:(db,id,kind,details)=>audit(db,id,kind,details,'qr-guest'),notifyKitchen});
+        return response(res,out.status,out.body);
       }
       if(!isPublicEnabled())return response(res,404,{code:'PUBLIC_MENU_DISABLED',message:'Cardápio indisponível'});
       const found=publicRead(db,method,route);
