@@ -1,4 +1,5 @@
 import {recordReceivedBatch,allocateFefo} from './retail-supply.mjs';
+import {businessDay} from './business-day.mjs';
 /** Single-writer inventory ledger; no parallel balance/cost store. Quantities: thousandths of g/ml/unit. */
 import {randomUUID} from 'node:crypto';
 const isInteger=x=>Number.isSafeInteger(x);
@@ -77,7 +78,7 @@ export function consumeStockForOrder(db,orderId,actor,conflict,{allowShortage=fa
       const batches=db.prepare('SELECT remaining_milli AS remainingMilli,expiry_date AS expiryDate FROM ingredient_batch WHERE ingredient_id=? AND remaining_milli>0').all(id);
       const tracked=batches.reduce((n,row)=>safeAdd(n,row.remainingMilli),0);
       if(tracked>ing.on_hand_milli)throw new Error('Divergência entre lotes e saldo de estoque');
-      const today=new Date().toISOString().slice(0,10);
+      const today=businessDay();
       const usable=ing.on_hand_milli-tracked+batches.filter(row=>row.expiryDate>=today).reduce((n,row)=>safeAdd(n,row.remainingMilli),0);
       consume=Math.min(qty,usable);
     }
@@ -125,7 +126,7 @@ export function inventoryRead(db,method,route,params,h){
     const date=v=>{if(v===null||v==='')return null;if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return null;const date=new Date(v+'T00:00:00.000Z');return Number.isFinite(date.valueOf())&&date.toISOString().slice(0,10)===v?v:null;};
     const start=date(from),end=date(to);
     if((from&&start===null)||(to&&end===null)||(start&&end&&start>end))h.bad('Período inválido');
-    const orders=db.prepare("SELECT o.id,o.closed_at AS closedAt,r.amount_cents AS refundCents FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id WHERE o.status='CLOSED' AND (? IS NULL OR substr(o.closed_at,1,10)>=?) AND (? IS NULL OR substr(o.closed_at,1,10)<=?)").all(start,start,end,end);
+    const orders=db.prepare("SELECT o.id,o.closed_at AS closedAt,r.amount_cents AS refundCents FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id WHERE o.status='CLOSED' AND (? IS NULL OR date(o.closed_at,'-3 hours')>=?) AND (? IS NULL OR date(o.closed_at,'-3 hours')<=?)").all(start,start,end,end);
     const lines=db.prepare('SELECT COALESCE(SUM(unit_price_cents*quantity),0) AS gross FROM order_line WHERE order_id=? AND cancelled_at IS NULL');
     const cogs=db.prepare("SELECT COALESCE(SUM(-value_delta_cents),0) AS cost FROM stock_movement WHERE source_order_id=? AND kind='SALE'");
     let grossSalesCents=0,refundedCents=0,cogsCents=0;
