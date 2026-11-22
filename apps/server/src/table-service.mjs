@@ -33,13 +33,20 @@ export function tableWrite(db,method,route,body,h){
   });
   const openTable=route.match(/^\/api\/tables\/([^/]+)\/open$/);
   if(method==='POST'&&openTable)return transact(db,route,body,()=>{
+    const assignWaiterIfEmpty=orderId=>{
+      if(!h.deviceId)return;
+      const assigned=db.prepare('INSERT OR IGNORE INTO order_waiter(order_id,waiter_device_id,assigned_at) VALUES(?,?,?)')
+       .run(orderId,h.deviceId,stamp());
+      if(assigned.changes) audit(db,orderId,'ATTENDANCE_WAITER_ASSIGNED',{waiterDeviceId:h.deviceId,origin:'TABLE_OPEN'});
+    };
     const tableId=openTable[1];if(!db.prepare("SELECT 1 FROM service_table WHERE id=? AND restaurant_id='r-local'").get(tableId))missing('Mesa');
     const current=db.prepare("SELECT id FROM sales_order WHERE service_table_id=? AND status IN ('DRAFT','OPEN')").get(tableId);
-    if(current)return {order:databaseOrder(db,current.id),reused:true};
+    if(current){assignWaiterIfEmpty(current.id);return {order:databaseOrder(db,current.id),reused:true};}
     const order=createOrder({id:randomUUID(),serviceMode:'table',createdAt:stamp()});
     db.prepare('INSERT INTO sales_order(id,restaurant_id,terminal_id,service_table_id,service_mode,status,revision,created_at) VALUES(?,?,?,?,?,?,?,?)')
       .run(order.id,'r-local','t-local',tableId,'table',order.status,order.revision,order.createdAt);
     audit(db,order.id,'ORDER_CREATED',{serviceMode:'table',tableId});
+    assignWaiterIfEmpty(order.id);
     return {order:databaseOrder(db,order.id),reused:false};
   },201);
  const move=route.match(/^\/api\/orders\/([^/]+)\/transfer-table$/);
