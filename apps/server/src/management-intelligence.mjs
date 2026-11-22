@@ -204,7 +204,7 @@ function replenishment(db,params){
   warning:'Sugestões não geram pedidos de compra; confirme prazo, estoque utilizável e validade.'}};
 }
 
-function consolidated(db,params){
+function consolidated(db,params,liveSummaries=[],syncIntervalMs=60000){
  const period=range(params),now=new Date(),all=[];
  const localId=db.prepare("SELECT unit_id AS unitId FROM installation_identity WHERE id='local'").get().unitId;
  all.push({unitId:localId,local:true,revision:db.prepare("SELECT revision FROM multiunit_export_state WHERE id='local'").get()?.revision||0,
@@ -214,6 +214,15 @@ function consolidated(db,params){
   const packet=JSON.parse(peer.packetJson);
   if(packet.unitId!==peer.unitId||!Array.isArray(packet.daily))throw Error('Snapshot de unidade inconsistente');
   all.push({unitId:peer.unitId,local:false,revision:peer.revision,importedAt:peer.importedAt,daily:packet.daily});
+ }
+ for(const summary of liveSummaries){
+  if(summary.unitId===localId||!Array.isArray(summary.daily)||!summary.receivedAt)continue;
+  const position=all.findIndex(u=>u.unitId===summary.unitId);
+  const existing=position>=0?all[position]:null;
+  if(existing?.importedAt&&summary.receivedAt<existing.importedAt)continue;
+  const candidate={unitId:summary.unitId,local:false,revision:0,importedAt:summary.receivedAt,
+   daily:summary.daily,source:'https-lan-read-only',generatedAt:summary.generatedAt};
+  if(position>=0)all[position]=candidate;else all.push(candidate);
  }
  const totals=empty(),trend=new Map();
  const units=all.map(u=>{
@@ -226,23 +235,27 @@ function consolidated(db,params){
   }
   addRow(totals,part);
   const age=u.local?0:Math.max(0,Math.round((now.getTime()-Date.parse(u.importedAt))/60000));
-  return {unitId:u.unitId,local:u.local,revision:u.revision,importedAt:u.importedAt,
-   ageMinutes:Number.isFinite(age)?age:null,stale:!u.local&&(!Number.isFinite(age)||age>1440),
-   latestDay:u.daily.at(-1)?.day??null,totals:part,source:u.local?'local-live':'manual-validated-snapshot'};
+  const live=u.source==='https-lan-read-only';
+  const limit=live?Math.max(3,Math.ceil(3*syncIntervalMs/60000)):1440;
+  return {unitId:u.unitId,local:u.local,revision:u.revision,importedAt:u.importedAt,generatedAt:u.generatedAt??null,
+   ageMinutes:Number.isFinite(age)?age:null,stale:!u.local&&(!Number.isFinite(age)||age>limit),
+   latestDay:u.daily.at(-1)?.day??null,totals:part,source:u.local?'local-live':u.source||'manual-validated-snapshot'};
  });
  return {status:200,body:{period,units,totals:{...totals,grossMarginCents:totals.netSalesCents-totals.cogsCents},
   byDay:[...trend].sort(([a],[b])=>a.localeCompare(b)).map(([day,values])=>({day,...values})),
-  mode:'MANUAL_OPT_IN',realTime:false,operationalReplication:false,generatedAt:now.toISOString(),
-  warning:'Unidades remotas são snapshots importados, não leituras ao vivo. Exportar e importar novas revisões para atualizar.'}};
+  mode:liveSummaries.length?'HTTPS_READ_ONLY_OPT_IN':'MANUAL_OPT_IN',realTime:false,
+  liveRefreshAvailable:liveSummaries.length>0,operationalReplication:false,generatedAt:now.toISOString(),
+  warning:liveSummaries.length?'Unidades HTTPS são amostras periódicas, não transações em tempo real; confira o frescor.'
+    :'Unidades remotas são snapshots importados; atualize por exportação/importação ou habilite consulta HTTPS privada.'}};
 }
 
-export function businessIntelligenceRead(db,method,route,params){
+export function businessIntelligenceRead(db,method,route,params,peerPoller=null){
  if(method!=='GET'||!route.startsWith('/api/bi/'))return null;
  try{
   if(route==='/api/bi/dashboard')return dashboard(db,params);
   if(route==='/api/bi/forecast')return forecast(db,params);
   if(route==='/api/bi/replenishment')return replenishment(db,params);
-  if(route==='/api/bi/consolidated')return consolidated(db,params);
+  if(route==='/api/bi/consolidated')return consolidated(db,params,peerPoller?.liveSummaries?.()??[],peerPoller?.status?.().intervalMs??60000);
   return null;
  }catch(error){return {status:400,body:{code:'BI_INVALID_REQUEST',message:error.message}};}
 }
