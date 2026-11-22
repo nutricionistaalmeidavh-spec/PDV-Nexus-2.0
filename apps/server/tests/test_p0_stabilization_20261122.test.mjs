@@ -227,3 +227,26 @@ test('P0: host despacha automaticamente comprovante pendente após configurar im
  assert.match(Buffer.concat(chunks).toString('ascii'),/NAO FISCAL/);
  assert.equal(await app.printPendingOnce(),null,'não reimprimir trabalho concluído');
 });
+
+test('P0: erro inesperado do financeiro responde 500 genérico sem vazar ID interno',async t=>{
+ const {createApp}=await import('../src/server.mjs');
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-internal-'));
+ const location=path.join(folder,'nexus.db');
+ const db=openDatabase(location);
+ db.prepare("INSERT INTO menu_product(id,category_id,name,price_cents) VALUES('private-p','c-default','Venda de teste',500)").run();
+ db.prepare("INSERT INTO sales_order(id,restaurant_id,terminal_id,service_mode,status,created_at,closed_at) VALUES('internal-order-secret','r-local','t-local','counter','CLOSED','2026-11-22T12:00:00.000Z','2026-11-22T12:30:00.000Z')").run();
+ db.prepare("INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES('private-line','internal-order-secret','private-p','Venda de teste',500,1)").run();
+ db.close();
+ const app=createApp({dataPath:location});
+ const origin=await app.listen({port:0});
+ t.after(async()=>{await app.close();fs.rmSync(folder,{force:true,recursive:true});});
+ const auth=await fetch(origin+'/api/auth/setup',{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify({username:'admin',password:'senhaForteErro2026'})});
+ assert.equal(auth.status,201);
+ const cookie=auth.headers.get('set-cookie').split(';')[0];
+ const res=await fetch(origin+'/api/reports/financial',{headers:{cookie}});
+ const body=await res.json();
+ assert.equal(res.status,500);
+ assert.equal(body.code,'INTERNAL_ERROR');
+ assert.equal(JSON.stringify(body).includes('internal-order-secret'),false);
+});
