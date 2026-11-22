@@ -193,3 +193,37 @@ test('P0: entrega não vira entregue sem pagamento e cancelamento encerra pedido
   const list=(await request('GET','/api/delivery/orders')).body.orders;
   assert.equal(list.find(x=>x.orderId===order.id).paymentStatus,'PAID');
 });
+
+test('P0: host despacha automaticamente comprovante pendente após configurar impressora local TCP',async t=>{
+ const net=await import('node:net');
+ const {createApp}=await import('../src/server.mjs');
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-printer-'));
+ const chunks=[];
+ const tcp=net.createServer(socket=>socket.on('data',data=>chunks.push(data)));
+ await new Promise(resolve=>tcp.listen(0,'127.0.0.1',resolve));
+ const tcpPort=tcp.address().port;
+ const app=createApp({dataPath:path.join(folder,'nexus.db')});
+ const origin=await app.listen({port:0});
+ t.after(async()=>{await app.close();await new Promise(resolve=>tcp.close(resolve));fs.rmSync(folder,{force:true,recursive:true});});
+ let cookie='';
+ const req=async(method,route,body)=>{
+  const response=await fetch(origin+route,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(cookie?{cookie}:{})},
+   body:body?JSON.stringify(body):undefined});
+  const session=response.headers.get('set-cookie');if(session)cookie=session.split(';')[0];
+  return {status:response.status,body:await response.json()};
+ };
+ assert.equal((await req('POST','/api/auth/setup',{username:'admin',password:'senhaImpressaoSegura2026'})).status,201);
+ const printer=await req('POST','/api/printer',{commandId:'printer-p0-auto',transport:'tcp',host:'127.0.0.1',port:tcpPort});
+ assert.equal(printer.status,200,JSON.stringify(printer.body));
+ assert.equal((await req('POST','/api/cash/open',{commandId:'printer-cash',openingCents:0})).status,201);
+ const product=(await req('POST','/api/products',{commandId:'printer-product',name:'Cafe',priceCents:500})).body.product;
+ const order=(await req('POST','/api/orders',{commandId:'printer-order',serviceMode:'counter'})).body.order;
+ await req('POST','/api/orders/'+order.id+'/lines',{commandId:'printer-line',expectedRevision:0,productId:product.id,quantity:1});
+ await req('POST','/api/orders/'+order.id+'/confirm',{commandId:'printer-confirm',expectedRevision:1});
+ assert.equal((await req('POST','/api/orders/'+order.id+'/close',{commandId:'printer-close',expectedRevision:2,payments:[{method:'pix',amountCents:500}]})).status,200);
+ const printed=await app.printPendingOnce();
+ assert.equal(printed.status,200,JSON.stringify(printed));
+ assert.equal((await req('GET','/api/print/jobs')).body.jobs[0].status,'DONE');
+ assert.match(Buffer.concat(chunks).toString('ascii'),/NAO FISCAL/);
+ assert.equal(await app.printPendingOnce(),null,'não reimprimir trabalho concluído');
+});
