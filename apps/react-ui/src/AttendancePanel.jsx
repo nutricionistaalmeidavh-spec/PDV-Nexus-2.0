@@ -79,3 +79,32 @@ export function AttendancePanel({api,mode,pairedRole}){
   {analytics&&<Text size="xs" c="dimmed" mt="md">Indicadores canônicos: {analytics.paidPendingTickets} ticket(s) pagos ainda não entregues · {analytics.deliveredClaims} entrega(s) registrada(s) pelo painel.</Text>}
  </section>;
 }
+
+/** Aviso de pedido pronto na própria tela do garçom: apenas tickets sob sua responsabilidade. */
+export function WaiterReadyAlerts({api,onOpen}){
+ const [mine,setMine]=useState(null),[tickets,setTickets]=useState([]);
+ useEffect(()=>{
+  let live=true,deviceId='';
+  const refresh=async()=>{
+   try{
+    if(!deviceId){const identity=await api('/api/attendance/me');deviceId=identity.waiterDeviceId||'';}
+    if(!deviceId)return;
+    const dashboard=await api('/api/attendance/overview');
+    if(live){setMine(deviceId);setTickets((dashboard.readyAssigned||[]).filter(t=>
+      t.claimedBy===deviceId||(!t.claimedBy&&t.waiterDeviceId===deviceId)));}
+   }catch{}
+  };
+  void refresh();
+  const interval=setInterval(()=>void refresh(),8000);
+  return()=>{live=false;clearInterval(interval)};
+ },[api]);
+ if(!mine||!tickets.length)return null;
+ return <Paper withBorder radius="md" p="md" style={{borderColor:'#328653'}}>
+  <Group justify="space-between" align="center">
+   <div><Text fw={800} role="status">{tickets.length} pedido(s) pronto(s) para entrega</Text>
+    <Text size="sm">Atendimentos: {tickets.map(t=>'#'+t.orderId.slice(-8)).join(', ')}</Text>
+   </div>
+   <Button onClick={onOpen}>Ver no Painel Central</Button>
+  </Group>
+ </Paper>;
+}
