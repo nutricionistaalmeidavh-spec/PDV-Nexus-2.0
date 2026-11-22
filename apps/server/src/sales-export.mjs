@@ -32,8 +32,8 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
     "r.reason AS refundReason,r.created_at AS refundCreatedAt "+
     "FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id "+
     "WHERE o.status='CLOSED' AND o.closed_at IS NOT NULL "+
-    "AND (? IS NULL OR substr(o.closed_at,1,10)>=?) "+
-    "AND (? IS NULL OR substr(o.closed_at,1,10)<=?) "+
+    "AND (? IS NULL OR date(o.closed_at,'-3 hours')>=?) "+
+    "AND (? IS NULL OR date(o.closed_at,'-3 hours')<=?) "+
     "ORDER BY o.closed_at,o.id LIMIT ?"
   ).all(from,from,to,to,MAX_ORDERS+1);
   if(orders.length>MAX_ORDERS)throw new Error('Muitas vendas para exportar. Selecione um periodo menor.');
