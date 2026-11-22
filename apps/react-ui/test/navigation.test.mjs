@@ -18,4 +18,6 @@ test('P3: navegação do caixa limita gestão; dispositivo pareado permanece iso
  assert.deepEqual(waiter,['garcom','atendimento','divisao']);
  const admin=availableNavLinks('live','',{role:'admin'}).map(([id])=>id);
  assert.ok(admin.includes('financeiro'));assert.ok(admin.includes('usuarios'));
+ assert.ok(admin.includes('inteligencia'));
+ assert.ok(!cashier.includes('inteligencia'));
 });
