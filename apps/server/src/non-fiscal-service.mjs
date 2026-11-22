@@ -9,9 +9,21 @@ export function receiptBytes(payload) {
     const suffix='  '+subtotal;
     return (`${l.quantity}x ${clean(l.productName)}`).slice(0,Math.max(0,width-suffix.length))+suffix;
   };
+  const methods={cash:'Dinheiro',pix:'Pix',credit:'Credito',debit:'Debito',other:'Outro'};
+  const payments=Array.isArray(payload.payments)?payload.payments.filter(p=>
+    methods[p?.method]&&Number.isSafeInteger(p.amountCents)&&p.amountCents>=0):[];
+  let issuedAt=null;
+  if(payload.issuedAt&&Number.isFinite(Date.parse(payload.issuedAt))){
+    issuedAt=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',
+      year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(payload.issuedAt));
+  }
   const titles={PREBILL:'PRE-CONTA - NAO FISCAL',KITCHEN:'TICKET DE COZINHA - NAO FISCAL',CASH_CLOSING:'FECHAMENTO DE CAIXA - NAO FISCAL'};
   const title=titles[payload.kind]??'RECIBO DE PEDIDO - NAO FISCAL';
-  const lines=['PDV NEXUS 2.0',title,'',`${payload.kind==='CASH_CLOSING'?'Sessao':'Pedido'} ${payload.kind==='CASH_CLOSING'?payload.id.slice(0,8):Number.isSafeInteger(payload.orderNumber)&&payload.orderNumber>0?String(payload.orderNumber).padStart(6,'0'):payload.id.slice(0,8)}`,
+  const lines=['PDV NEXUS 2.0',
+    ...(payload.restaurantName? [clean(payload.restaurantName).slice(0,width)]:[]),
+    title,'',
+    ...(issuedAt?['Data/Hora: '+clean(issuedAt)]:[]),
+    ...(payload.tableLabel?['Mesa: '+clean(payload.tableLabel).slice(0,width-6)]:[]),`${payload.kind==='CASH_CLOSING'?'Sessao':'Pedido'} ${payload.kind==='CASH_CLOSING'?payload.id.slice(0,8):Number.isSafeInteger(payload.orderNumber)&&payload.orderNumber>0?String(payload.orderNumber).padStart(6,'0'):payload.id.slice(0,8)}`,
     ...(Number.isSafeInteger(payload.orderNumber)&&payload.orderNumber>0?['Ref '+payload.id.slice(0,8)]:[]),
     ...(payload.stationName?['Setor: '+clean(payload.stationName).slice(0,30)]:[]),
     '-'.repeat(width),
@@ -28,7 +40,12 @@ export function receiptBytes(payload) {
       'Esperado R$ '+(payload.expectedCents/100).toFixed(2),
       'Contado R$ '+(payload.countedCents/100).toFixed(2),
       'Diferenca R$ '+(payload.differenceCents/100).toFixed(2)
-    ]:[`TOTAL R$ ${(payload.totalCents/100).toFixed(2)}`]),
+    ]:[
+      `TOTAL R$ ${(payload.totalCents/100).toFixed(2)}`,
+      ...payments.map(p=>`${methods[p.method]}: R$ ${(p.amountCents/100).toFixed(2)}`),
+      ...(Number.isSafeInteger(payload.changeCents)&&payload.changeCents>0?
+        [`Troco R$ ${(payload.changeCents/100).toFixed(2)}`]:[])
+    ]),
     '','NAO SUBSTITUI DOCUMENTO FISCAL',''];
   return Buffer.concat([Buffer.from([0x1b,0x40]),Buffer.from(lines.join('\n')+'\n\n\n','ascii'),Buffer.from([0x1d,0x56,0x01])]);
 }
