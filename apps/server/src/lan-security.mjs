@@ -41,13 +41,14 @@ export function roleAllows(role,method,route) {
     /^\/api\/orders\/[^/]+$/.test(route)||
     /^\/api\/orders\/[^/]+\/line-history$/.test(route)||
     /^\/api\/tables\/[^/]+\/requests$/.test(route)||
-    /^\/api\/products\/[^/]+\/modifiers$/.test(route))) ||
+    /^\/api\/products\/[^/]+\/modifiers$/.test(route)||
+    /^\/api\/pizza\/products\/[^/]+\/config$/.test(route))) ||
     (method==='POST'&&(
       route==='/api/orders'|| /^\/api\/tables\/[^/]+\/open$/.test(route)||
       /^\/api\/orders\/[^/]+\/waiter$/.test(route)||
       /^\/api\/orders\/[^/]+\/reopen-service$/.test(route)||
       /^\/api\/attendance\/tickets\/[^/]+\/(claim|deliver)$/.test(route)||
-      /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)||
+      /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table|pizza-lines)$/.test(route)||
       /^\/api\/orders\/[^/]+\/lines\/[^/]+\/(edit|cancel)$/.test(route)||
       /^\/api\/tables\/[^/]+\/qr$/.test(route)||
       /^\/api\/table-requests\/[^/]+\/(accept|reject)$/.test(route)));
