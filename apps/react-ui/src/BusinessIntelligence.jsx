@@ -167,7 +167,7 @@ export function BusinessIntelligence({api,mode,onOpenUnits}){
   <div className="pageheading">
    <div><p className="eyebrow">GESTÃO / P2</p><h1>BI e planejamento</h1>
     <p className="subtext">Indicadores, projeção de demanda, reposição e visão multiunidade sem serviços externos.</p></div>
-   <Button variant="default" leftSection={<RefreshCw size={16}/>} loading={state.loading} onClick={()=>setRevision(n=>n+1)}>Atualizar</Button>
+   <Button variant="default" leftSection={<RefreshCw size={16}/>} loading={displayed.loading} onClick={()=>setRevision(n=>n+1)}>Atualizar</Button>
   </div>
   <Group gap="xs" mb="md" wrap="wrap">{Object.entries(titles).map(([id,label])=><Button key={id}
    variant={tab===id?'filled':'default'} color={tab===id?'teal':undefined} onClick={()=>setTab(id)}
