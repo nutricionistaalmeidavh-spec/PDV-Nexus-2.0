@@ -15,6 +15,11 @@ export function orderLinesWrite(db,method,route,body,h){
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             if(order.suspended)conflict('Venda suspensa: retome a venda','ORDER_SUSPENDED');
             if(db.prepare('SELECT 1 FROM table_attendance_state WHERE order_id=? AND close_requested_at IS NOT NULL').get(id))conflict('Conta solicitada; reabra o atendimento antes de novos itens','CLOSING_REQUESTED');
+            if(order.tableId&&h.deviceId){
+              const assigned=db.prepare('INSERT OR IGNORE INTO order_waiter(order_id,waiter_device_id,assigned_at) VALUES(?,?,?)')
+               .run(id,h.deviceId,stamp());
+              if(assigned.changes)audit(db,id,'ATTENDANCE_WAITER_ASSIGNED',{waiterDeviceId:h.deviceId,origin:'FIRST_ITEM'});
+            }
             if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Pagamento já iniciado; novos itens exigem outra comanda','PAYMENT_STARTED');
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
             if(product.sale_unit==='kg'||db.prepare('SELECT 1 FROM pizza_product WHERE product_id=?').get(product.id))
