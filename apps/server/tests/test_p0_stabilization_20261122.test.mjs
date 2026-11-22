@@ -102,7 +102,7 @@ test('P0: backup automático validado preserva versões recentes e rotaciona som
   await jobs.runOnce();
   now+=60_001;
   const third=await jobs.runOnce();
-  const autos=fs.readdirSync(path.join(folder,'backups')).filter(x=>x.startsWith('auto-'));
+  const autos=fs.readdirSync(path.join(folder,'backups')).filter(x=>/^auto-\d{13}-[0-9a-f-]{36}\.sqlite$/.test(x));
   assert.equal(autos.length,2);
   assert.equal(fs.existsSync(third),true);
   assert.equal(fs.existsSync(manual),true);
