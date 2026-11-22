@@ -29,9 +29,11 @@ export function kitchenRead(db,method,route,h,params=new URLSearchParams()){
       LEFT JOIN order_waiter ow ON ow.order_id=so.id LEFT JOIN paired_device pd ON pd.id=ow.waiter_device_id
       LEFT JOIN kitchen_delivery_claim dc ON dc.ticket_id=kt.id
       WHERE (kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.change_note IS NOT NULL AND kt.updated_at>=?))
-        AND (? IS NULL OR kt.kitchen_station_id=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString(),params.get('stationId'),params.get('stationId'));
-    for(const ticket of tickets)ticket.paid=!!ticket.paid;
-    return {status:200,body:{tickets}};
+        AND (? IS NULL OR kt.kitchen_station_id=?) ORDER BY CASE kt.status WHEN 'PENDING' THEN 0 WHEN 'PREPARING' THEN 1 ELSE 2 END, kt.created_at DESC, kt.id DESC LIMIT 201`).all(new Date(Date.now()-12*3600*1000).toISOString(),params.get('stationId'),params.get('stationId'));
+    const hasMore=tickets.length>200;
+    const visible=tickets.slice(0,200);
+    for(const ticket of visible)ticket.paid=!!ticket.paid;
+    return {status:200,body:{tickets:visible,hasMore}};
   }
  return null;
 }
