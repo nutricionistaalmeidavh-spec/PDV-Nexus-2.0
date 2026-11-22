@@ -123,7 +123,8 @@ export function PosPaymentModal({order,onClose,onPay,busy,canOverrideStock=false
    })():paymentDraft(total,method,method==='cash'?parseMoney(tendered):0).payments;
    setError('');
    if(overrideStock&&(!canOverrideStock||overrideReason.trim().length<8))throw Error('Informe um motivo de pelo menos 8 caracteres com autorização do supervisor');
-   onPay(payments,overrideStock?overrideReason.trim():null);
+   if(overrideStock)onPay(payments,overrideReason.trim());
+   else onPay(payments);
   }catch(e){setError(asError(e));}
  };
  return <Modal opened onClose={onClose} centered size="lg" radius="lg"
