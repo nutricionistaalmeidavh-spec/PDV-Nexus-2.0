@@ -20,6 +20,7 @@ export function databaseOrder(db, id) {
   order.totalCents=orderTotalCents(order);
   order.waiter=db.prepare(`SELECT ow.waiter_device_id AS deviceId,pd.label FROM order_waiter ow JOIN paired_device pd ON pd.id=ow.waiter_device_id WHERE ow.order_id=?`).get(id)??null;
   order.closeRequested=Boolean(db.prepare('SELECT close_requested_at AS at FROM table_attendance_state WHERE order_id=?').get(id)?.at);
+  order.pendingKitchenTickets=db.prepare("SELECT COUNT(*) AS n FROM kitchen_ticket WHERE order_id=? AND status IN ('PENDING','PREPARING','READY')").get(id).n;
   return order;
 }
 
