@@ -27,6 +27,7 @@ import {PizzeriaSettings,KitchenStationsManager,PartialRefundDialog} from './Res
 import {SaleUnitsConfig} from './SaleUnitsConfig.jsx';
 import {PairDevice} from './PairDevice.jsx';
 import {LicenseOnboarding} from './LicenseOnboarding.jsx';
+import {OperationDialog} from './OperationDialog.jsx';
 import {PairedDevicesPanel} from './PairedDevicesPanel.jsx';
 import {AttendancePanel,WaiterReadyAlerts} from './AttendancePanel.jsx';
 import {TabletAdminPanel} from './TabletAdminPanel.jsx';
@@ -99,20 +100,29 @@ function App(){
   setOrder(result.order);setModal(null);setNotice('Item registrado no pedido.');
  }).catch(()=>{});
  const confirm=()=>run(async()=>{if(!order?.lines?.length)throw Error('Pedido sem itens');if(isDemo){setOrder({...order,status:'OPEN',revision:order.revision+1});setNotice('Pedido confirmado somente na prévia.');return;}const result=await issue(`/api/orders/${order.id}/confirm`,{expectedRevision:order.revision});setOrder(result.order);setNotice('Pedido confirmado no host.');}).catch(()=>{});
- const cancel=()=>{const reason=window.prompt('Motivo do cancelamento (obrigatório):');if(reason===null)return;void run(async()=>{if(!reason.trim())throw Error('Informe o motivo do cancelamento');if(isDemo){setOrder({...order,status:'CANCELLED'});return;}const result=await issue(`/api/orders/${order.id}/cancel`,{expectedRevision:order.revision,reason:reason.trim()});setOrder(result.order);setNotice('Pedido cancelado no host.');}).catch(()=>{});};
+ const cancel=()=>{if(!order)return;setModal({type:'cancel',order});};
  const pay=async(payments,inventoryOverrideReason=null)=>run(async()=>{if(!order||order.status!=='OPEN')throw Error('Confirme o pedido antes do pagamento');if(!session&&!isDemo)throw Error('Abra o caixa para receber pagamento');if(isDemo){const closed={...order,status:'CLOSED'};setOrder(closed);setDoneOrder(closed);setModal(null);setView('concluida');setNotice('Prévia de venda: não houve pagamento real.');return;}const result=await issue(`/api/orders/${order.id}/close`,{expectedRevision:order.revision,payments,...(inventoryOverrideReason?{inventoryOverrideReason}:{})});setOrder(result.order);setDoneOrder(result.order);setModal(null);setView('concluida');setNotice(`Venda gravada · troco ${centsLabel(result.changeCents)}`);await refresh();}).catch(()=>{});
  const openOrder=o=>run(async()=>{if(isDemo){setOrder({...demoOrder(),id:o.id,status:o.status,serviceMode:o.serviceMode,revision:o.revision});setView('venda');return;}const data=await api(`/api/orders/${o.id}`);setOrder(data.order);setView('venda');}).catch(()=>{});
- const refundOrder=o=>{
-   const reason=window.prompt('Motivo da devolução integral (obrigatório):');
-   if(reason===null)return;
-   if(!reason.trim()){setError('Informe o motivo da devolução');return;}
-   const externalRefundConfirmed=window.confirm('Se a venda contém Pix ou cartão, a devolução foi feita e confirmada manualmente? Clique em Cancelar para não afirmar essa confirmação.');
-   if(!window.confirm('Confirmar devolução integral da venda #'+o.id.slice(-8)+'? O registro é auditado e não pode ser repetido.'))return;
-   void run(async()=>{
-     await issue('/api/orders/'+encodeURIComponent(o.id)+'/refund',{reason:reason.trim(),externalRefundConfirmed});
-     setNotice('Devolução integral registrada. A saída financeira foi conciliada pelo host.');
-     await refresh();
-   }).catch(()=>{});
+ const refundOrder=o=>setModal({type:'refund',order:o});
+ const submitOperation=async({reason,externalRefundConfirmed})=>{
+   const target=modal?.order;
+   if(!target)throw Error('Pedido não selecionado');
+   if(modal.type==='cancel'){
+     await run(async()=>{
+       if(isDemo){setOrder({...target,status:'CANCELLED'});return;}
+       const result=await issue(`/api/orders/${target.id}/cancel`,{expectedRevision:target.revision,reason});
+       setOrder(result.order);setNotice('Pedido cancelado no host.');
+       await refresh();
+     });
+   }else if(modal.type==='refund'){
+     await run(async()=>{
+       if(isDemo)throw Error('Devolução exige host local');
+       await issue('/api/orders/'+encodeURIComponent(target.id)+'/refund',{reason,externalRefundConfirmed});
+       setNotice('Devolução integral registrada no host.');
+       await refresh();
+     });
+   }else throw Error('Operação inválida');
+   setModal(null);
  };
  const addCategory=async(name)=>run(async()=>{if(isDemo){setCategories(s=>[...s,{id:`demo-cat-${Date.now()}`,name,active:1}]);setNotice('Categoria criada apenas na prévia.');return;}await issue('/api/categories',{name});await refresh();setNotice('Categoria salva.');});
  const addCatalogProduct=async({name,price,categoryId,barcode})=>run(async()=>{const priceCents=parseMoney(price);if(isDemo){setProducts(s=>[...s,{id:`demo-p-${Date.now()}`,name,priceCents,categoryId,active:1}]);setNotice('Produto criado apenas na prévia.');return;}await issue('/api/products',{name,priceCents,categoryId,barcode:barcode||null});await refresh();setNotice('Produto cadastrado.');});
@@ -189,6 +199,7 @@ function App(){
   {notice&&<div className="notice" role="status"><span>{notice}</span><Button kind="icon" onClick={()=>setNotice('')} aria-label="Dispensar aviso">×</Button></div>}
   {page()}
  </AppShell.Main>
+ {['cancel','refund'].includes(modal?.type)&&<OperationDialog key={modal.order.id+modal.type} type={modal.type} order={modal.order} onClose={()=>setModal(null)} onSubmit={submitOperation} busy={busy}/>}
  {modal?.type==='product'&&<ProductModal product={modal.product} requester={api} demo={isDemo} busy={busy} onClose={()=>setModal(null)} onSubmit={addProduct}/>}
  {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy} canOverrideStock={mode==='live'&&user?.role==='admin'}/>}
  {modal?.type==='refund-items'&&<PartialRefundDialog orderId={modal.orderId} api={api} onClose={()=>setModal(null)} onDone={()=>{setModal(null);void refresh();}}/>}
