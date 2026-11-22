@@ -29,3 +29,9 @@ test('P2: interface de BI mantém quatro abas e consultas read-only independente
  assert.match(source,/\/api\/bi\/replenishment/);
 });
 function requireSource(){return readFileSync(new URL('../src/BusinessIntelligence.jsx',import.meta.url),'utf8');}
+
+test('P2: mudança de aba não deve renderizar resultado da consulta anterior',()=>{
+ const source=readFileSync(new URL('../src/BusinessIntelligence.jsx',import.meta.url),'utf8');
+ assert.match(source,/requestKey/,'cada consulta precisa de chave própria');
+ assert.match(source,/state\.key===requestKey/,'não renderizar dados de outra aba antes de carregar');
+});
