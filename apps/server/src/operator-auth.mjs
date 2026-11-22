@@ -106,7 +106,7 @@ export function allowedOperator(role,method,route){
   if(role!=='cashier')return false;
   if(/^\/api\/auth\//.test(route))return false;
   if(/^\/api\/exports\//.test(route)||route==='/api/purchases'||/^\/api\/purchases\//.test(route))return false;
-  if(/^\/api\/(stock|reports|delivery|system|sync|suppliers)\//.test(route)||route==='/api/suppliers')return false;
+  if(/^\/api\/(bi|stock|reports|delivery|system|sync|suppliers)\//.test(route)||route==='/api/suppliers')return false;
   if(/^\/api\/printer/.test(route)||/^\/api\/print\/jobs\/[^/]+\/send$/.test(route))return false;
   if(/^\/api\/products/.test(route)&&method!=='GET')return false;
   if(/^\/api\/categories/.test(route)&&method!=='GET')return false;
