@@ -217,6 +217,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           requestRole=operator.role;
           if(!allowedOperator(operator.role,method,route))throw new HttpError(403,'OPERATOR_FORBIDDEN','Perfil sem permissao para este comando');
         }
+        if(method==='GET'&&route==='/api/attendance/me')return response(res,200,{waiterDeviceId:requestDeviceId});
         if(method==='GET'&&route==='/api/kitchen/events'){
           res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-cache, no-store, must-revalidate','connection':'keep-alive','x-content-type-options':'nosniff'});
           res.write('retry: 2500\nevent: ready\ndata: {}\n\n');
