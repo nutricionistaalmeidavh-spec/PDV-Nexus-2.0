@@ -15,7 +15,7 @@ test('P3: navegação do caixa limita gestão; dispositivo pareado permanece iso
  const kitchen=availableNavLinks('paired','kitchen',{role:'kitchen'}).map(([id])=>id);
  assert.deepEqual(kitchen,['kds']);
  const waiter=availableNavLinks('paired','waiter',{role:'waiter'}).map(([id])=>id);
- assert.deepEqual(waiter,['garcom','divisao']);
+ assert.deepEqual(waiter,['garcom','atendimento','divisao']);
  const admin=availableNavLinks('live','',{role:'admin'}).map(([id])=>id);
  assert.ok(admin.includes('financeiro'));assert.ok(admin.includes('usuarios'));
 });
