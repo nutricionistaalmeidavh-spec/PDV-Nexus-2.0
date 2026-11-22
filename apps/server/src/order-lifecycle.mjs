@@ -35,6 +35,7 @@ export function orderLifecycleWrite(db,method,route,body,h){
           return transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             if(order.suspended)conflict('Retome a venda antes de finalizar','ORDER_SUSPENDED');
+            if(db.prepare("SELECT 1 FROM table_order_request WHERE order_id=? AND status='PENDING' LIMIT 1").get(id))conflict('Existem pedidos do tablet aguardando aprovação. Aprove ou rejeite antes do pagamento','PENDING_TABLE_REQUESTS');
              if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Finalize pagamentos por convidado no fluxo de recebimentos parciais','PARTIAL_PAYMENT_EXISTS');
              try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
             const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
