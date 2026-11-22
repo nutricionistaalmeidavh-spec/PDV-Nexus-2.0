@@ -11,6 +11,7 @@ import { HttpError,bad,conflict,missing,safeCents,requireCents,requireString,ass
 import { transact } from './command-service.mjs';
 import { audit } from './audit-service.mjs';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
+import {createAutomaticBackupScheduler} from './backup-scheduler.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {createCommercialLicense} from './commercial-license.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
@@ -88,11 +89,12 @@ async function readJson(req,maxLength=32768) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null,automaticBackup=null}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
+  const automaticBackups=createAutomaticBackupScheduler(db,dataPath,automaticBackup||{});
   const operatorAuth=createOperatorAuth(db);
   const licenseControl=createCommercialLicense(db,commercialLicense||{
     required:process.env.NEXUS_REQUIRE_COMMERCIAL_ACTIVATION==='true',
@@ -579,7 +581,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     listen({port=3434,host='127.0.0.1'}={}){return new Promise((resolve,reject)=>{
       if(!lanConfig&&host!=='127.0.0.1')return reject(new Error('A API LAN requer TLS e tokens por perfil'));
       if(lanConfig&&!['0.0.0.0','127.0.0.1'].includes(host))return reject(new Error('Host LAN não autorizado'));
-      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();resolve(origin);});
+      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();automaticBackups.start();resolve(origin);});
     });},
     startPublicPortal({port=3435,host='127.0.0.1'}={}){
       if(closed)return Promise.reject(new Error('Servidor encerrado'));
@@ -602,6 +604,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     async close(){
       if(closed)return;closed=true;
       await peerPoller.stop();
+      await automaticBackups.stop();
       for(const client of kitchenListeners)client.end();kitchenListeners.clear();
       if(portalServer?.listening)await new Promise(resolve=>portalServer.close(resolve));
       if(server.listening)await new Promise(resolve=>server.close(resolve));
