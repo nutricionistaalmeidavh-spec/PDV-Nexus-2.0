@@ -142,10 +142,10 @@ function App(){
  case 'delivery':return <DeliveryPanel mode={mode} api={api}/>;
  case 'unidades':return <UnitsPanel mode={mode} api={api}/>;
  case 'privacidade':return <DeliveryPanel mode={mode} api={api} section="privacidade"/>;
- case 'usuarios':return <Users onAdd={addOperator} busy={busy} user={user}/>;
+ case 'usuarios':return <Users onAdd={addOperator} busy={busy} user={user} api={api} mode={mode}/>;
  case 'integracoes':return <HardwareToolsPanel mode={mode} api={api}/>;
  case 'dispositivos':return <PairedDevicesPanel api={api} mode={mode}/>;
- case 'impressao':return <Printing mode={mode} onSave={savePrinter} busy={busy} jobs={jobs}/>;
+ case 'impressao':return <Printing mode={mode} onSave={savePrinter} busy={busy} jobs={jobs} user={user} api={api} onRefresh={refresh}/>;
  case 'sistema':return <Maintenance mode={mode} api={api}/>;
  case 'exportacao':return <Exports mode={mode}/>;
  default:return <Sale products={products} categories={categories} order={order} onManage={()=>setView('divisao')} onChoose={chooseProduct} onConfirm={confirm} onCancel={cancel} onPay={()=>setModal({type:'payment'})} onNew={()=>setOrder(null)} busy={busy} mode={mode}/>;
