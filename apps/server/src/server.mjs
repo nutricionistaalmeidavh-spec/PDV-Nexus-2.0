@@ -349,7 +349,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(cats)return response(res,cats.status,cats.body);
         const comboResult=comboRead(db,method,route,{missing});
         if(comboResult)return response(res,comboResult.status,comboResult.body);
-        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,suspended_at AS suspendedAt,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
+        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,order_number AS orderNumber,service_mode AS serviceMode,status,revision,suspended_at AS suspendedAt,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
