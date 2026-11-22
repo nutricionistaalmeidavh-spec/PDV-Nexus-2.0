@@ -36,7 +36,7 @@ export function roleAllows(role,method,route) {
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
   if(role==='waiter')return (method==='GET'&&(
-    (route==='/api/attendance/overview'||route==='/api/attendance/analytics')||
+    (route==='/api/attendance/overview'||route==='/api/attendance/analytics'||route==='/api/attendance/me')||
     ['/api/products','/api/orders','/api/tables','/api/restaurant/summary','/api/health'].includes(route)||
     /^\/api\/orders\/[^/]+$/.test(route)||
     /^\/api\/orders\/[^/]+\/line-history$/.test(route)||
