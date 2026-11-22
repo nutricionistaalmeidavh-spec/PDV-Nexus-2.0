@@ -30,6 +30,8 @@ function catalog(db){
   return products.map(p=>({...p,modifiers:mod.all(p.id)}));
 }
 function acceptedOrder(db,request,h){
+  if(db.prepare('SELECT close_requested_at AS at FROM table_attendance_state WHERE order_id=?').get(request.order_id)?.at)
+    guestConflict('Conta solicitada: novos pedidos bloqueados','CLOSING_REQUESTED');
   const current=h.databaseOrder(db,request.order_id);
   if(!['DRAFT','OPEN'].includes(current.status))throw new GuestError(409,'TABLE_CLOSED','Mesa já encerrada');
   if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(current.id))guestConflict('Pagamento iniciado; chame o atendente','TABLE_PAYMENT_STARTED');
