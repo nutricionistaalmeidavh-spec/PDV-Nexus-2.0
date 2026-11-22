@@ -90,7 +90,7 @@ async function readJson(req,maxLength=32768) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null,automaticBackup=null}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null,automaticBackup=null,legacyTableQrOrdering=false}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
@@ -211,6 +211,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,out.status,out.body);
         }
         if(route.startsWith('/api/public/')){
+          if(!legacyTableQrOrdering&&route.startsWith('/api/public/table/'))return response(res,404,{code:'TABLE_ORDERING_DISABLED'});
           const qrPage=publicTableRead(db,method,route);
           if(qrPage)return response(res,qrPage.status,qrPage.body);
           if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
@@ -437,6 +438,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,deviceId:requestDeviceId,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,
           forbidden:(message,code='FORBIDDEN')=>{throw new HttpError(403,code,message);},
           supervisor:requestRole==='admin'||role==='manager'};
+        if(!legacyTableQrOrdering&&method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route))return response(res,404,{code:'TABLE_ORDERING_DISABLED'});
         const special=attendanceWrite(db,method,route,body,h)??partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
         if(special){
           out=special;
@@ -577,6 +579,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         req.resume();res.shouldKeepAlive=false;
         throw new HttpError(402,'LICENSE_REQUIRED','Avaliação comercial encerrada: novos pedidos estão indisponíveis. Consulte os dados existentes no host.');
       }
+      if(!legacyTableQrOrdering&&route.startsWith('/api/public/table/'))return response(res,404,{code:'TABLE_ORDERING_DISABLED'});
       const tablePage=publicTableRead(db,method,route);
       if(tablePage)return response(res,tablePage.status,tablePage.body);
       if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
