@@ -29,6 +29,7 @@ export function parseScaleSerial(raw,{brand='generic'}={}){
   }else{
     const match=frame.match(/([+-]?\d+(?:\.\d+)?)(?:\s*(kg|g))?/i);
     if(!match)throw new Error('Peso ausente ou quadro serial não reconhecido');
+    if(match[1].includes('.')&&!match[2])throw new Error('Unidade ambígua: informe kg ou g na leitura decimal');
     const n=Number(match[1]);
     // Filizola responses without a unit commonly encode thousandths of kg.
     if(match[2]?.toLowerCase()==='g')weightGrams=Math.round(n);
