@@ -109,6 +109,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
+  const activePrintTasks=new Set();
+  let printTimer=null;
   const backupJobs=new Map();
   const scaleReadings=new Map();
   const kitchenListeners=new Set();
@@ -123,6 +125,41 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     const result=transact(db,route,body,handler,status);
     queueMicrotask(notifyKitchen);
     return result;
+  }
+  async function sendPrintJob(id,actor){
+    const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);
+    if(!job)missing('Impressão');
+    if(job.status==='DONE'||sendingPrintJobs.has(id))
+      conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
+    const payload=JSON.parse(job.payload_json);
+    const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(payload.profileId??'default');
+    if(!printer)conflict('Impressora não configurada');
+    sendingPrintJobs.add(id);
+    const task=(async()=>{
+      try {
+        const bytes=receiptBytes(payload);
+        if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
+        else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
+        else await transmit(printer.host,printer.port,bytes);
+        db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
+        audit(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id,profileId:payload.profileId??'default'},actor);
+        return {status:200,body:{id,status:'DONE',warning:'Envio ao transporte concluído; saída física não confirmada'}};
+      }catch(error){
+        db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
+        return {status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
+      }finally{sendingPrintJobs.delete(id);}
+    })();
+    activePrintTasks.add(task);
+    try{return await task;}finally{activePrintTasks.delete(task);}
+  }
+  async function printPendingOnce(){
+    if(closed||sendingPrintJobs.size)return null;
+    const pending=db.prepare(`SELECT e.id FROM outbox_event e
+      JOIN printer_profile p ON p.id=COALESCE(json_extract(e.payload_json,'$.profileId'),'default') AND p.enabled=1
+      WHERE e.kind LIKE 'PRINT_%' AND e.status='PENDING'
+      ORDER BY e.created_at,e.id LIMIT 1`).get();
+    if(!pending)return null;
+    return sendPrintJob(pending.id,'print-worker');
   }
   async function handler(req,res) {
     let requestActor='unauthenticated',requestRole=null,requestDeviceId=null;
@@ -461,27 +498,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             auditForRequest(db,original.aggregate_id,'RECEIPT_REPRINT_REQUESTED',{sourceId,jobId:newId});
             return {id:newId,status:'PENDING',copyOfJobId:sourceId};
           },201);
-        } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
-          const id=route.split('/')[4];
-          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);if(!job)missing('Impressão');
-          if(job.status==='DONE'||sendingPrintJobs.has(id)) conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
-          const jobPayload=JSON.parse(job.payload_json);
-          const profileId=jobPayload.profileId??'default';
-          const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(profileId);
-          if(!printer)conflict('Impressora não configurada');
-          // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
-          sendingPrintJobs.add(id);
-          try {
-            const bytes=receiptBytes(jobPayload);
-            if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
-            else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
-            else await transmit(printer.host,printer.port,bytes);
-            db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
-            auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio ao transporte concluído; impressão física não confirmada'}};
-          } catch(e) {
-            db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
-            out={status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
-          } finally {sendingPrintJobs.delete(id);}
+        } else if(method==='POST'&&route.match(/^\\/api\\/print\\/jobs\\/[^/]+\\/send$/)) {
+          out=await sendPrintJob(route.split('/')[4],requestActor);
         } else return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
         return response(res,out.status,out.body);
       }
@@ -582,7 +600,12 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     listen({port=3434,host='127.0.0.1'}={}){return new Promise((resolve,reject)=>{
       if(!lanConfig&&host!=='127.0.0.1')return reject(new Error('A API LAN requer TLS e tokens por perfil'));
       if(lanConfig&&!['0.0.0.0','127.0.0.1'].includes(host))return reject(new Error('Host LAN não autorizado'));
-      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();automaticBackups.start();resolve(origin);});
+      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();automaticBackups.start();
+        printTimer=setInterval(()=>{void printPendingOnce().catch(error=>{
+          console.error('[Nexus impressão] Falha no processamento da fila:',error?.code??'INTERNAL_ERROR');
+        });},3000);
+        printTimer.unref?.();
+        resolve(origin);});
     });},
     startPublicPortal({port=3435,host='127.0.0.1'}={}){
       if(closed)return Promise.reject(new Error('Servidor encerrado'));
@@ -602,10 +625,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     },
     syncPeersOnce(){return peerPoller.syncOnce();},
     backup(dest){return createBackup(db,dest);},
+    printPendingOnce(){return printPendingOnce();},
     async close(){
       if(closed)return;closed=true;
       await peerPoller.stop();
       await automaticBackups.stop();
+      if(printTimer)clearInterval(printTimer);
+      await Promise.allSettled([...activePrintTasks]);
       for(const client of kitchenListeners)client.end();kitchenListeners.clear();
       if(portalServer?.listening)await new Promise(resolve=>portalServer.close(resolve));
       if(server.listening)await new Promise(resolve=>server.close(resolve));
