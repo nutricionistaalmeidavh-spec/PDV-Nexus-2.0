@@ -157,3 +157,41 @@ test('P0: garçom pode consultar pizza e incluir linha, mas nunca configurar car
   assert.equal(roleAllows('waiter','POST','/api/orders/o-1/pizza-lines'),true);
   assert.equal(roleAllows('waiter','POST','/api/pizza/products/p-1/sizes'),false);
 });
+
+test('P0: entrega não vira entregue sem pagamento e cancelamento encerra pedido vinculado',async t=>{
+  const {createApp}=await import('../src/server.mjs');
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-delivery-'));
+  const app=createApp({dataPath:path.join(dir,'nexus.db'),publicMenuEnabled:true});
+  const origin=await app.listen({port:0});
+  t.after(async()=>{await app.close();fs.rmSync(dir,{force:true,recursive:true});});
+  let cookie='';
+  const request=async(method,route,body,guest=false)=>{
+    const response=await fetch(origin+route,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(!guest&&cookie?{cookie}:{})},
+      body:body?JSON.stringify(body):undefined});
+    const session=response.headers.get('set-cookie');if(!guest&&session)cookie=session.split(';')[0];
+    return {status:response.status,body:await response.json()};
+  };
+  await request('POST','/api/auth/setup',{username:'admin',password:'senhaForteDelivery2026'});
+  const product=(await request('POST','/api/products',{commandId:'del-product',name:'Entrega',priceCents:800})).body.product;
+  const create=async id=>{
+    const req=await request('POST','/api/public/delivery/requests',{customerName:'Cliente',phone:'16999999999',address:'Rua Central 123',items:[{productId:product.id,quantity:1}]},true);
+    assert.equal(req.status,202);
+    const accepted=await request('POST','/api/delivery/requests/'+req.body.requestId+'/accept',{commandId:'del-accept-'+id});
+    assert.equal(accepted.status,201);
+    return accepted.body.order;
+  };
+  const pending=await create('a');
+  assert.equal((await request('POST','/api/delivery/orders/'+pending.id+'/status',{commandId:'del-cancel',status:'CANCELLED'})).status,200);
+  assert.equal((await request('GET','/api/orders/'+pending.id)).body.order.status,'CANCELLED');
+  const order=await create('b');
+  const confirmed=await request('POST','/api/orders/'+order.id+'/confirm',{commandId:'del-confirm',expectedRevision:order.revision});
+  assert.equal(confirmed.status,200);
+  assert.equal((await request('POST','/api/delivery/orders/'+order.id+'/status',{commandId:'del-prep',status:'PREPARING'})).status,200);
+  assert.equal((await request('POST','/api/delivery/orders/'+order.id+'/status',{commandId:'del-dispatch',status:'OUT_FOR_DELIVERY'})).status,200);
+  assert.equal((await request('POST','/api/delivery/orders/'+order.id+'/status',{commandId:'del-unpaid',status:'DELIVERED'})).status,409);
+  assert.equal((await request('POST','/api/cash/open',{commandId:'del-cash',openingCents:0})).status,201);
+  assert.equal((await request('POST','/api/orders/'+order.id+'/close',{commandId:'del-paid',expectedRevision:confirmed.body.order.revision,payments:[{method:'pix',amountCents:800}]})).status,200);
+  assert.equal((await request('POST','/api/delivery/orders/'+order.id+'/status',{commandId:'del-delivered',status:'DELIVERED'})).status,200);
+  const list=(await request('GET','/api/delivery/orders')).body.orders;
+  assert.equal(list.find(x=>x.orderId===order.id).paymentStatus,'PAID');
+});
