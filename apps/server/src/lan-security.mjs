@@ -36,6 +36,7 @@ export function roleAllows(role,method,route) {
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
   if(role==='waiter')return (method==='GET'&&(
+    (route==='/api/attendance/overview'||route==='/api/attendance/analytics')||
     ['/api/products','/api/orders','/api/tables','/api/restaurant/summary','/api/health'].includes(route)||
     /^\/api\/orders\/[^/]+$/.test(route)||
     /^\/api\/orders\/[^/]+\/line-history$/.test(route)||
@@ -43,6 +44,8 @@ export function roleAllows(role,method,route) {
     /^\/api\/products\/[^/]+\/modifiers$/.test(route))) ||
     (method==='POST'&&(
       route==='/api/orders'|| /^\/api\/tables\/[^/]+\/open$/.test(route)||
+      /^\/api\/orders\/[^/]+\/waiter$/.test(route)||
+      /^\/api\/attendance\/tickets\/[^/]+\/(claim|deliver)$/.test(route)||
       /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)||
       /^\/api\/orders\/[^/]+\/lines\/[^/]+\/(edit|cancel)$/.test(route)||
       /^\/api\/tables\/[^/]+\/qr$/.test(route)||
