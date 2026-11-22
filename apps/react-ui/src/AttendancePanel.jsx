@@ -12,7 +12,7 @@ export function AttendancePanel({api,mode,pairedRole}){
   let alive=true;
   const load=async()=>{
    try{
-    const [o,a]=await Promise.all([api('/api/attendance/overview'),api('/api/attendance/analytics')]);
+    const [o,a]=await Promise.all([api('/api/attendance/overview'),mode==='paired'?Promise.resolve(null):api('/api/attendance/analytics')]);
     if(alive){setOverview(o);setAnalytics(a);}
    }catch(e){if(alive)setError(e.message);}
   };
