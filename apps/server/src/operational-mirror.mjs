@@ -1,6 +1,6 @@
 /** Optional read-only mirror of peer units. Never writes another unit's canonical sales or stock. */
 import {createHash,randomUUID} from 'node:crypto';
-import net from 'node:net';
+import {isPrivatePeerHost} from './private-network.mjs';
 import {verifyLiveSummary} from './summary-live.mjs';
 import {readBoundedJson} from './bounded-json.mjs';
 
@@ -136,12 +136,6 @@ export function operationalWrite(db,method,route,body,h){
  },201);
  return result.body.imported?result:{...result,status:200};
 }
-function isPrivateHost(hostname){
- if(/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(hostname))return true;
- if(net.isIP(hostname)!==4)return false;
- const parts=hostname.split('.').map(Number);
- return parts[0]===10||(parts[0]===172&&parts[1]>=16&&parts[1]<=31)||(parts[0]===192&&parts[1]===168);
-}
 export function validatePeerOptions(options){
  if(options==null)return {peers:[],intervalMs:60000,transport:fetch,summarySync:false};
  if(typeof options!=='object'||Array.isArray(options)||!Array.isArray(options.peers)||options.peers.length>8)throw new Error('Configuração de sincronização inválida');
@@ -153,7 +147,7 @@ export function validatePeerOptions(options){
   if(!p||typeof p!=='object'||typeof p.url!=='string'||typeof p.token!=='string'||p.token.length<32||p.token.length>512)throw new Error('Token da unidade é obrigatório (mínimo 32 caracteres)');
   let u;try{u=new URL(p.url);}catch{throw new Error('Endereço da unidade inválido');}
   if(u.protocol!=='https:')throw new Error('A sincronização automática exige HTTPS');
-  if(!isPrivateHost(u.hostname)||u.username||u.password||u.search||u.hash||u.pathname!=='/')throw new Error('Use HTTPS de uma unidade na rede privada com certificado válido');
+  if(!isPrivatePeerHost(u.hostname)||u.username||u.password||u.search||u.hash||u.pathname!=='/')throw new Error('Use HTTPS de uma unidade na rede privada com certificado válido');
   return {url:u.origin,token:p.token};
  });
  if(new Set(peers.map(p=>p.url)).size!==peers.length)throw new Error('Unidades remotas duplicadas');
