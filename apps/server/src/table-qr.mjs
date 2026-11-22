@@ -53,6 +53,7 @@ function acceptedOrder(db,request,h){
     for(const c of components)db.prepare(`INSERT INTO order_line_combo_item
       (id,line_id,product_id,product_name_snapshot,quantity) VALUES(?,?,?,?,?)`)
       .run(randomUUID(),line.id,c.productId,c.name,c.quantity);
+    db.prepare('UPDATE order_line SET waiter_device_id=(SELECT waiter_device_id FROM order_waiter WHERE order_id=?) WHERE id=?').run(request.order_id,line.id);
     h.snapshotLineRecipe(db,line.id,line.productId);
   }
   if(next.totalCents!==undefined&&next.totalCents<0)guestConflict('Total inválido');
@@ -168,6 +169,8 @@ export function publicTableSubmit(db,route,body,h){
     db.exec('BEGIN IMMEDIATE');
     let result;
     try{
+      if(db.prepare('SELECT close_requested_at AS at FROM table_attendance_state WHERE order_id=?').get(session.order_id)?.at)
+        guestConflict('Conta solicitada: novos pedidos bloqueados','CLOSING_REQUESTED');
       const old=db.prepare(`SELECT id,status,total_cents AS totalCents,payload_hash AS hash FROM table_order_request
         WHERE session_id=? AND client_request_id=?`).get(session.id,body.clientRequestId);
       if(old){
