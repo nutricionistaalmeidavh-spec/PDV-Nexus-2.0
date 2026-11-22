@@ -25,7 +25,7 @@ import {SaleUnitsConfig} from './SaleUnitsConfig.jsx';
 import {PairDevice} from './PairDevice.jsx';
 import {LicenseOnboarding} from './LicenseOnboarding.jsx';
 import {PairedDevicesPanel} from './PairedDevicesPanel.jsx';
-import {AttendancePanel} from './AttendancePanel.jsx';
+import {AttendancePanel,WaiterReadyAlerts} from './AttendancePanel.jsx';
 import {TabletAdminPanel} from './TabletAdminPanel.jsx';
 
 const demoOrder=()=>({...DEMO_ORDER,lines:[]});
@@ -129,7 +129,7 @@ function App(){
  case 'mesas':return <Tables tables={tables} selected={selected} onSelect={openTable} onNew={createTable} busy={busy}/>;
  case 'kds':return <Kitchen api={api} tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
  case 'atendimento':return <AttendancePanel api={api} mode={mode} pairedRole={pairedRole}/>;
- case 'garcom':return <Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/>;
+ case 'garcom':return <div className="stack">{mode==='paired'&&<WaiterReadyAlerts api={api} onOpen={()=>setView('atendimento')}/>}<Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/></div>;
  case 'restaurante-config':return <div className="stack"><PizzeriaSettings api={api} products={products} onRefresh={refresh} mode={mode}/><KitchenStationsManager api={api} products={products} onChanged={refresh} mode={mode}/><TabletAdminPanel api={api} tables={tables} mode={mode}/></div>;
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':order?.serviceMode==='table'?'mesas':'venda');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session} canManage={canEdit}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
