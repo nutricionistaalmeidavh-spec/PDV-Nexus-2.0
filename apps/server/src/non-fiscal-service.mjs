@@ -11,7 +11,7 @@ export function receiptBytes(payload) {
   };
   const titles={PREBILL:'PRE-CONTA - NAO FISCAL',KITCHEN:'TICKET DE COZINHA - NAO FISCAL',CASH_CLOSING:'FECHAMENTO DE CAIXA - NAO FISCAL'};
   const title=titles[payload.kind]??'RECIBO DE PEDIDO - NAO FISCAL';
-  const lines=['PDV NEXUS 2.0',title,'',`${payload.kind==='CASH_CLOSING'?'Sessao':'Pedido'} ${payload.id.slice(0,8)}`,
+  const lines=['PDV NEXUS 2.0',title,'',`${payload.kind==='CASH_CLOSING'?'Sessao':'Pedido'} ${payload.kind==='CASH_CLOSING'?payload.id.slice(0,8):Number.isSafeInteger(payload.orderNumber)&&payload.orderNumber>0?String(payload.orderNumber).padStart(6,'0'):payload.id.slice(0,8)}`,
     ...(payload.stationName?['Setor: '+clean(payload.stationName).slice(0,30)]:[]),
     '-'.repeat(width),
     ...payload.lines.flatMap(l=>[
