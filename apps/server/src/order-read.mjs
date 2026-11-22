@@ -16,7 +16,7 @@ export function databaseOrder(db, id) {
     line.weight=db.prepare('SELECT weight_grams AS weightGrams,price_per_kg_cents AS pricePerKgCents,source FROM order_line_weight WHERE line_id=?').get(line.id)??null;
   }
   const refunded=Boolean(db.prepare('SELECT 1 FROM order_refund WHERE order_id=?').get(id));
-  const order={id:row.id,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,suspended:!!row.suspended_at,lines,payments,refunded,totalCents:0};
+  const order={id:row.id,orderNumber:row.order_number,tableId:row.service_table_id,serviceMode:row.service_mode,createdAt:row.created_at,status:row.status,revision:row.revision,suspended:!!row.suspended_at,lines,payments,refunded,totalCents:0};
   order.totalCents=orderTotalCents(order);
   order.waiter=db.prepare(`SELECT ow.waiter_device_id AS deviceId,pd.label FROM order_waiter ow JOIN paired_device pd ON pd.id=ow.waiter_device_id WHERE ow.order_id=?`).get(id)??null;
   order.closeRequested=Boolean(db.prepare('SELECT close_requested_at AS at FROM table_attendance_state WHERE order_id=?').get(id)?.at);
