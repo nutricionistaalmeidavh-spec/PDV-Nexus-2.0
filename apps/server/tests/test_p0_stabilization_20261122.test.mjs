@@ -9,6 +9,7 @@ import {inspectBackup} from '../src/restore.mjs';
 import {kitchenRead} from '../src/kitchen-service.mjs';
 import {allowedOperator} from '../src/operator-auth.mjs';
 import {mayFinishExistingOperation} from '../src/license-operation-policy.mjs';
+import {roleAllows} from '../src/lan-security.mjs';
 
 test('P0: cashier pode enviar comprovantes sem poder configurar impressora',()=>{
   assert.equal(allowedOperator('cashier','POST','/api/print/jobs/job/send'),true);
@@ -149,4 +150,10 @@ test('P0: supervisor consegue finalizar falta de estoque com motivo e débito ra
   const stock=await req('GET','/api/stock/report');
   assert.equal(stock.body.ingredients.find(x=>x.id===ingredient.id).shortageMilli,1000);
   assert.equal(stock.body.ingredients.find(x=>x.id===ingredient.id).onHandMilli,0);
+});
+
+test('P0: garçom pode consultar pizza e incluir linha, mas nunca configurar cardápio',()=>{
+  assert.equal(roleAllows('waiter','GET','/api/pizza/products/p-1/config'),true);
+  assert.equal(roleAllows('waiter','POST','/api/orders/o-1/pizza-lines'),true);
+  assert.equal(roleAllows('waiter','POST','/api/pizza/products/p-1/sizes'),false);
 });
