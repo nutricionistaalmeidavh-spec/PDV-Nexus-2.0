@@ -53,3 +53,32 @@ test('P0: KDS prioriza tickets novos ativos mesmo acima de 200 pendências antig
   assert.equal(result.body.tickets.length,200);
   assert.equal(result.body.hasMore,true);
 });
+
+test('P0: supervisor gerencia operadores, revoga sessao e protege ultimo administrador',async t=>{
+  const {createApp}=await import('../src/server.mjs');
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-users-'));
+  const app=createApp({dataPath:path.join(folder,'nexus.db')});
+  const origin=await app.listen({port:0});
+  t.after(async()=>{await app.close();fs.rmSync(folder,{force:true,recursive:true});});
+  let cookie='';
+  const req=async(method,route,body,useCookie=true)=>{
+    const response=await fetch(origin+route,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(useCookie&&cookie?{cookie}:{})},
+      body:body?JSON.stringify(body):undefined});
+    const session=response.headers.get('set-cookie');
+    if(useCookie&&session)cookie=session.split(';')[0];
+    return {status:response.status,body:await response.json()};
+  };
+  assert.equal((await req('POST','/api/auth/setup',{username:'admin',password:'senhaForteParaTestes2026'})).status,201);
+  const employee=await req('POST','/api/auth/operators',{username:'caixa01',password:'senhaInicialValida123',role:'cashier'});
+  assert.equal(employee.status,201);
+  const id=employee.body.user.id;
+  const users=await req('GET','/api/auth/operators');
+  assert.equal(users.status,200);
+  assert.equal(users.body.users.some(u=>u.id===id&&u.role==='cashier'),true);
+  const adm=users.body.users.find(u=>u.username==='admin');
+  assert.equal((await req('PATCH','/api/auth/operators/'+adm.id,{enabled:false})).status,409);
+  assert.equal((await req('POST','/api/auth/operators/'+id+'/password',{password:'novaSenhaForte12345'})).status,200);
+  assert.equal((await req('PATCH','/api/auth/operators/'+id,{enabled:false})).status,200);
+  assert.equal((await req('POST','/api/auth/logout',{})).status,200);
+  assert.equal((await req('POST','/api/auth/login',{username:'caixa01',password:'novaSenhaForte12345'})).status,401);
+});
