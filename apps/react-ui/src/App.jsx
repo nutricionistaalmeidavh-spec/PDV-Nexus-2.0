@@ -11,6 +11,7 @@ import {Cash} from './RestaurantScreens.jsx';
 import {RestaurantTables as Tables,RestaurantKitchen as Kitchen,RestaurantWaiter as Waiter} from './RestaurantTangerine.jsx';
 import {Onboarding,Users,Printing,Exports} from './AdminScreens.jsx';
 const Dashboard=lazy(()=>import('./ManagementTangerine.jsx').then(module=>({default:module.ManagementOverview})));
+const Intelligence=lazy(()=>import('./BusinessIntelligence.jsx').then(module=>({default:module.BusinessIntelligence})));
 
 import {availableNavLinks,titleOf} from './navigation.mjs';
 import {useHostRefresh,useKitchenPolling,useBusyCommand} from './useOperations.jsx';
@@ -35,7 +36,7 @@ const embedded=new URLSearchParams(window.location.search).has('embedded');
 const centsLabel=c=>formatMoney(Number.isSafeInteger(c)?c:0);
 const initials=s=>(s||'Nexus').split(' ').slice(0,2).map(x=>x[0]).join('').toUpperCase();
 
-const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,atendimento:ClipboardList,divisao:UsersIcon,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,unidades:Store,privacidade:Shield,usuarios:UsersIcon,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
+const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,atendimento:ClipboardList,divisao:UsersIcon,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,inteligencia:ChartBar,unidades:Store,privacidade:Shield,usuarios:UsersIcon,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
 function App(){
  const [mode,setMode]=useState('boot'),[user,setUser]=useState(null),[needsSetup,setNeedsSetup]=useState(false),[loginError,setLoginError]=useState('');
  const [licenseInfo,setLicenseInfo]=useState(null);
@@ -137,6 +138,7 @@ function App(){
  case 'estoque':return <div className="stack"><StockBusiness mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/><AdvancedStockPanel mode={mode} api={api} onChanged={()=>setStockRevision(v=>v+1)} reloadKey={stockRevision}/></div>;
  case 'financeiro':return <FinanceBusiness mode={mode} api={api}/>;
  case 'relatorios':return <FinanceBusiness mode={mode} api={api} section="relatorios"/>;
+ case 'inteligencia':return <Suspense fallback={<p className="subtext">Carregando BI local...</p>}><Intelligence api={api} mode={mode} onOpenUnits={()=>setView('unidades')}/></Suspense>;
  case 'delivery':return <DeliveryPanel mode={mode} api={api}/>;
  case 'unidades':return <UnitsPanel mode={mode} api={api}/>;
  case 'privacidade':return <DeliveryPanel mode={mode} api={api} section="privacidade"/>;
