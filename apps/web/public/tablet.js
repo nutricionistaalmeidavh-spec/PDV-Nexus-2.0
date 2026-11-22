@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),money=value=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value/100);
 const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};
-let token=localStorage.getItem('nexus-tablet-token')||'',state=null,cart=[],pending=null,working=false;
+let token=localStorage.getItem('nexus-tablet-token')||'',state=null,cart=[],pending=null,working=false,lastRequestId=null;
 function alertMessage(message){$('alert').textContent=message;$('alert').hidden=!message;}
 function view(name){for(const id of ['pairing','welcome','service','closing'])$(id).hidden=id!==name;}
 async function api(route,body){
@@ -11,7 +11,7 @@ async function api(route,body){
 function show(){
  if(!state){view('pairing');return;}
  $('table-name').textContent=state.table.label;
- if(!state.order){cart=[];pending=null;view('welcome');return;}
+ if(!state.order){cart=[];pending=null;lastRequestId=null;view('welcome');return;}
  if(state.closeRequested){view('closing');return;}
  view('service');$('order-number').textContent='Atendimento #'+state.order.id.slice(-8);
  const list=$('products');list.replaceChildren();
@@ -43,7 +43,12 @@ function renderCart(){
 }
 async function reload(){
  if(!token){state=null;show();return;}
- try{state=await api('/api/tablet/state');alertMessage('');show();}
+ try{state=await api('/api/tablet/state');alertMessage('');show();
+  if(state.order&&lastRequestId&&!state.closeRequested){
+   try{const r=await api('/api/tablet/requests/'+encodeURIComponent(lastRequestId));
+    $('order-notice').textContent=r.statusText==='ACCEPTED'?'Pedido confirmado e enviado à cozinha.':r.statusText==='REJECTED'?'Pedido não aprovado. Chame o garçom.':'Pedido aguardando aprovação do garçom.';
+   }catch{}
+  }
  catch(e){if(e.status===401){token='';localStorage.removeItem('nexus-tablet-token');state=null;show();}
   alertMessage(e.message);}
 }
@@ -64,6 +69,7 @@ $('send').addEventListener('click',async()=>{
  if(!pending||pending.fingerprint!==fingerprint)pending={fingerprint,id:crypto.randomUUID()};
  try{
   const data=await api('/api/tablet/orders',{clientRequestId:pending.id,items});
+  lastRequestId=data.requestId;
   $('order-notice').textContent=data.statusText==='PENDING'?'Pedido enviado para aprovação do garçom.':'Pedido enviado à cozinha.';
   cart=[];pending=null;await reload();
  }catch(e){alertMessage(e.message)}finally{working=false;renderCart();}
