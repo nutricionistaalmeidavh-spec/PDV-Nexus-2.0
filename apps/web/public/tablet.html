@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer">
+<title>Atendimento na mesa | PDV Nexus</title><link rel="stylesheet" href="/tablet.css">
+</head><body>
+<header><strong>PDV NEXUS · TABLET DA MESA</strong><span id="table-name">Aguardando pareamento</span></header>
+<main>
+<p id="alert" role="alert" hidden></p>
+<section id="pairing">
+<h1>Conectar tablet</h1><p>Use a credencial gerada no caixa para esta mesa. A conexão exige HTTPS na rede local.</p>
+<form id="pair-form"><label>Credencial do dispositivo<input id="pair-token" type="password" autocomplete="off" minlength="64" maxlength="64" required></label><button type="submit">Conectar à mesa</button></form>
+</section>
+<section id="welcome" hidden><h1>Bem-vindo</h1><p>Toque para iniciar seu atendimento.</p><button id="start">Iniciar atendimento</button></section>
+<section id="service" hidden>
+<div class="heading"><h1>Seu cardápio</h1><p id="order-number"></p></div>
+<div class="layout">
+<section><h2>Produtos</h2><div id="products" class="products"></div></section>
+<aside><h2>Seu pedido</h2><div id="cart"></div><strong id="total">R$ 0,00</strong>
+<button id="send" disabled>Enviar pedido</button><button id="bill" class="secondary">Solicitar conta</button>
+<p id="order-notice" role="status" aria-live="polite"></p></aside>
+</div>
+</section>
+<section id="closing" hidden><h1>Conta solicitada</h1><p>Aguarde o garçom trazer sua conta. Novos pedidos estão bloqueados.</p></section>
+</main>
+<script src="/tablet.js" defer></script>
+</body></html>
