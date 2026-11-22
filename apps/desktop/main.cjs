@@ -14,7 +14,7 @@ app.whenReady().then(async () => {
     required:true,publicJwk:edition.publicJwk,endpoint:edition.endpoint,
     storagePath:dataPath+'.license.json'
   }:{required:false};
-  const pos=server({dataPath,operationMode:'demo',commercialLicense});
+  const pos=server({dataPath,operationMode:'production',commercialLicense});
   server=pos;
   appUrl=await pos.listen({port:0});
   const window=new BrowserWindow({width:1370,height:880,minWidth:800,minHeight:650,show:false,
