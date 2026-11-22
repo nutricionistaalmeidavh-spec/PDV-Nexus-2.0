@@ -25,10 +25,10 @@ function safeguardMigrations(db,dataPath){
  const exists=db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get();
  if(!exists)return; // clean installation
  const current=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()?.version??0;
- if(current>=21||current<=0)return;
+ if(current>=22||current<=0)return;
  const backupDir=path.join(path.dirname(dataPath),'backups');
  fs.mkdirSync(backupDir,{recursive:true,mode:0o700});
- const name='before-v21-from-v'+current+'-'+Date.now()+'-'+randomUUID()+'.sqlite';
+ const name='before-v22-from-v'+current+'-'+Date.now()+'-'+randomUUID()+'.sqlite';
  const target=path.join(backupDir,name),temporary=target+'.tmp';
  try{
    db.prepare('VACUUM INTO ?').run(temporary);
