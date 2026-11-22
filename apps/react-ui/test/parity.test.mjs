@@ -26,3 +26,9 @@ test('P0: checkout expõe exceção de estoque só para supervisor com motivo',(
  assert.match(app,/inventoryOverrideReason/);
  assert.match(app,/user\?\.role==='admin'/);
 });
+
+test('P0: tela da comanda não oferece criação de pedidos via QR de mesa',()=>{
+ const table=readFileSync(new URL('../src/TableOrderPanel.jsx',import.meta.url),'utf8');
+ assert.equal(table.includes('Gerar / renovar QR da mesa'),false);
+ assert.equal(table.includes('Enviar automaticamente à cozinha, sem aprovação de atendente'),false);
+});
