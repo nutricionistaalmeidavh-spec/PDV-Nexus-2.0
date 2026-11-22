@@ -87,10 +87,9 @@ test('P0: supervisor gerencia operadores, revoga sessao e protege ultimo adminis
 test('P0: backup automático validado preserva versões recentes e rotaciona somente seus próprios arquivos',async t=>{
   const {createAutomaticBackupScheduler}=await import('../src/backup-scheduler.mjs');
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-autobackup-'));
-  t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
   const database=path.join(folder,'nexus.db');
   const db=openDatabase(database);
-  t.after(()=>db.close());
+  t.after(()=>{db.close();fs.rmSync(folder,{recursive:true,force:true});});
   let now=1_800_000_000_000;
   const jobs=createAutomaticBackupScheduler(db,database,{now:()=>now,retention:2,intervalMs:60_000});
   const manual=path.join(folder,'backups','manual-user.sqlite');
