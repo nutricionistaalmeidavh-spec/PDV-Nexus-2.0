@@ -144,7 +144,7 @@ function Consolidated({data}){
 export function BusinessIntelligence({api,mode,onOpenUnits}){
  const [tab,setTab]=useState('dashboard'),[periodDays,setPeriodDays]=useState('30');
  const [forecastDays,setForecastDays]=useState('7'),[leadDays,setLeadDays]=useState('3'),[safetyDays,setSafetyDays]=useState('2');
- const [revision,setRevision]=useState(0),[state,setState]=useState({loading:true,data:null,error:''});
+ const [revision,setRevision]=useState(0),[state,setState]=useState({key:null,loading:true,data:null,error:''});
  const params=useMemo(()=>{
   const p=new URLSearchParams();
   if(tab==='dashboard'||tab==='consolidated'){const to=today();p.set('from',dateShift(to,-Number(periodDays)+1));p.set('to',to);}
@@ -152,13 +152,17 @@ export function BusinessIntelligence({api,mode,onOpenUnits}){
   if(tab==='replenishment'){p.set('lookbackDays','28');p.set('leadDays',leadDays);p.set('safetyDays',safetyDays);}
   return p.toString();
  },[tab,periodDays,forecastDays,leadDays,safetyDays]);
+ const requestKey=tab+'?'+params+'&revision='+revision+'&mode='+mode;
  useEffect(()=>{
-  if(mode!=='live'){setState({loading:false,data:null,error:'BI exige autenticação no host local.'});return;}
-  let live=true;setState({loading:true,data:null,error:''});
-  api(paths[tab]+'?'+params).then(data=>{if(live)setState({loading:false,data,error:''})})
-   .catch(e=>{if(live)setState({loading:false,data:null,error:e.message})});
+  if(mode!=='live'){setState({key:requestKey,loading:false,data:null,error:'BI exige autenticação no host local.'});return;}
+  let live=true;
+  setState({key:requestKey,loading:true,data:null,error:''});
+  api(paths[tab]+'?'+params).then(data=>{if(live)setState({key:requestKey,loading:false,data,error:''})})
+   .catch(e=>{if(live)setState({key:requestKey,loading:false,data:null,error:e.message})});
   return()=>{live=false};
- },[api,mode,tab,params,revision]);
+ },[api,mode,tab,params,revision,requestKey]);
+ // React may render the new tab before its effect runs. Never pass previous tab data to it.
+ const displayed=state.key===requestKey?state:{loading:true,data:null,error:''};
  return <div className="page nexus-management">
   <div className="pageheading">
    <div><p className="eyebrow">GESTÃO / P2</p><h1>BI e planejamento</h1>
@@ -177,11 +181,11 @@ export function BusinessIntelligence({api,mode,onOpenUnits}){
     <Select label="Estoque de segurança" value={safetyDays} onChange={setSafetyDays} w={180} data={[{value:'0',label:'0 dias'},{value:'2',label:'2 dias'},{value:'5',label:'5 dias'},{value:'10',label:'10 dias'}]}/>
    </>}
   </Group>
-  {state.loading?<Text c="dimmed">Calculando indicadores no servidor local...</Text>
-   :state.error?<Paper withBorder p="md" role="alert"><Text c="red">{state.error}</Text></Paper>
-   :tab==='dashboard'?<Dashboard data={state.data}/>
-   :tab==='forecast'?<Forecast key={params} data={state.data}/>
-   :tab==='replenishment'?<Replenishment data={state.data}/>
-   :<><Consolidated data={state.data}/>{onOpenUnits&&<Button mt="md" onClick={onOpenUnits}>Exportar ou importar atualizações de unidades</Button>}</>}
+  {displayed.loading?<Text c="dimmed">Calculando indicadores no servidor local...</Text>
+   :displayed.error?<Paper withBorder p="md" role="alert"><Text c="red">{displayed.error}</Text></Paper>
+   :tab==='dashboard'?<Dashboard data={displayed.data}/>
+   :tab==='forecast'?<Forecast key={params} data={displayed.data}/>
+   :tab==='replenishment'?<Replenishment data={displayed.data}/>
+   :<><Consolidated data={displayed.data}/>{onOpenUnits&&<Button mt="md" onClick={onOpenUnits}>Exportar ou importar atualizações de unidades</Button>}</>}
  </div>;
 }
