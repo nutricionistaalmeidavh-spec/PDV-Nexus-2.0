@@ -107,7 +107,8 @@ export function allowedOperator(role,method,route){
   if(/^\/api\/auth\//.test(route))return false;
   if(/^\/api\/exports\//.test(route)||route==='/api/purchases'||/^\/api\/purchases\//.test(route))return false;
   if(/^\/api\/(bi|stock|reports|delivery|system|sync|suppliers)\//.test(route)||route==='/api/suppliers')return false;
-  if(/^\/api\/printer/.test(route)||/^\/api\/print\/jobs\/[^/]+\/send$/.test(route))return false;
+  if(/^\/api\/printer/.test(route))return method!=='POST';
+  if(/^\/api\/print\/jobs\/[^/]+\/(send|reprint)$/.test(route))return method==='POST';
   if(/^\/api\/products/.test(route)&&method!=='GET')return false;
   if(/^\/api\/categories/.test(route)&&method!=='GET')return false;
   if(/^\/api\/tables/.test(route)&&method==='PATCH')return false;
