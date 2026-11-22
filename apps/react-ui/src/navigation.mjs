@@ -12,5 +12,5 @@ const restricted=new Set(['produtos','caixa','geral','estoque','financeiro','rel
 export function availableNavLinks(mode,pairedRole,user){
  if(mode==='paired')return navigationLinks.filter(([id])=>pairedRole==='kitchen'?id==='kds':['garcom','atendimento','divisao'].includes(id));
  const canEdit=!user||user.role==='admin';
- return navigationLinks.filter(([id])=>!restricted.has(id)||canEdit);
+ return navigationLinks.filter(([id])=>!restricted.has(id)||canEdit||(['caixa','impressao'].includes(id)&&user?.role==='cashier'));
 }
