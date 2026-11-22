@@ -498,7 +498,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             auditForRequest(db,original.aggregate_id,'RECEIPT_REPRINT_REQUESTED',{sourceId,jobId:newId});
             return {id:newId,status:'PENDING',copyOfJobId:sourceId};
           },201);
-        } else if(method==='POST'&&route.match(/^\\/api\\/print\\/jobs\\/[^/]+\\/send$/)) {
+        } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
           out=await sendPrintJob(route.split('/')[4],requestActor);
         } else return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
         return response(res,out.status,out.body);
