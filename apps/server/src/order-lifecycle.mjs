@@ -53,7 +53,15 @@ export function orderLifecycleWrite(db,method,route,body,h){
               if(!safeCents(amount)||!safeCents(change))bad('Valor excedeu limite seguro');
             }
             let next;try{next=closeOrder(order,amount);}catch(e){bad(e.message);}
-            const stock=consumeStockForOrder(db,id,actor,conflict);
+            let stockOverrideReason='';
+            if(body.inventoryOverrideReason!==undefined){
+              if(operatorRole!=='admin'&&deviceRole!=='manager')
+                h.forbidden('Somente supervisor pode autorizar divergência de estoque','SUPERVISOR_REQUIRED');
+              stockOverrideReason=requireString(body.inventoryOverrideReason,'Motivo da falta de estoque',240);
+              if(stockOverrideReason.length<8)bad('Informe motivo de pelo menos 8 caracteres');
+            }
+            const stock=consumeStockForOrder(db,id,actor,conflict,{allowShortage:!!stockOverrideReason,reason:stockOverrideReason});
+            if(stock.shortages.length) audit(db,id,'STOCK_SHORTAGE_APPROVED',{reason:stockOverrideReason,shortages:stock.shortages});
             for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id) VALUES(?,?,?,?,?,?,?)')
               .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id);
             const pendingKitchenTickets=db.prepare("SELECT COUNT(*) AS n FROM kitchen_ticket WHERE order_id=? AND status IN ('PENDING','PREPARING','READY')").get(id).n;
