@@ -89,7 +89,7 @@ function App(){
  }).catch(()=>{});
  const confirm=()=>run(async()=>{if(!order?.lines?.length)throw Error('Pedido sem itens');if(isDemo){setOrder({...order,status:'OPEN',revision:order.revision+1});setNotice('Pedido confirmado somente na prévia.');return;}const result=await api(`/api/orders/${order.id}/confirm`,{method:'POST',body:{commandId:commandId(),expectedRevision:order.revision}});setOrder(result.order);setNotice('Pedido confirmado no host.');}).catch(()=>{});
  const cancel=()=>{const reason=window.prompt('Motivo do cancelamento (obrigatório):');if(reason===null)return;void run(async()=>{if(!reason.trim())throw Error('Informe o motivo do cancelamento');if(isDemo){setOrder({...order,status:'CANCELLED'});return;}const result=await api(`/api/orders/${order.id}/cancel`,{method:'POST',body:{commandId:commandId(),expectedRevision:order.revision,reason:reason.trim()}});setOrder(result.order);setNotice('Pedido cancelado no host.');}).catch(()=>{});};
- const pay=async(payments)=>run(async()=>{if(!order||order.status!=='OPEN')throw Error('Confirme o pedido antes do pagamento');if(!session&&!isDemo)throw Error('Abra o caixa para receber pagamento');if(isDemo){const closed={...order,status:'CLOSED'};setOrder(closed);setDoneOrder(closed);setModal(null);setView('concluida');setNotice('Prévia de venda: não houve pagamento real.');return;}const result=await api(`/api/orders/${order.id}/close`,{method:'POST',body:{commandId:commandId(),expectedRevision:order.revision,payments}});setOrder(result.order);setDoneOrder(result.order);setModal(null);setView('concluida');setNotice(`Venda gravada · troco ${centsLabel(result.changeCents)}`);await refresh();}).catch(()=>{});
+ const pay=async(payments,inventoryOverrideReason=null)=>run(async()=>{if(!order||order.status!=='OPEN')throw Error('Confirme o pedido antes do pagamento');if(!session&&!isDemo)throw Error('Abra o caixa para receber pagamento');if(isDemo){const closed={...order,status:'CLOSED'};setOrder(closed);setDoneOrder(closed);setModal(null);setView('concluida');setNotice('Prévia de venda: não houve pagamento real.');return;}const result=await api(`/api/orders/${order.id}/close`,{method:'POST',body:{commandId:commandId(),expectedRevision:order.revision,payments,...(inventoryOverrideReason?{inventoryOverrideReason}:{})}});setOrder(result.order);setDoneOrder(result.order);setModal(null);setView('concluida');setNotice(`Venda gravada · troco ${centsLabel(result.changeCents)}`);await refresh();}).catch(()=>{});
  const openOrder=o=>run(async()=>{if(isDemo){setOrder({...demoOrder(),id:o.id,status:o.status,serviceMode:o.serviceMode,revision:o.revision});setView('venda');return;}const data=await api(`/api/orders/${o.id}`);setOrder(data.order);setView('venda');}).catch(()=>{});
  const refundOrder=o=>{
    const reason=window.prompt('Motivo da devolução integral (obrigatório):');
@@ -177,7 +177,7 @@ function App(){
   {page()}
  </AppShell.Main>
  {modal?.type==='product'&&<ProductModal product={modal.product} requester={api} demo={isDemo} busy={busy} onClose={()=>setModal(null)} onSubmit={addProduct}/>}
- {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy}/>}
+ {modal?.type==='payment'&&<PaymentModal order={order} onClose={()=>setModal(null)} onPay={pay} busy={busy} canOverrideStock={mode==='live'&&user?.role==='admin'}/>}
  {modal?.type==='refund-items'&&<PartialRefundDialog orderId={modal.orderId} api={api} onClose={()=>setModal(null)} onDone={()=>{setModal(null);void refresh();}}/>}
  </AppShell>
 }
