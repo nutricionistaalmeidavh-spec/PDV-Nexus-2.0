@@ -45,6 +45,7 @@ export function roleAllows(role,method,route) {
     (method==='POST'&&(
       route==='/api/orders'|| /^\/api\/tables\/[^/]+\/open$/.test(route)||
       /^\/api\/orders\/[^/]+\/waiter$/.test(route)||
+      /^\/api\/orders\/[^/]+\/reopen-service$/.test(route)||
       /^\/api\/attendance\/tickets\/[^/]+\/(claim|deliver)$/.test(route)||
       /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)||
       /^\/api\/orders\/[^/]+\/lines\/[^/]+\/(edit|cancel)$/.test(route)||
