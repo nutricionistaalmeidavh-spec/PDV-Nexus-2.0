@@ -11,3 +11,11 @@ export function mayFinishExistingOperation(method,route){
     /^\/api\/delivery\/orders\/[^/]+\/status$/.test(route) ||
     /^\/api\/print\/jobs\/[^/]+\/(?:send|reprint)$/.test(route);
 }
+
+/** Narrow exception: an existing unsettled order may require opening a cash shift
+ * to record its payment after entitlement expiry. Never creates a new order.
+ */
+export function mayOpenCashForUnfinishedOrders(db,method,route){
+ if(method!=='POST'||route!=='/api/cash/open')return false;
+ return !!db.prepare("SELECT 1 FROM sales_order WHERE status IN ('DRAFT','OPEN') LIMIT 1").get();
+}
