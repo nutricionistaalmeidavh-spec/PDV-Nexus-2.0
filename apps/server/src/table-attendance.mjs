@@ -234,7 +234,7 @@ export function attendanceWrite(db,method,route,body,h){
   if(result.changes!==1)h.conflict('Ticket alterado simultaneamente','REVISION_CONFLICT');
   if(claimed)db.prepare('UPDATE kitchen_delivery_claim SET delivered_at=? WHERE ticket_id=?').run(h.stamp(),ticket.id);
   h.audit(db,ticket.orderId,'KITCHEN_TICKET_DELIVERED',{ticketId:ticket.id,waiterDeviceId:waiterId});
-  return {ticketId:ticket.id,status:'SERVED',waiterDeviceId:waiterId};
+  return {ticket:{id:ticket.id,status:'SERVED',waiterDeviceId:waiterId}};
  });
  return null;
 }
