@@ -31,7 +31,7 @@ export function lanRole(req,config,dynamicRole=()=>null) {
 }
 export function roleAllows(role,method,route) {
   if(role==='local'||role==='manager')return true;
-  if(role==='mirror')return method==='GET'&&route==='/api/sync/operational/export';
+  if(role==='mirror')return method==='GET'&&['/api/sync/operational/export','/api/sync/summary/daily'].includes(route);
   if(role==='kitchen') return (method==='GET'&&['/api/kitchen/tickets','/api/kitchen/events'].includes(route)) ||
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
