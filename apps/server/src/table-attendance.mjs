@@ -176,6 +176,18 @@ export function attendanceWrite(db,method,route,body,h){
   h.audit(db,'r-local','TABLET_APPROVAL_MODE_CHANGED',{autoAccept:body.autoAccept});
   return {autoAccept:body.autoAccept};
  });
+ const reopen=route.match(/^\/api\/orders\/([^/]+)\/reopen-service$/);
+ if(reopen)return h.transact(db,route,body,()=>{
+  if(!h.supervisor&&!h.deviceId)h.forbidden('Apenas um garçom identificado ou supervisor pode reabrir pedidos','WAITER_REQUIRED');
+  const order=db.prepare("SELECT id,status FROM sales_order WHERE id=? AND service_mode='table'").get(reopen[1]);
+  if(!order)h.missing('Atendimento');
+  if(!['DRAFT','OPEN'].includes(order.status))h.conflict('Atendimento já encerrado','ATTENDANCE_CLOSED');
+  const locked=db.prepare('SELECT close_requested_at AS at FROM table_attendance_state WHERE order_id=?').get(order.id);
+  if(!locked?.at)h.conflict('Conta não está solicitada','NOT_CLOSING');
+  db.prepare('UPDATE table_attendance_state SET close_requested_at=NULL WHERE order_id=?').run(order.id);
+  h.audit(db,order.id,'TABLET_BILL_REQUEST_CANCELLED',{reason:h.requireString(body.reason,'Motivo',240)});
+  return {orderId:order.id,closeRequested:false};
+ });
  const assign=route.match(/^\/api\/orders\/([^/]+)\/waiter$/);
  if(assign)return h.transact(db,route,body,()=>{
   const order=db.prepare("SELECT id,status FROM sales_order WHERE id=? AND service_mode='table'").get(assign[1]);
