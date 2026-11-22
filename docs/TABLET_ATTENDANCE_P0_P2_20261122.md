@@ -50,11 +50,11 @@ Antes desta branch já existiam: `sales_order`, `order_line`, `payment`, `kitche
 | `POST /api/attendance/tickets/:id/deliver` | Responsável: confirmar entrega |
 | `GET /api/attendance/analytics` | Indicadores read-only sobre os registros canônicos |
 
-## P2 — o que está entregue e o que continua pendente
+## P2 — BI e planejamento concluídos na branch
 
-**Nesta branch:** endpoint read-only de métricas operacionais (tickets por etapa, preparados após pagamento, entregas registradas e pagamentos confirmados). Não é projeção de demanda nem BI preditivo.
+Além das métricas operacionais, a branch possui BI financeiro detalhado, projeção histórica transparente por dia da semana, sugestões de reposição com FEFO e visão consolidada por unidade. A consulta periódica por HTTPS LAN é **opcional e desativada por padrão**; a exportação/importação manual permanece disponível. O sistema não produz compras, não utiliza modelo pago e não replica vendas operacionais entre unidades.
 
-**Futuro, sem simular conclusão:** dashboards gerenciais aprofundados, previsão de demanda e ruptura, compras sugeridas e painel de gestão centralizado online para múltiplas unidades. A sincronização operacional bidirecional não é implementada aqui; permanece o mecanismo de exportação/consolidação já existente no Core.
+**Critérios, limites e endpoints:** [P2_BI_FINAL_20261122.md](./P2_BI_FINAL_20261122.md). Indicadores remotos são snapshots/leituras periódicas, não transações financeiras em tempo real.
 
 ## Testes e aceitação
 
