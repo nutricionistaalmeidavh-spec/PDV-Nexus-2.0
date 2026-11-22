@@ -68,7 +68,7 @@ export function orderLifecycleWrite(db,method,route,body,h){
             writeOrder(db,next);
             if(order.tableId&&pendingKitchenTickets) audit(db,id,'TABLE_RELEASED_WITH_PENDING_KITCHEN',{tableId:order.tableId,pendingKitchenTickets});
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
-              .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
+              .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,orderNumber:order.orderNumber,lines:next.lines,totalCents:amount}),'PENDING',stamp());
             audit(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents,pendingKitchenTickets});
             return {order:databaseOrder(db,id),changeCents:change};
           });
