@@ -102,7 +102,7 @@ export function consumeStockForOrder(db,orderId,actor,conflict,{allowShortage=fa
 export function inventoryRead(db,method,route,params,h){
   if(method!=='GET')return null;
   if(route==='/api/stock/ingredients'){
-    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active,(SELECT COALESCE(SUM(s.shortage_milli),0) FROM stock_shortage s WHERE s.ingredient_id=stock_ingredient.id) AS shortageMilli, FROM stock_ingredient WHERE restaurant_id='r-local' ORDER BY name COLLATE NOCASE").all();
+    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active,(SELECT COALESCE(SUM(s.shortage_milli),0) FROM stock_shortage s WHERE s.ingredient_id=stock_ingredient.id) AS shortageMilli FROM stock_ingredient WHERE restaurant_id='r-local' ORDER BY name COLLATE NOCASE").all();
     return {status:200,body:{ingredients}};
   }
   const history=route.match(/^\/api\/stock\/ingredients\/([^/]+)\/movements$/);
@@ -116,7 +116,7 @@ export function inventoryRead(db,method,route,params,h){
     return {status:200,body:{productId:recipe[1],items:db.prepare('SELECT ingredient_id AS ingredientId,quantity_milli AS quantityMilli FROM stock_recipe_item WHERE product_id=? ORDER BY ingredient_id').all(recipe[1])}};
   }
   if(route==='/api/stock/report'){
-    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active,(SELECT COALESCE(SUM(s.shortage_milli),0) FROM stock_shortage s WHERE s.ingredient_id=stock_ingredient.id) AS shortageMilli, FROM stock_ingredient WHERE restaurant_id='r-local' AND active=1 ORDER BY name COLLATE NOCASE").all();
+    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active,(SELECT COALESCE(SUM(s.shortage_milli),0) FROM stock_shortage s WHERE s.ingredient_id=stock_ingredient.id) AS shortageMilli FROM stock_ingredient WHERE restaurant_id='r-local' AND active=1 ORDER BY name COLLATE NOCASE").all();
     const totalValueCents=ingredients.reduce((x,i)=>safeAdd(x,i.bookValueCents),0);
     return {status:200,body:{ingredients:ingredients.map(i=>({...i,lowStock:i.lowStockMilli>0&&i.onHandMilli<=i.lowStockMilli})),totalValueCents,lowStockCount:ingredients.filter(i=>i.lowStockMilli>0&&i.onHandMilli<=i.lowStockMilli).length}};
   }
