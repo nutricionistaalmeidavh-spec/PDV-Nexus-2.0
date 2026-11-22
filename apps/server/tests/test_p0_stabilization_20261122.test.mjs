@@ -82,3 +82,28 @@ test('P0: supervisor gerencia operadores, revoga sessao e protege ultimo adminis
   assert.equal((await req('POST','/api/auth/logout',{})).status,200);
   assert.equal((await req('POST','/api/auth/login',{username:'caixa01',password:'novaSenhaForte12345'})).status,401);
 });
+
+test('P0: backup automático validado preserva versões recentes e rotaciona somente seus próprios arquivos',async t=>{
+  const {createAutomaticBackupScheduler}=await import('../src/backup-scheduler.mjs');
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-autobackup-'));
+  t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+  const database=path.join(folder,'nexus.db');
+  const db=openDatabase(database);
+  t.after(()=>db.close());
+  let now=1_800_000_000_000;
+  const jobs=createAutomaticBackupScheduler(db,database,{now:()=>now,retention:2,intervalMs:60_000});
+  const manual=path.join(folder,'backups','manual-user.sqlite');
+  fs.mkdirSync(path.dirname(manual),{recursive:true});
+  fs.writeFileSync(manual,'preserve');
+  const first=await jobs.runOnce();
+  assert.equal(inspectBackup(first).compatible,true);
+  assert.equal(await jobs.runOnce(),null,'intervalo mínimo evita duplicar snapshots');
+  now+=60_001;
+  await jobs.runOnce();
+  now+=60_001;
+  const third=await jobs.runOnce();
+  const autos=fs.readdirSync(path.join(folder,'backups')).filter(x=>x.startsWith('auto-'));
+  assert.equal(autos.length,2);
+  assert.equal(fs.existsSync(third),true);
+  assert.equal(fs.existsSync(manual),true);
+});
