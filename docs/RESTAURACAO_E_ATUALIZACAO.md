@@ -5,7 +5,7 @@ O aplicativo mantém **um único arquivo SQLite por instalação**. Não compart
 
 - Em **Backup e atualizações**, o supervisor local clica em **Criar backup SQLite**. O host salva na subpasta `backups/`, valida `PRAGMA integrity_check` e `PRAGMA foreign_key_check` e só então confirma o caminho.
 - O endpoint de backup é local e autenticado; o ID do comando impede que retries criem arquivos duplicados.
-- Antes de aplicar uma migração de esquema em um banco existente, o host produz um snapshot SQLite validado, com nome `before-v18-from-v<versão>-...`. Se não for possível salvá-lo, a migração é interrompida sem executar DDL.
+- Antes de aplicar uma migração de esquema em um banco existente, o host produz um snapshot SQLite validado no formato `before-v<NOVA>-from-v<ANTIGA>-...`. As versões são descobertas pelas migrations versionadas, sem número fixo no código; se o snapshot falhar, a migração é interrompida sem executar DDL.
 - Além do backup local, mantenha uma cópia em mídia independente. Não armazene arquivos de clientes no Git.
 
 ## Restauração (operações offline)
