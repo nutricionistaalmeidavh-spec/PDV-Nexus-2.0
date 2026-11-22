@@ -156,10 +156,14 @@ try{
  const prediction=await data('/api/bi/forecast?days=7');
  assert.ok(prediction.products.length>=1);
  await shot('p2-07-bi-previsao');
- await page.locator('.nexus-management').getByRole('button',{name:'Reposição'}).click();
- await page.getByRole('heading',{name:'Sugestões de reposição'}).waitFor();
  const reorder=await data('/api/bi/replenishment');
  assert.equal(reorder.automaticPurchase,false,'BI nunca dispara compras automaticamente');
+ await page.locator('.nexus-management').getByRole('button',{name:'Reposição'}).click();
+ try{await page.getByRole('heading',{name:'Sugestões de reposição'}).waitFor({timeout:9000});}
+ catch(error){
+  const visible=await page.locator('.nexus-management').innerText().catch(()=>'(painel ausente)');
+  throw new Error('Falha ao abrir aba Reposição: '+visible.slice(0,1400),{cause:error});
+ }
  await shot('p2-08-bi-reposicao');
  await page.locator('.nexus-management').getByRole('button',{name:'Unidades',exact:true}).click();
  await page.getByRole('heading',{name:'Origem e atualização das unidades'}).waitFor();
