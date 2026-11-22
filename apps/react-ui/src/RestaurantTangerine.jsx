@@ -122,11 +122,6 @@ export function RestaurantKitchen({tickets=[],api,onUpdate,busy,onRefresh}){
    }catch(error){setPageError(error?.message||'Não foi possível carregar tickets adicionais');}
    finally{setLoadingMore(false);}
  };
- const updateLoaded=async(ticket,status)=>{
-   const completed=await onUpdate(ticket,status);
-   if(completed)setExtra(old=>old.map(x=>x.id===ticket.id?{...x,status,revision:x.revision+1}:x)
-     .filter(x=>['PENDING','PREPARING','READY'].includes(x.status)));
- };
  const visible=useMemo(()=>shown.filter(t=>
    [ 'PENDING','PREPARING','READY' ].includes(t.status)&&
    [t.tableLabel,t.productName,t.orderId].some(v=>String(v||'').toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR')))
@@ -158,7 +153,10 @@ export function RestaurantKitchen({tickets=[],api,onUpdate,busy,onRefresh}){
        {ticket.waiterName&&<Text size="xs" c="dimmed">Garçom: {ticket.waiterName}</Text>}
        {ticket.note&&<Text size="sm" mb="xs" className="nexus-kds-note">Obs.: {ticket.note}</Text>}
        {ticket.modifiers&&<Text size="sm" c="dimmed">Adicionais: {ticket.modifiers}</Text>}
-       <Button color={group.tone} fullWidth mt="md" onClick={()=>void updateLoaded(ticket,group.next)} disabled={busy}>
+       <Button color={group.tone} fullWidth mt="md" onClick={()=>void Promise.resolve(onUpdate(ticket,group.next)).then(completed=>{
+         if(completed)setExtra(old=>old.map(x=>x.id===ticket.id?{...x,status:group.next,revision:x.revision+1}:x)
+           .filter(x=>['PENDING','PREPARING','READY'].includes(x.status)));
+        })} disabled={busy}>
         {group.action}
        </Button>
       </Card>)}
