@@ -124,6 +124,36 @@ function TableQrPanel({order,api,mode,run,busy,onError}){
  </div>;
 }
 
+function AttendanceWaiter({order,api,canManage,onUpdate}){
+ const [devices,setDevices]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{
+  if(!canManage||order?.serviceMode!=='table')return;
+  let alive=true;api('/api/pairing/devices')
+   .then(x=>{if(alive)setDevices((x.devices||[]).filter(v=>v.role==='waiter'&&!v.revokedAt))})
+   .catch(e=>{if(alive)setError(e.message)});
+  return()=>{alive=false};
+ },[api,canManage,order?.serviceMode]);
+ if(order?.serviceMode!=='table')return null;
+ const assign=async deviceId=>{
+  if(!deviceId||busy)return;
+  setError('');setBusy(true);
+  try{
+   await api('/api/orders/'+encodeURIComponent(order.id)+'/waiter',{method:'POST',body:{commandId:uuid(),waiterDeviceId:deviceId}});
+   onUpdate((await api('/api/orders/'+encodeURIComponent(order.id))).order);
+  }catch(e){setError(e.message)}finally{setBusy(false)}
+ };
+ return <Panel title="Garçom responsável">
+  <p className="help">Responsável atual: <strong>{order.waiter?.label||'Nenhum — atendimento pelo tablet'}</strong>. Cada transferência preserva a auditoria e o responsável original dos itens.</p>
+  {canManage&&['DRAFT','OPEN'].includes(order.status)&&<label className="field">Atribuir ou transferir para
+   <select value={order.waiter?.deviceId||''} disabled={busy} onChange={event=>void assign(event.target.value)}>
+    <option value="">Escolha um garçom pareado</option>
+    {devices.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}
+   </select>
+  </label>}
+  {error&&<p className="errorbox" role="alert">{error}</p>}
+ </Panel>;
+}
+
 export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,onCheckout,session,canManage=false}){
  const [productId,setProductId]=useState(''),[qty,setQty]=useState('1'),[note,setNote]=useState('');
  const [mods,setMods]=useState([]),[selectedMods,setSelectedMods]=useState([]);
@@ -149,7 +179,7 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
    return result;
   }catch(e){setError(e.message);}finally{setBusy(false)}
  };
- const lineAllowed=order&&['DRAFT','OPEN'].includes(order.status)&&!order.suspended&&!(order.payments||[]).length;
+ const lineAllowed=order&&['DRAFT','OPEN'].includes(order.status)&&!order.suspended&&!order.closeRequested&&!(order.payments||[]).length;
  const canConfirm=order?.status==='DRAFT'&&order?.lines?.length>0;
  const canCheckout=order?.status==='OPEN'&&!!session&&!(order.payments||[]).length;
  const safeProducts=products.filter(x=>x.active&&x.categoryActive!==0&&!x.isPizza&&x.saleUnit!=='kg');
@@ -157,6 +187,15 @@ export function TableOrderPanel({order,tables,products,api,mode,onUpdate,onBack,
  const isTable=order?.serviceMode==='table';
  return <div className="page nexus-restaurant nexus-table-order">
    <div className="pageheading"><div><p className="eyebrow">RESTAURANTE / COMANDA CANÔNICA</p><h1>{isTable?'Gerenciar mesa':'Gerenciar pedido'}</h1><p className="subtext">{order?.tableId?'Mesa vinculada':'Pedido'} · {order?.status||'Sem comanda'} · nenhuma operação é confirmada sem o host.</p></div><Button variant="default" leftSection={<ArrowLeft size={17}/>} onClick={onBack}>Voltar às mesas</Button></div>
+   {order?.closeRequested&&<Paper withBorder radius="lg" p="md" style={{borderColor:'#cd7825',background:'#fff7ed'}}>
+    <Text fw={800}>Conta solicitada — novos pedidos bloqueados</Text>
+    <Text size="sm">O caixa pode receber normalmente, inclusive com itens em preparo. Garçom ou gerente pode reabrir o atendimento mediante motivo.</Text>
+    <Button size="xs" mt="sm" variant="outline" disabled={busy} onClick={()=>{const reason=window.prompt('Motivo para reabrir o atendimento:');
+     if(reason?.trim())void run('/api/orders/'+encodeURIComponent(order.id)+'/reopen-service',{reason:reason.trim()}).then(async result=>{
+       if(result)onUpdate((await api('/api/orders/'+encodeURIComponent(order.id))).order);
+     })}}>Reabrir atendimento</Button>
+   </Paper>}
+   <AttendanceWaiter order={order} api={api} canManage={canManage} onUpdate={onUpdate}/>
    {error&&<p className="errorbox" role="alert">{error}</p>}
    {notice&&<p className="help" role="status">{notice}</p>}
    {!order?<Panel title="Selecione uma mesa">Abra uma comanda no mapa do salão.</Panel>:<div className="stack">
