@@ -10,7 +10,7 @@ for(const role of ['waiter','kitchen','manager','mirror']) {
 const lan=lanHost?{certPath:env.PDV_LAN_CERT,keyPath:env.PDV_LAN_KEY,tokens}:null;
 const operationalSync=env.PDV_OPERATIONAL_PEERS_JSON?
   {peers:JSON.parse(env.PDV_OPERATIONAL_PEERS_JSON),intervalMs:Number(env.PDV_SYNC_INTERVAL_MS??60000)}:null;
-const app=createApp({dataPath:env.PDV_DATA_PATH,operationMode:env.PDV_OPERATION_MODE??'demo',lan,
+const app=createApp({dataPath:env.PDV_DATA_PATH,operationMode:env.PDV_OPERATION_MODE??'production',lan,
   publicMenuEnabled:env.PDV_PUBLIC_MENU_ENABLED==='true',operationalSync});
 const origin=await app.listen({host:lanHost??'127.0.0.1',port:Number(env.PDV_PORT??3434)});
 if(env.PDV_PUBLIC_PORT){
