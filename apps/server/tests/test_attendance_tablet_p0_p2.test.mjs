@@ -61,6 +61,12 @@ test('tablet fixo abre atendimento, registra pedido sem duplicar e bloqueia apó
  const blocked=await api('POST','/api/tablet/orders',{clientRequestId:randomUUID(),items:[{productId:product.id,quantity:1}]},token);
  assert.equal(blocked.status,409,JSON.stringify(blocked));
  assert.equal((await api('GET','/api/tablet/state',undefined,token)).closeRequested,true);
+ const reopened=await api('POST','/api/orders/'+started.order.id+'/reopen-service',cmd({reason:'Cliente decidiu continuar consumindo'}));
+ assert.equal(reopened.status,200,JSON.stringify(reopened));
+ assert.equal(reopened.closeRequested,false);
+ const newRequest=await api('POST','/api/tablet/orders',{clientRequestId:randomUUID(),items:[{productId:product.id,quantity:1}]},token);
+ assert.equal(newRequest.status,202,JSON.stringify(newRequest));
+ assert.equal((await api('POST','/api/tablet/close-request',cmd(),token)).status,200);
  const dashboard=await api('GET','/api/attendance/overview');
  assert.equal(dashboard.status,200);
  assert.ok(dashboard.closingRequests.some(x=>x.orderId===started.order.id));
