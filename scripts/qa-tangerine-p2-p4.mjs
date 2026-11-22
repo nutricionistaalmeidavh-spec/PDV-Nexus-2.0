@@ -161,8 +161,8 @@ try{
  await page.locator('.nexus-management').getByRole('button',{name:'Reposição'}).click();
  try{await page.getByRole('heading',{name:'Sugestões de reposição'}).waitFor({timeout:9000});}
  catch(error){
-  const visible=await page.locator('.nexus-management').innerText().catch(()=>'(painel ausente)');
-  throw new Error('Falha ao abrir aba Reposição: '+visible.slice(0,1400),{cause:error});
+  const visible=await page.locator('body').innerText().catch(()=>'(DOM indisponível)');
+  throw new Error('Falha ao abrir aba Reposição: '+visible.slice(0,1400)+' | PAGEERRORS: '+errors.join(' | ').slice(0,1800),{cause:error});
  }
  await shot('p2-08-bi-reposicao');
  await page.locator('.nexus-management').getByRole('button',{name:'Unidades',exact:true}).click();
