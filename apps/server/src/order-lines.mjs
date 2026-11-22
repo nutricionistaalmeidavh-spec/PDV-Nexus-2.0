@@ -14,6 +14,7 @@ export function orderLinesWrite(db,method,route,body,h){
           return transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             if(order.suspended)conflict('Venda suspensa: retome a venda','ORDER_SUSPENDED');
+            if(db.prepare('SELECT 1 FROM table_attendance_state WHERE order_id=? AND close_requested_at IS NOT NULL').get(id))conflict('Conta solicitada; reabra o atendimento antes de novos itens','CLOSING_REQUESTED');
             if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Pagamento já iniciado; novos itens exigem outra comanda','PAYMENT_STARTED');
             const product=db.prepare('SELECT * FROM menu_product WHERE id=? AND active=1').get(body.productId);if(!product)missing('Produto');
             if(product.sale_unit==='kg'||db.prepare('SELECT 1 FROM pizza_product WHERE product_id=?').get(product.id))
