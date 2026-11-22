@@ -54,6 +54,24 @@ function Dashboard({data}){
     {(data.methods||[]).map(x=><Group key={x.method} justify="space-between" mb="xs"><Text size="sm">{({cash:'Dinheiro',pix:'Pix',credit:'Crédito',debit:'Débito',other:'Outros'})[x.method]||x.method}</Text><Text fw={700} size="sm">{money(x.confirmedCents)}</Text></Group>)}
    </Section>
   </SimpleGrid>
+  <SimpleGrid cols={{base:1,lg:2}} spacing="lg">
+   <Section title="Desempenho por categoria">
+    <div style={style}><Table striped highlightOnHover>
+     <Table.Thead><Table.Tr><Table.Th>Categoria</Table.Th><Table.Th ta="right">Itens</Table.Th><Table.Th ta="right">Bruto</Table.Th></Table.Tr></Table.Thead>
+     <Table.Tbody>{(data.topCategories||[]).map(c=><Table.Tr key={c.categoryId}>
+      <Table.Td>{c.name}</Table.Td><Table.Td ta="right">{c.quantity}</Table.Td><Table.Td ta="right">{money(c.grossCents)}</Table.Td>
+     </Table.Tr>)}</Table.Tbody>
+    </Table></div>{!data.topCategories?.length&&<Text c="dimmed">{empty}</Text>}
+   </Section>
+   <Section title="Movimento por hora (UTC)">
+    <div style={style}><Table striped highlightOnHover>
+     <Table.Thead><Table.Tr><Table.Th>Hora registrada</Table.Th><Table.Th ta="right">Pedidos</Table.Th><Table.Th ta="right">Líquido</Table.Th></Table.Tr></Table.Thead>
+     <Table.Tbody>{(data.byHour||[]).map(h=><Table.Tr key={h.hour}>
+      <Table.Td>{h.hour}:00</Table.Td><Table.Td ta="right">{h.orders}</Table.Td><Table.Td ta="right">{money(h.netSalesCents)}</Table.Td>
+     </Table.Tr>)}</Table.Tbody>
+    </Table></div>{!data.byHour?.length&&<Text c="dimmed">{empty}</Text>}
+   </Section>
+  </SimpleGrid>
   <Text size="xs" c="dimmed">Devoluções atribuídas à data de fechamento da venda. Categorias usam o cadastro atual. Horários da API em UTC.</Text>
  </Stack>;
 }
@@ -91,11 +109,12 @@ function Replenishment({data}){
   </Paper>
   <Section title="Sugestões de reposição">
    <div style={style}><Table striped highlightOnHover>
-    <Table.Thead><Table.Tr><Table.Th>Ingrediente</Table.Th><Table.Th ta="right">Utilizável</Table.Th><Table.Th ta="right">Vencendo/vencido</Table.Th><Table.Th ta="right">Repor</Table.Th><Table.Th>Base</Table.Th></Table.Tr></Table.Thead>
+    <Table.Thead><Table.Tr><Table.Th>Ingrediente</Table.Th><Table.Th ta="right">Utilizável</Table.Th><Table.Th ta="right">Vencendo/vencido</Table.Th><Table.Th ta="right">Cobertura</Table.Th><Table.Th ta="right">Repor</Table.Th><Table.Th>Base</Table.Th></Table.Tr></Table.Thead>
     <Table.Tbody>{(data.ingredients||[]).map(x=><Table.Tr key={x.id}>
      <Table.Td><Text fw={650}>{x.name}</Text><Text size="xs" c="dimmed">Mínimo: {quantity(x.lowStockMilli,x.unit)}</Text></Table.Td>
      <Table.Td ta="right">{quantity(x.usableMilli,x.unit)}</Table.Td>
      <Table.Td ta="right">{quantity(x.expiredMilli+x.expiringMilli,x.unit)}</Table.Td>
+     <Table.Td ta="right">{x.stockoutDays===null?'Sem estimativa':x.stockoutDays+' dias'}</Table.Td>
      <Table.Td ta="right"><Text fw={800} c={x.recommendedMilli>0?'orange':'dimmed'}>{quantity(x.recommendedMilli,x.unit)}</Text></Table.Td>
      <Table.Td><Badge color={x.demandConfidence==='INSUFFICIENT_HISTORY'?'gray':'blue'}>{x.demandConfidence==='INSUFFICIENT_HISTORY'?'Mínimo cadastrado':'Histórico de consumo'}</Badge></Table.Td>
     </Table.Tr>)}</Table.Tbody>
