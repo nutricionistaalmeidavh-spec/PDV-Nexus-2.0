@@ -95,12 +95,37 @@ const KDS_GROUPS=[
  {status:'READY',label:'Prontos',action:'Entregar',next:'SERVED',tone:'green',icon:Check}
 ];
 
-export function RestaurantKitchen({tickets=[],onUpdate,busy,onRefresh}){
+export function RestaurantKitchen({tickets=[],api,onUpdate,busy,onRefresh}){
  const [query,setQuery]=useState('');
- const visible=useMemo(()=>tickets.filter(t=>
+ const [extra,setExtra]=useState([]),[nextCursor,setNextCursor]=useState(undefined),[loadingMore,setLoadingMore]=useState(false),[pageError,setPageError]=useState('');
+ const shown=useMemo(()=>{
+   const ids=new Set(tickets.map(x=>x.id));
+   return [...tickets,...extra.filter(x=>!ids.has(x.id))];
+ },[tickets,extra]);
+ const loadMore=async()=>{
+   if(loadingMore)return;
+   setLoadingMore(true);setPageError('');
+   try{
+     let cursor=nextCursor;
+     if(cursor===undefined){
+       const first=await api('/api/kitchen/tickets?limit=200');
+       cursor=first.nextCursor;
+     }
+     if(!cursor){setNextCursor(null);return;}
+     const page=await api('/api/kitchen/tickets?limit=200&cursor='+encodeURIComponent(cursor));
+     const found=new Set(tickets.map(x=>x.id));
+     setExtra(old=>{
+       const seen=new Set([...found,...old.map(x=>x.id)]);
+       return [...old,...page.tickets.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true;})];
+     });
+     setNextCursor(page.nextCursor);
+   }catch(error){setPageError(error?.message||'Não foi possível carregar tickets adicionais');}
+   finally{setLoadingMore(false);}
+ };
+ const visible=useMemo(()=>shown.filter(t=>
    [ 'PENDING','PREPARING','READY' ].includes(t.status)&&
    [t.tableLabel,t.productName,t.orderId].some(v=>String(v||'').toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR')))
- ),[tickets,query]);
+ ),[shown,query]);
  return <div className="page nexus-restaurant nexus-kitchen">
   <Heading eyebrow="PRODUÇÃO / COZINHA" title="Painel KDS" description="Tickets operacionais do host local; etapas não alteram nem quitam a venda."
     action={<Button variant="default" leftSection={<RefreshCw size={17}/>} onClick={onRefresh} loading={busy}>Atualizar</Button>}/>
@@ -128,7 +153,10 @@ export function RestaurantKitchen({tickets=[],onUpdate,busy,onRefresh}){
        {ticket.waiterName&&<Text size="xs" c="dimmed">Garçom: {ticket.waiterName}</Text>}
        {ticket.note&&<Text size="sm" mb="xs" className="nexus-kds-note">Obs.: {ticket.note}</Text>}
        {ticket.modifiers&&<Text size="sm" c="dimmed">Adicionais: {ticket.modifiers}</Text>}
-       <Button color={group.tone} fullWidth mt="md" onClick={()=>onUpdate(ticket,group.next)} disabled={busy}>
+       <Button color={group.tone} fullWidth mt="md" onClick={()=>void Promise.resolve(onUpdate(ticket,group.next)).then(completed=>{
+         if(completed)setExtra(old=>old.map(x=>x.id===ticket.id?{...x,status:group.next,revision:x.revision+1}:x)
+           .filter(x=>['PENDING','PREPARING','READY'].includes(x.status)));
+        })} disabled={busy}>
         {group.action}
        </Button>
       </Card>)}
@@ -137,6 +165,10 @@ export function RestaurantKitchen({tickets=[],onUpdate,busy,onRefresh}){
     </Paper>
    })}
   </div>
+  {pageError&&<Text role="alert" c="red.8" size="sm">{pageError}</Text>}
+  {tickets.length>=200&&nextCursor!==null&&<Group mt="md" justify="center">
+    <Button variant="outline" loading={loadingMore} onClick={()=>void loadMore()}>Carregar mais tickets</Button>
+  </Group>}
  </div>;
 }
 

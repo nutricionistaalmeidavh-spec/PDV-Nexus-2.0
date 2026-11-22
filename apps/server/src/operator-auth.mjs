@@ -11,9 +11,20 @@ const hashPassword=(password,salt)=>scryptSync(password,Buffer.from(salt,'hex'),
 function userView(row) {return {id:row.id,username:row.username,role:row.role};}
 
 export function createOperatorAuth(db) {
-  const sessions=new Map(),failures=new Map();
+  const sessions=new Map(),failures=new Map(),ipFailures=new Map();
+  let attempts=0;
+  function prune(now=Date.now()){
+    if(++attempts%64!==0&&failures.size<=2048&&ipFailures.size<=1024&&sessions.size<=8192)return;
+    for(const [k,v] of failures)if(now-v.last>attemptWindowMs*2)failures.delete(k);
+    for(const [k,v] of ipFailures)if(now-v.last>attemptWindowMs*2)ipFailures.delete(k);
+    for(const [k,v] of sessions)if(v.expires<=now)sessions.delete(k);
+    while(failures.size>2048)failures.delete(failures.keys().next().value);
+    while(ipFailures.size>1024)ipFailures.delete(ipFailures.keys().next().value);
+    while(sessions.size>8192)sessions.delete(sessions.keys().next().value);
+  }
   function configured(){return db.prepare('SELECT COUNT(*) AS amount FROM operator_account').get().amount>0;}
   function login(req,user) {
+    prune();
     const token=randomBytes(32).toString('base64url');
     const key=digest(token);
     sessions.set(key,{user:userView(user),expires:Date.now()+memorySeconds*1000});
@@ -62,9 +73,12 @@ export function createOperatorAuth(db) {
     }
     if(req.method==='POST'&&route==='/api/auth/login'){
       const username=body?.username,password=body?.password;
-      if(!validUsername(username)||typeof password!=='string')return reply(res,401,{code:'INVALID_CREDENTIALS',message:'Credenciais invalidas'});
-      const id=username.toLowerCase(),now=Date.now(),entry=failures.get(id);
-      if(entry?.until>now)return reply(res,429,{code:'TOO_MANY_ATTEMPTS',message:'Aguarde antes de tentar novamente'});
+      if(!validUsername(username)||typeof password!=='string'||password.length>128)return reply(res,401,{code:'INVALID_CREDENTIALS',message:'Credenciais invalidas'});
+      const ip=req.socket.remoteAddress??'unknown',id=ip+'|'+username.toLowerCase(),now=Date.now();
+      prune(now);
+      const prior=failures.get(id),entry=prior?.until>0&&prior.until<=now?null:prior;
+      const ipPrior=ipFailures.get(ip),ipEntry=ipPrior?.until>0&&ipPrior.until<=now?null:ipPrior;
+      if(entry?.until>now||ipEntry?.until>now)return reply(res,429,{code:'TOO_MANY_ATTEMPTS',message:'Aguarde antes de tentar novamente'});
       const account=db.prepare('SELECT * FROM operator_account WHERE username=? COLLATE NOCASE AND enabled=1').get(username);
       // Mesmo em usuario inexistente executar scrypt para reduzir enumeracao por timing.
       const actual=hashPassword(password,account?.password_salt??'0'.repeat(32));
@@ -72,7 +86,9 @@ export function createOperatorAuth(db) {
       const valid=timingSafeEqual(Buffer.from(actual,'hex'),Buffer.from(compare,'hex'))&&!!account;
       if(!valid){
         const count=(entry?.count??0)+1;
-        failures.set(id,{count,until:count>=5?now+attemptWindowMs:0});
+        failures.set(id,{count,until:count>=5?now+attemptWindowMs:0,last:now});
+        const ipCount=(ipEntry?.count??0)+1;
+        ipFailures.set(ip,{count:ipCount,until:ipCount>=30?now+attemptWindowMs:0,last:now});
         return reply(res,401,{code:'INVALID_CREDENTIALS',message:'Credenciais invalidas'});
       }
       failures.delete(id);
@@ -96,6 +112,64 @@ export function createOperatorAuth(db) {
         db.exec('COMMIT');return reply(res,201,{user:userView(account)});
       }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return reply(res,400,{code:'INVALID_OPERATOR',message:e.message});}
     }
+
+    if(req.method==='GET'&&route==='/api/auth/operators'){
+      const supervisor=user(req);
+      if(!supervisor)return reply(res,401,{code:'AUTH_REQUIRED',message:'Entre com a conta de operador'});
+      if(supervisor.role!=='admin')return reply(res,403,{code:'FORBIDDEN',message:'Somente supervisor pode consultar operadores'});
+      const users=db.prepare('SELECT id,username,role,enabled,created_at AS createdAt FROM operator_account ORDER BY username COLLATE NOCASE').all();
+      return reply(res,200,{users});
+    }
+    const operatorChange=route.match(/^\/api\/auth\/operators\/([^/]+)$/);
+    if(req.method==='PATCH'&&operatorChange){
+      const supervisor=user(req);
+      if(!supervisor)return reply(res,401,{code:'AUTH_REQUIRED'});
+      if(supervisor.role!=='admin')return reply(res,403,{code:'FORBIDDEN'});
+      if((body?.role===undefined&&body?.enabled===undefined)||
+         (body?.role!==undefined&&!['admin','cashier'].includes(body.role))||
+         (body?.enabled!==undefined&&typeof body.enabled!=='boolean'))
+        return reply(res,400,{code:'INVALID_OPERATOR',message:'Perfil ou estado inválido'});
+      try{
+        db.exec('BEGIN IMMEDIATE');
+        const existing=db.prepare('SELECT * FROM operator_account WHERE id=?').get(operatorChange[1]);
+        if(!existing){db.exec('ROLLBACK');return reply(res,404,{code:'NOT_FOUND'});}
+        const role=body.role??existing.role,enabled=body.enabled===undefined?existing.enabled:Number(body.enabled);
+        if(supervisor.id===existing.id&&(role!=='admin'||enabled!==1)){
+          db.exec('ROLLBACK');
+          return reply(res,409,{code:'SELF_ADMIN_LOCK',message:'Sua conta de supervisor não pode ser desativada ou rebaixada'});
+        }
+        if(existing.role==='admin'&&existing.enabled===1&&(role!=='admin'||enabled!==1)){
+          const admins=db.prepare("SELECT COUNT(*) AS count FROM operator_account WHERE role='admin' AND enabled=1").get().count;
+          if(admins<=1){db.exec('ROLLBACK');return reply(res,409,{code:'LAST_ADMIN',message:'Mantenha ao menos um supervisor ativo'});}
+        }
+        db.prepare('UPDATE operator_account SET role=?,enabled=? WHERE id=?').run(role,enabled,existing.id);
+        db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
+          .run(randomUUID(),existing.id,'OPERATOR_UPDATED',supervisor.id,JSON.stringify({role,enabled}),stamp());
+        db.exec('COMMIT');
+        for(const [key,session] of sessions)if(session.user.id===existing.id)sessions.delete(key);
+        return reply(res,200,{user:{id:existing.id,username:existing.username,role,enabled}});
+      }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return reply(res,400,{code:'INVALID_OPERATOR',message:'Não foi possível atualizar o operador'});}
+    }
+    const resetPassword=route.match(/^\/api\/auth\/operators\/([^/]+)\/password$/);
+    if(req.method==='POST'&&resetPassword){
+      const supervisor=user(req);
+      if(!supervisor)return reply(res,401,{code:'AUTH_REQUIRED'});
+      if(supervisor.role!=='admin')return reply(res,403,{code:'FORBIDDEN'});
+      if(!validPassword(body?.password))return reply(res,400,{code:'INVALID_PASSWORD',message:'Senha deve ter entre 12 e 128 caracteres'});
+      try{
+        db.exec('BEGIN IMMEDIATE');
+        const existing=db.prepare('SELECT id FROM operator_account WHERE id=?').get(resetPassword[1]);
+        if(!existing){db.exec('ROLLBACK');return reply(res,404,{code:'NOT_FOUND'});}
+        const salt=randomBytes(16).toString('hex');
+        db.prepare('UPDATE operator_account SET password_salt=?,password_hash=? WHERE id=?')
+          .run(salt,hashPassword(body.password,salt),existing.id);
+        db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
+          .run(randomUUID(),existing.id,'OPERATOR_PASSWORD_RESET',supervisor.id,'{}',stamp());
+        db.exec('COMMIT');
+        for(const [key,session] of sessions)if(session.user.id===existing.id)sessions.delete(key);
+        return reply(res,200,{ok:true});
+      }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return reply(res,500,{code:'PASSWORD_RESET_FAILED',message:'Falha ao atualizar credencial'});}
+    }
     return reply(res,404,{code:'NOT_FOUND',message:'Rota de autenticacao inexistente'});
   }
   return {handle,user,configured};
@@ -107,7 +181,8 @@ export function allowedOperator(role,method,route){
   if(/^\/api\/auth\//.test(route))return false;
   if(/^\/api\/exports\//.test(route)||route==='/api/purchases'||/^\/api\/purchases\//.test(route))return false;
   if(/^\/api\/(bi|stock|reports|delivery|system|sync|suppliers)\//.test(route)||route==='/api/suppliers')return false;
-  if(/^\/api\/printer/.test(route)||/^\/api\/print\/jobs\/[^/]+\/send$/.test(route))return false;
+  if(/^\/api\/printer/.test(route))return method!=='POST';
+  if(/^\/api\/print\/jobs\/[^/]+\/(send|reprint)$/.test(route))return method==='POST';
   if(/^\/api\/products/.test(route)&&method!=='GET')return false;
   if(/^\/api\/categories/.test(route)&&method!=='GET')return false;
   if(/^\/api\/tables/.test(route)&&method==='PATCH')return false;

@@ -26,7 +26,7 @@ export function localSummary(db){
        item_refunds AS (SELECT order_id,SUM(amount_cents) AS total FROM order_line_refund GROUP BY order_id),
        costs AS (SELECT source_order_id AS order_id,SUM(-value_delta_cents) AS total
                  FROM stock_movement WHERE kind='SALE' GROUP BY source_order_id)
-  SELECT substr(o.closed_at,1,10) AS day,COUNT(*) AS orderCount,
+  SELECT date(o.closed_at,'-3 hours') AS day,COUNT(*) AS orderCount,
          SUM(g.total) AS grossSalesCents,
          SUM(COALESCE(ref.total,0)+COALESCE(item_refunds.total,0)) AS refundedCents,
          SUM(COALESCE(costs.total,0)) AS cogsCents
@@ -35,7 +35,7 @@ export function localSummary(db){
   LEFT JOIN item_refunds ON item_refunds.order_id=o.id
   LEFT JOIN costs ON costs.order_id=o.id
   WHERE o.status='CLOSED' AND o.closed_at IS NOT NULL
-  GROUP BY substr(o.closed_at,1,10) ORDER BY day ASC`).all();
+  GROUP BY date(o.closed_at,'-3 hours') ORDER BY day ASC`).all();
  return daily.map(r=>{
   const row={...r,netSalesCents:r.grossSalesCents-r.refundedCents};
   if(!keyset(row,dayKeys)||!validateDay(row))throw Error('Resumo financeiro inconsistente');

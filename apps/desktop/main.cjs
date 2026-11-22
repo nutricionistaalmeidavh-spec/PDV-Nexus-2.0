@@ -2,6 +2,7 @@
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const {loadDesktopNetworkConfig}=require('./network-config.cjs');
 let server;
 let appUrl;
 app.whenReady().then(async () => {
@@ -14,9 +15,11 @@ app.whenReady().then(async () => {
     required:true,publicJwk:edition.publicJwk,endpoint:edition.endpoint,
     storagePath:dataPath+'.license.json'
   }:{required:false};
-  const pos=server({dataPath,operationMode:'demo',commercialLicense});
+  const network=loadDesktopNetworkConfig(app.getPath('userData'));
+  const pos=server({dataPath,operationMode:'production',commercialLicense,
+    lan:network.lan,operationalSync:network.operationalSync,publicMenuEnabled:network.publicMenuEnabled});
   server=pos;
-  appUrl=await pos.listen({port:0});
+  appUrl=await pos.listen({port:network.port,host:network.host});
   const window=new BrowserWindow({width:1370,height:880,minWidth:800,minHeight:650,show:false,
     webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));

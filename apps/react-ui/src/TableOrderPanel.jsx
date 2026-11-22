@@ -67,63 +67,48 @@ function LineEditDialog({line,api,onClose,onSave,onCancel,busy}){
   </section>
  </div>;
 }
+/** Show only unresolved requests created by an older installation; the current
+ * product uses menu QR for browsing and the garçom/fixed tablet for ordering. */
 function TableQrPanel({order,api,mode,run,busy,onError}){
- const [publicBaseUrl,setPublicBaseUrl]=useState('');
- const [autoAccept,setAutoAccept]=useState(false);
- const [qr,setQr]=useState(null),[requests,setRequests]=useState([]);
+ const [requests,setRequests]=useState([]);
  const [rejection,setRejection]=useState({});
  useEffect(()=>{
   if(!order?.tableId||!['live','paired'].includes(mode))return;
-  let live=true;
+  let active=true;
   const load=()=>api('/api/tables/'+encodeURIComponent(order.tableId)+'/requests')
-    .then(data=>{if(live)setRequests(data.requests||[])}).catch(e=>{if(live)onError(e.message)});
-  void load();const timer=setInterval(load,10000);
-  return()=>{live=false;clearInterval(timer)};
+    .then(data=>{if(active)setRequests(data.requests||[])}).catch(e=>{if(active)onError(e.message)});
+  void load();
+  const timer=setInterval(load,10000);
+  return()=>{active=false;clearInterval(timer)};
  },[api,order?.tableId,mode]);
  const refresh=async()=>{
   try{const data=await api('/api/tables/'+encodeURIComponent(order.tableId)+'/requests');setRequests(data.requests||[]);}
   catch(e){onError(e.message)}
- };
- const issue=async()=>{
-  const result=await run('/api/tables/'+encodeURIComponent(order.tableId)+'/qr',{publicBaseUrl:publicBaseUrl.trim(),autoAccept});
-  if(result)setQr(result);
  };
  const decide=async(request,accept)=>{
   const route='/api/table-requests/'+encodeURIComponent(request.id)+'/'+(accept?'accept':'reject');
   const result=await run(route,accept?{}:{reason:rejection[request.id]||''});
   if(result)await refresh();
  };
- return <div className="stack">
-  <Panel title="QR Code para pedidos na mesa">
-   <p className="help">A mesa precisa ter comanda aberta. O link é individual, expira em 12 horas e perde a validade ao fechar ou transferir a mesa. Um novo QR revoga o anterior.</p>
-   <label className="field">URL HTTPS do portal público (self-hosted)
-    <input type="url" value={publicBaseUrl} onChange={e=>setPublicBaseUrl(e.target.value)} placeholder="https://menu.seu-restaurante.com.br/" maxLength={512}/>
-   </label>
-   <label className="option-row"><input type="checkbox" checked={autoAccept} onChange={e=>setAutoAccept(e.target.checked)}/>
-    <span>Enviar automaticamente à cozinha, sem aprovação de atendente</span></label>
-   <button className="btn primary" disabled={busy||!publicBaseUrl||!['live','paired'].includes(mode)} onClick={()=>void issue()}>Gerar / renovar QR da mesa</button>
-   {qr&&<div className="stack" style={{marginTop:12}}>
-    <img src={'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(qr.qrSvg)} alt={'QR Code de '+qr.tableLabel} width="200" height="200"/>
-    <a href={qr.url} target="_blank" rel="noreferrer">Abrir cardápio da mesa</a>
-    <small>Válido até {new Date(qr.expiresAt).toLocaleString('pt-BR')} · {qr.autoAccept?'Envio automático':'Aprovação manual'}</small>
-    <button className="btn secondary" type="button" onClick={()=>window.print()}>Imprimir QR</button>
-   </div>}
-  </Panel>
-  <Panel title={'Solicitações de clientes ('+requests.filter(x=>x.status==='PENDING').length+' pendentes)'}>
-   <div className="row wrap"><button className="btn secondary" onClick={()=>void refresh()}>Atualizar solicitações</button></div>
-   {!requests.some(x=>x.status==='PENDING')&&<p className="help">Nenhuma solicitação pendente para esta mesa.</p>}
-   {requests.filter(x=>x.status==='PENDING').map(request=><div className="stack" style={{borderBottom:'1px solid #eee',paddingBottom:12}} key={request.id}>
+ const pending=requests.filter(x=>x.status==='PENDING');
+ if(!pending.length)return null;
+ return <Panel title={'Solicitações legadas pendentes ('+pending.length+')'}>
+   <p className="help">Solicitações recebidas antes da mudança para cardápio QR somente de consulta. Novos pedidos são registrados pelo garçom ou tablet fixo.</p>
+   <button className="btn secondary" onClick={()=>void refresh()}>Atualizar solicitações</button>
+   {pending.map(request=><div className="stack" style={{borderBottom:'1px solid #eee',paddingBottom:12}} key={request.id}>
     <strong>{request.guestName||'Cliente da mesa'} · {money(request.totalCents)}</strong>
     {(request.items||[]).map((item,i)=><small key={i}>{item.quantity} × {item.productName}{item.note?' · '+item.note:''}{item.modifiers?.length?' · '+item.modifiers.map(m=>m.name).join(', '):''}</small>)}
-    <div className="row wrap"><button disabled={busy} className="btn primary" onClick={()=>void decide(request,true)}>Aceitar e enviar à cozinha</button>
-     <label className="field">Motivo da rejeição<input maxLength={240} value={rejection[request.id]||''} onChange={e=>setRejection(s=>({...s,[request.id]:e.target.value}))}/></label>
-     <button disabled={busy||!(rejection[request.id]||'').trim()} className="btn secondary" onClick={()=>void decide(request,false)}>Rejeitar</button>
+    <div className="row wrap">
+     <button disabled={busy} className="btn primary" onClick={()=>void decide(request,true)}>Aceitar e enviar à cozinha</button>
+     <label className="field">Motivo da rejeição
+      <input maxLength={240} value={rejection[request.id]||''} onChange={e=>setRejection(s=>({...s,[request.id]:e.target.value}))}/>
+     </label>
+     <button disabled={busy||!(rejection[request.id]||'').trim()} className="btn secondary"
+      onClick={()=>void decide(request,false)}>Rejeitar</button>
     </div>
    </div>)}
-  </Panel>
- </div>;
+ </Panel>;
 }
-
 function AttendanceWaiter({order,api,canManage,onUpdate}){
  const [devices,setDevices]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{

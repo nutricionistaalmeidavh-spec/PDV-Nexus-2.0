@@ -1,6 +1,7 @@
 /** Explicit opt-in guest menu on a self-hosted LAN; guest requests remain pending until staff accepts. */
 import {randomUUID,createHash} from 'node:crypto';
-import {createOrder,addOrderLine} from '../../../packages/core/src/order.ts';
+import {createOrder,addOrderLine,cancelOrder} from '../../../packages/core/src/order.ts';
+import {writeOrder} from './order-read.mjs';
 const canPay=x=>Number.isSafeInteger(x)&&x>=0;
 const requireText=(x,min,max)=>typeof x==='string'&&x.trim().length>=min&&x.trim().length<=max?x.trim():null;
 const phoneValid=x=>typeof x==='string'&&/^\+?[0-9 ()-]{8,20}$/.test(x)&&x.replace(/\D/g,'').length>=8;
@@ -10,9 +11,16 @@ export function publicRead(db,method,route){
   const products=db.prepare("SELECT p.id,p.name,p.price_cents AS priceCents,c.name AS categoryName,p.is_combo AS isCombo FROM menu_product p JOIN menu_category c ON c.id=p.category_id WHERE p.active=1 AND c.active=1 AND p.sale_unit='unit' AND NOT EXISTS(SELECT 1 FROM pizza_product z WHERE z.product_id=p.id) ORDER BY c.sort_order,c.name COLLATE NOCASE,p.name COLLATE NOCASE LIMIT 250").all();
   return {status:200,body:{documentType:'NON_FISCAL_CATALOG',products}};
 }
-export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
+export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000,maxPending=200}={}){
   const perIp=new Map();
+  let attempts=0;
   function submit(body,remoteAddress){
+    const now=Date.now();
+    if(++attempts%64===0||perIp.size>2048){
+      for(const [ip,item] of perIp)if(item.until<=now)perIp.delete(ip);
+      // Bound memory even under adversarial streams of never-before-seen addresses.
+      while(perIp.size>2048)perIp.delete(perIp.keys().next().value);
+    }
     const clientRequestId=body.clientRequestId??null;
     if(clientRequestId!==null&&(typeof clientRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId)))
       return {status:400,body:{code:'INVALID_REQUEST_ID',message:'Identificador da solicitação inválido'}};
@@ -26,7 +34,7 @@ export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
         return {status:202,body:{requestId:old.id,status:old.status,totalCents:old.totalCents,notice:'Solicitação já recebida. Não houve duplicação.'}};
       }
     }
-    const ip=remoteAddress??'unknown',t=Date.now(),previous=perIp.get(ip);
+    const ip=remoteAddress??'unknown',t=now,previous=perIp.get(ip);
     const entry=previous&&previous.until>t?previous:{count:0,until:t+windowMs};
     if(entry.count>=maxPerWindow)return {status:429,body:{code:'RATE_LIMIT',message:'Muitas solicitações. Contate a loja.'}};
     entry.count++;perIp.set(ip,entry);
@@ -45,6 +53,9 @@ export function createPublicRequests(db,{maxPerWindow=8,windowMs=600000}={}){
       totalCents+=lineTotal;
       lines.push({...product,quantity:item.quantity});
     }
+    // An unbounded public backlog would exhaust restaurant staff and local SQLite.
+    const pendingCount=db.prepare("SELECT COUNT(*) AS n FROM delivery_request WHERE restaurant_id='r-local' AND status='PENDING'").get().n;
+    if(pendingCount>=maxPending)return {status:429,body:{code:'DELIVERY_QUEUE_FULL',message:'Loja com pedidos pendentes demais. Tente novamente mais tarde.'}};
     // Anti-spam and every line are committed together; no financial side effects.
     const id=randomUUID(),createdAt=new Date().toISOString();
     db.exec('BEGIN IMMEDIATE');
@@ -77,7 +88,13 @@ export function deliveryRead(db,method,route){
     return {status:200,body:{request:{id:request.id,status:request.status,customerName:request.customer_name,phone:request.phone,address:request.address,note:request.note,totalCents:request.total_cents,lines}}};
   }
   if(route==='/api/delivery/orders'){
-    const orders=db.prepare('SELECT d.order_id AS orderId,d.status,o.status AS orderStatus,r.customer_name AS customerName,r.address,r.created_at AS createdAt FROM delivery_order d JOIN sales_order o ON o.id=d.order_id JOIN delivery_request r ON r.id=d.request_id ORDER BY d.updated_at DESC LIMIT 100').all();
+    const orders=db.prepare(`SELECT d.order_id AS orderId,d.status,o.status AS orderStatus,
+       CASE WHEN o.status='CLOSED' AND EXISTS(SELECT 1 FROM payment p WHERE p.order_id=o.id AND p.state='CONFIRMED')
+         THEN 'PAID' WHEN EXISTS(SELECT 1 FROM payment p WHERE p.order_id=o.id AND p.state='CONFIRMED') THEN 'PARTIAL'
+         ELSE 'PENDING' END AS paymentStatus,
+       r.customer_name AS customerName,r.address,r.created_at AS createdAt
+       FROM delivery_order d JOIN sales_order o ON o.id=d.order_id
+       JOIN delivery_request r ON r.id=d.request_id ORDER BY d.updated_at DESC LIMIT 100`).all();
     return {status:200,body:{orders}};
   }
   return null;
@@ -135,6 +152,24 @@ export function deliveryWrite(db,method,route,body,h){
     if(!row)h.missing('Entrega');
     if(!allowedStatus[row.status]?.includes(body.status))h.conflict('Transição de entrega inválida');
     if(body.status==='OUT_FOR_DELIVERY'&&!['OPEN','CLOSED'].includes(row.orderStatus))h.conflict('Confirme o pedido antes da expedição');
+    if(body.status==='DELIVERED'){
+      if(row.orderStatus!=='CLOSED'||
+         !db.prepare("SELECT 1 FROM payment WHERE order_id=? AND state='CONFIRMED' LIMIT 1").get(status[1]))
+        h.conflict('Registre e concilie o pagamento antes de concluir a entrega','DELIVERY_UNPAID');
+    }
+    if(body.status==='CANCELLED'){
+      if(!['DRAFT','OPEN'].includes(row.orderStatus))
+        h.conflict('Pedido já fechado: use devolução financeira antes de cancelar','DELIVERY_ORDER_SETTLED');
+      if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(status[1]))
+        h.conflict('Pedido possui pagamentos: realize estorno antes do cancelamento','DELIVERY_HAS_PAYMENT');
+      if(db.prepare("SELECT 1 FROM kitchen_ticket WHERE order_id=? AND status IN ('PREPARING','READY','SERVED') LIMIT 1").get(status[1]))
+        h.conflict('Cozinha já iniciou preparo: registre ocorrência gerencial','DELIVERY_IN_PREPARATION');
+      const order=h.databaseOrder(db,status[1]);
+      writeOrder(db,cancelOrder(order));
+      db.prepare("UPDATE kitchen_ticket SET status='CANCELLED',revision=revision+1,updated_at=? WHERE order_id=? AND status='PENDING'")
+        .run(h.stamp(),status[1]);
+      h.audit(db,status[1],'DELIVERY_LINKED_ORDER_CANCELLED',{reason:body.reason??'Cancelamento da entrega'});
+    }
     db.prepare('UPDATE delivery_order SET status=?,updated_at=? WHERE order_id=?').run(body.status,h.stamp(),status[1]);
     h.audit(db,status[1],'DELIVERY_STATUS_CHANGED',{from:row.status,to:body.status});
     return {orderId:status[1],status:body.status};

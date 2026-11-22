@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {createApp} from '../src/server.mjs';
+import {latestSchemaVersion} from '../src/db.mjs';
 import {inspectBackup,restoreBackup} from '../src/restore.mjs';
 import {compareVersions,normalizeRelease} from '../src/system-maintenance.mjs';
 async function fixture(t){
@@ -45,7 +46,7 @@ test('backup sob demanda é validado e restauração offline mantém os dados',a
  assert.equal(parallel[0].body.filename,parallel[1].body.filename);
  const report=inspectBackup(created.body.path);
  assert.equal(report.compatible,true);
- assert.equal(report.schemaVersion,22);
+ assert.equal(report.schemaVersion,latestSchemaVersion());
  assert.ok((await api('GET','/api/system/backups')).body.backups.some(x=>x.name===created.body.filename));
  const destination=path.join(dir,'restored.db');
  restoreBackup(created.body.path,destination);
@@ -77,7 +78,7 @@ test('schema antigo gera snapshot validado antes da migração para v19',async t
  const app=createApp({dataPath:dbPath});
  try{
   const dirBackup=path.join(dir,'backups');
-  const files=fs.readdirSync(dirBackup).filter(n=>n.startsWith('before-v22-from-v17-'));
+  const files=fs.readdirSync(dirBackup).filter(n=>n.startsWith('before-v'+latestSchemaVersion()+'-from-v17-'));
   assert.equal(files.length,1);
   assert.equal(inspectBackup(path.join(dirBackup,files[0])).schemaVersion,17);
  }finally{await app.close();}

@@ -1,7 +1,8 @@
 /** Optional read-only mirror of peer units. Never writes another unit's canonical sales or stock. */
 import {createHash,randomUUID} from 'node:crypto';
-import net from 'node:net';
+import {isPrivatePeerHost} from './private-network.mjs';
 import {verifyLiveSummary} from './summary-live.mjs';
+import {readBoundedJson} from './bounded-json.mjs';
 
 const sha=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const time=()=>new Date().toISOString();
@@ -135,12 +136,6 @@ export function operationalWrite(db,method,route,body,h){
  },201);
  return result.body.imported?result:{...result,status:200};
 }
-function isPrivateHost(hostname){
- if(/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(hostname))return true;
- if(net.isIP(hostname)!==4)return false;
- const parts=hostname.split('.').map(Number);
- return parts[0]===10||(parts[0]===172&&parts[1]>=16&&parts[1]<=31)||(parts[0]===192&&parts[1]===168);
-}
 export function validatePeerOptions(options){
  if(options==null)return {peers:[],intervalMs:60000,transport:fetch,summarySync:false};
  if(typeof options!=='object'||Array.isArray(options)||!Array.isArray(options.peers)||options.peers.length>8)throw new Error('Configuração de sincronização inválida');
@@ -152,7 +147,7 @@ export function validatePeerOptions(options){
   if(!p||typeof p!=='object'||typeof p.url!=='string'||typeof p.token!=='string'||p.token.length<32||p.token.length>512)throw new Error('Token da unidade é obrigatório (mínimo 32 caracteres)');
   let u;try{u=new URL(p.url);}catch{throw new Error('Endereço da unidade inválido');}
   if(u.protocol!=='https:')throw new Error('A sincronização automática exige HTTPS');
-  if(!isPrivateHost(u.hostname)||u.username||u.password||u.search||u.hash||u.pathname!=='/')throw new Error('Use HTTPS de uma unidade na rede privada com certificado válido');
+  if(!isPrivatePeerHost(u.hostname)||u.username||u.password||u.search||u.hash||u.pathname!=='/')throw new Error('Use HTTPS de uma unidade na rede privada com certificado válido');
   return {url:u.origin,token:p.token};
  });
  if(new Set(peers.map(p=>p.url)).size!==peers.length)throw new Error('Unidades remotas duplicadas');
@@ -176,7 +171,7 @@ export function createOperationalPoller(db,options){
        redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'
      });
      if(!response.ok)throw Error('Status do peer: '+response.status);
-     const snapshot=await response.json();
+     const snapshot=await readBoundedJson(response,{maxBytes});
      validate(snapshot,msg=>{throw Error(msg)});
      if(snapshot.unitId===unit(db))throw Error('O peer possui o mesmo identificador local');
      let summary=null,summaryError=false;
@@ -187,7 +182,7 @@ export function createOperationalPoller(db,options){
         redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'
        });
        if(!financeResponse.ok)throw Error('Resumo BI remoto indisponível');
-       summary=verifyLiveSummary(await financeResponse.json());
+       summary=verifyLiveSummary(await readBoundedJson(financeResponse,{maxBytes:524288}));
        if(summary.unitId!==snapshot.unitId)throw Error('Identidade do peer divergente');
       }catch{summaryError=true;}
      }

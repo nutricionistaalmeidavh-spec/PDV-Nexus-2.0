@@ -35,3 +35,11 @@ test('P2: mudança de aba não deve renderizar resultado da consulta anterior',(
  assert.match(source,/requestKey/,'cada consulta precisa de chave própria');
  assert.match(source,/state\.key===requestKey/,'não renderizar dados de outra aba antes de carregar');
 });
+
+test('P0: caixa consegue acessar controle de caixa e envio de impressão sem gerenciar usuários',()=>{
+ const links=availableNavLinks('live','',{role:'cashier'}).map(([id])=>id);
+ assert.ok(links.includes('caixa'));
+ assert.ok(links.includes('impressao'));
+ assert.equal(links.includes('usuarios'),false);
+ assert.equal(links.includes('integracoes'),false);
+});

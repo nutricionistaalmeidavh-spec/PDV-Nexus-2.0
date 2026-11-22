@@ -34,3 +34,10 @@ test('cada instalação tem identidade própria persistente, sem sincronização
   }finally{await again.app.close();}
  }finally{await a.app.close();await b.app.close();}
 });
+
+test('P2: CLI local inicia em modo produção salvo opção explícita de demonstração',()=>{
+ const source=fs.readFileSync(new URL('../src/index.mjs',import.meta.url),'utf8');
+ assert.match(source,/PDV_OPERATION_MODE\?\?'production'/);
+ assert.match(source,/PDV_LAN_HOST/);
+ assert.match(source,/PDV_PUBLIC_PORT/);
+});

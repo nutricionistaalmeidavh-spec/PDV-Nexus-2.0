@@ -1,13 +1,8 @@
 /** P1: setores KDS, perfis de impressão e comprovantes não fiscais. */
 import {randomUUID} from 'node:crypto';
-import net from 'node:net';
+import {isPrivateIpv4} from './private-network.mjs';
 import {validateSerialDevicePath} from './retail-hardware.mjs';
 import {validatePrinterQueueName} from './windows-raw-printer.mjs';
-const isPrivateIp=s=>{
- if(net.isIP(s)!==4)return false;
- const n=s.split('.').map(Number);
- return n[0]===10||n[0]===192&&n[1]===168||n[0]===172&&n[1]>=16&&n[1]<=31||n[0]===127;
-};
 const allowedKind={PREBILL:'PRINT_PREBILL',KITCHEN:'PRINT_KITCHEN'};
 export function kitchenOperationsRead(db,method,route){
  if(method!=='GET')return null;
@@ -63,7 +58,7 @@ export function kitchenOperationsWrite(db,method,route,body,h){
   if(transport==='tcp'){
    host=h.requireString(body.host,'IP da impressora',64);
    port=body.port;
-   if(!isPrivateIp(host)||!Number.isInteger(port)||port<1||port>65535)h.bad('IP privado/porta inválidos');
+   if(!isPrivateIpv4(host)||!Number.isInteger(port)||port<1||port>65535)h.bad('IP privado/porta inválidos');
   }else{
    devicePath=h.requireString(body.devicePath,'Porta ou fila da impressora',128);
    if(transport==='serial'){
@@ -99,7 +94,7 @@ export function kitchenOperationsWrite(db,method,route,body,h){
   const id=randomUUID(),kind=allowedKind[body.type];
   db.prepare(`INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at)
    VALUES(?,?,?,?,'PENDING',?)`).run(id,kind,order.id,JSON.stringify({
-    id:order.id,kind:body.type,stationName,profileId,lines,totalCents:lines.reduce((sum,l)=>sum+l.quantity*l.unitPriceCents,0),
+    id:order.id,orderNumber:order.orderNumber,kind:body.type,stationName,profileId,lines,totalCents:lines.reduce((sum,l)=>sum+l.quantity*l.unitPriceCents,0),
     tableId:order.tableId,nonFiscal:true
    }),h.stamp());
   h.audit(db,order.id,'OPERATIONAL_PRINT_QUEUED',{jobId:id,kind,stationId:body.stationId??null});

@@ -17,3 +17,18 @@ test('host redirects the old admin entrypoint to the unified React UI',()=>{
   assert.match(host,/const redirects=/);
   assert.match(host,/res.writeHead\(302/);
 });
+
+test('P0: checkout expõe exceção de estoque só para supervisor com motivo',()=>{
+ const ui=readFileSync(new URL('../src/PosExperience.jsx',import.meta.url),'utf8');
+ const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
+ assert.match(ui,/canOverrideStock/);
+ assert.match(ui,/overrideReason/);
+ assert.match(app,/inventoryOverrideReason/);
+ assert.match(app,/user\?\.role==='admin'/);
+});
+
+test('P0: tela da comanda não oferece criação de pedidos via QR de mesa',()=>{
+ const table=readFileSync(new URL('../src/TableOrderPanel.jsx',import.meta.url),'utf8');
+ assert.equal(table.includes('Gerar / renovar QR da mesa'),false);
+ assert.equal(table.includes('Enviar automaticamente à cozinha, sem aprovação de atendente'),false);
+});

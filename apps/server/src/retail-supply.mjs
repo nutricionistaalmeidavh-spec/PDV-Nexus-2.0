@@ -1,5 +1,6 @@
 /** Supplier/FEFO metadata over the existing single-writer ingredient ledger. */
 import { randomUUID } from 'node:crypto';
+import {businessDay} from './business-day.mjs';
 const validDate=s=>{if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00.000Z');return Number.isFinite(d.valueOf())&&d.toISOString().slice(0,10)===s;};
 const positive=n=>Number.isSafeInteger(n)&&n>0;
 export function supplyRead(db,method,route,params){
@@ -69,7 +70,7 @@ export function allocateFefo(db,ingredientId,quantity,actor,orderId,conflict,{al
   const tracked=all.reduce((sum,b)=>sum+b.remainingMilli,0);
   if(tracked>current.on_hand_milli)throw new Error('Divergência entre lotes e saldo canônico');
   const untracked=current.on_hand_milli-tracked;
-  const today=new Date().toISOString().slice(0,10);
+  const today=businessDay();
   const eligible=all.filter(b=>allowExpired||b.expiryDate>=today);
   const usable=untracked+eligible.reduce((sum,b)=>sum+b.remainingMilli,0);
   if(usable<quantity)conflict('Estoque válido insuficiente: há lote vencido','STOCK_EXPIRED');

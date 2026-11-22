@@ -3,6 +3,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import {isPrivateIpv4 as isPrivateIPv4,isPrivatePeerHost,isLocalLanHostname} from './private-network.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { databaseOrder } from './order-read.mjs';
@@ -11,8 +12,10 @@ import { HttpError,bad,conflict,missing,safeCents,requireCents,requireString,ass
 import { transact } from './command-service.mjs';
 import { audit } from './audit-service.mjs';
 import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
+import {createAutomaticBackupScheduler} from './backup-scheduler.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {createCommercialLicense} from './commercial-license.mjs';
+import {mayFinishExistingOperation,mayOpenCashForUnfinishedOrders} from './license-operation-policy.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
 import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
@@ -64,11 +67,6 @@ function visibleCash(db) {
   const session=cashSession(db);
   return session?{id:session.id,status:session.status,openedAt:session.opened_at,openingCents:session.opening_amount_cents,expectedCents:cashExpected(db,session)}:null;
 }
-function isPrivateIPv4(ip) {
-  if(net.isIP(ip)!==4) return false;
-  const v=ip.split('.').map(Number);
-  return v[0]===10 || v[0]===127 || v[0]===192&&v[1]===168 || v[0]===172&&v[1]>=16&&v[1]<=31;
-}
 async function transmit(host,port,buffer) {
   return new Promise((resolve,reject)=>{
     const socket=net.createConnection({host,port});
@@ -88,11 +86,12 @@ async function readJson(req,maxLength=32768) {
 }
 function response(res,status,body) { res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body)); }
 
-export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null}={}) {
+export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=null,publicMenuEnabled=false,operationalSync=null,commercialLicense=null,automaticBackup=null,legacyTableQrOrdering=false}={}) {
   // Modo operacional nao emite documentos fiscais: comprovante nao fiscal + exportacao externa.
   if(!['demo','production'].includes(operationMode))throw new Error('Modo de operacao invalido');
   const lanConfig=validateLanConfig(lan);
   const db=openDatabase(dataPath);
+  const automaticBackups=createAutomaticBackupScheduler(db,dataPath,automaticBackup||{});
   const operatorAuth=createOperatorAuth(db);
   const licenseControl=createCommercialLicense(db,commercialLicense||{
     required:process.env.NEXUS_REQUIRE_COMMERCIAL_ACTIVATION==='true',
@@ -106,6 +105,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
   const isPublicEnabled=()=>publicMenuEnabled===true||db.prepare("SELECT enabled FROM delivery_public_setting WHERE id='local'").get()?.enabled===1;
   let server, origin, closed=false,portalServer=null;
   const sendingPrintJobs=new Set();
+  const activePrintTasks=new Set();
+  let printTimer=null;
   const backupJobs=new Map();
   const scaleReadings=new Map();
   const kitchenListeners=new Set();
@@ -121,6 +122,41 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     queueMicrotask(notifyKitchen);
     return result;
   }
+  async function sendPrintJob(id,actor){
+    const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);
+    if(!job)missing('Impressão');
+    if(job.status==='DONE'||sendingPrintJobs.has(id))
+      conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
+    const payload=JSON.parse(job.payload_json);
+    const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(payload.profileId??'default');
+    if(!printer)conflict('Impressora não configurada');
+    sendingPrintJobs.add(id);
+    const task=(async()=>{
+      try {
+        const bytes=receiptBytes(payload);
+        if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
+        else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
+        else await transmit(printer.host,printer.port,bytes);
+        db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
+        audit(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id,profileId:payload.profileId??'default'},actor);
+        return {status:200,body:{id,status:'DONE',warning:'Envio ao transporte concluído; saída física não confirmada'}};
+      }catch(error){
+        db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
+        return {status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
+      }finally{sendingPrintJobs.delete(id);}
+    })();
+    activePrintTasks.add(task);
+    try{return await task;}finally{activePrintTasks.delete(task);}
+  }
+  async function printPendingOnce(){
+    if(closed||sendingPrintJobs.size)return null;
+    const pending=db.prepare(`SELECT e.id FROM outbox_event e
+      JOIN printer_profile p ON p.id=COALESCE(json_extract(e.payload_json,'$.profileId'),'default') AND p.enabled=1
+      WHERE e.kind LIKE 'PRINT_%' AND e.status='PENDING'
+      ORDER BY e.created_at,e.id LIMIT 1`).get();
+    if(!pending)return null;
+    return sendPrintJob(pending.id,'print-worker');
+  }
   async function handler(req,res) {
     let requestActor='unauthenticated',requestRole=null,requestDeviceId=null;
     const auditForRequest=(db,aggregateId,action,payload={})=>audit(db,aggregateId,action,payload,requestActor);
@@ -131,7 +167,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const host=req.headers.host||'';
       const isLoopbackHost=/^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(host);
       const hostname=host.split(':')[0];
-      const isLanHost=net.isIP(hostname)===4&&isPrivateIPv4(hostname) || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(hostname);
+      const isLanHost=isPrivateIPv4(hostname)||isLocalLanHostname(hostname);
       if(!isLoopbackHost && !(lanConfig&&isLanHost))throw new HttpError(403,'INVALID_HOST','Host não permitido');
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
@@ -153,7 +189,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             return response(res,route==='/api/license/trial/request'?202:200,result);
           }catch(e){throw new HttpError(e.status>=400&&e.status<600?e.status:400,'LICENSE_ERROR',e.message)}
         }
-        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!(await licenseControl.status()).active){
+        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!mayFinishExistingOperation(method,route)&&!mayOpenCashForUnfinishedOrders(db,method,route)&&!(await licenseControl.status()).active){
           // Rejeitar a operação sem manter um POST parcialmente lido em keep-alive.
           req.resume();res.shouldKeepAlive=false;
           throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
@@ -171,6 +207,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,out.status,out.body);
         }
         if(route.startsWith('/api/public/')){
+          if(!legacyTableQrOrdering&&route.startsWith('/api/public/table/'))return response(res,404,{code:'TABLE_ORDERING_DISABLED'});
           const qrPage=publicTableRead(db,method,route);
           if(qrPage)return response(res,qrPage.status,qrPage.body);
           if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
@@ -192,8 +229,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(route.startsWith('/api/auth/')){
           if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
             throw new HttpError(403,'LOCAL_ONLY','Autenticacao de operador permitida apenas no host local');
-          if(method!=='GET'&&method!=='POST')return response(res,405,{code:'METHOD_NOT_ALLOWED'});
-          const authBody=method==='POST'?await readJson(req):null;
+          if(!['GET','POST','PATCH'].includes(method))return response(res,405,{code:'METHOD_NOT_ALLOWED'});
+          const authBody=(method==='POST'||method==='PATCH')?await readJson(req):null;
           return operatorAuth.handle(req,res,route,authBody);
         }
         // Resgate de PIN é público somente no host local ou na LAN HTTPS configurada.
@@ -232,8 +269,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const target=url.searchParams.get('url');
           let candidate;
           try{candidate=new URL(target);}catch{bad('URL do QR invalida');}
-          const isLanAddress=net.isIP(candidate.hostname)===4&&isPrivateIPv4(candidate.hostname)&&!candidate.hostname.startsWith('127.')
-            || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(candidate.hostname);
+          const isLanAddress=isPrivatePeerHost(candidate.hostname);
           if(!target||target.length>256||candidate.protocol!=='https:'||!isLanAddress||candidate.username||candidate.password
             ||!['/restaurant.html','/kitchen.html'].includes(candidate.pathname)||candidate.search||candidate.hash)
             bad('Use URL HTTPS da rede privada para salao ou cozinha');
@@ -292,12 +328,15 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         if(method==='GET'&&route==='/api/hardware/scale/parse'){
           const raw=url.searchParams.get('raw')??'',brand=url.searchParams.get('brand')??'generic';
-          const parsed=parseScaleSerial(raw,{brand});
+          let parsed;
+          try{parsed=parseScaleSerial(raw,{brand});}catch{bad('Leitura serial inválida ou instável');}
           return response(res,200,{reading:parsed,warning:'Leitura por texto; confirme estabilidade e homologação antes de vender'});
         }
         if(method==='GET'&&route==='/api/hardware/scale/label'){
           const code=url.searchParams.get('code')??'',mode=url.searchParams.get('mode')??'weight';
-          return response(res,200,{label:decodeScaleLabel(code,{mode})});
+          let label;
+          try{label=decodeScaleLabel(code,{mode});}catch{bad('Etiqueta de balança inválida');}
+          return response(res,200,{label});
         }
         const stockResult=inventoryRead(db,method,route,url.searchParams,{missing,bad});
         if(stockResult)return response(res,stockResult.status,stockResult.body);
@@ -305,7 +344,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(cats)return response(res,cats.status,cats.body);
         const comboResult=comboRead(db,method,route,{missing});
         if(comboResult)return response(res,comboResult.status,comboResult.body);
-        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,service_mode AS serviceMode,status,revision,suspended_at AS suspendedAt,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
+        if(method==='GET'&&route==='/api/orders') return response(res,200,{orders:db.prepare('SELECT id,order_number AS orderNumber,service_mode AS serviceMode,status,revision,suspended_at AS suspendedAt,created_at AS createdAt FROM sales_order ORDER BY created_at DESC LIMIT 100').all()});
         const orderGet=route.match(/^\/api\/orders\/([^/]+)$/);
         if(method==='GET'&&orderGet) return response(res,200,{order:databaseOrder(db,orderGet[1])});
         if(method==='GET'&&route==='/api/cash/current') return response(res,200,{session:visibleCash(db),expectedCents:visibleCash(db)?.expectedCents??null});
@@ -394,6 +433,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,deviceId:requestDeviceId,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,
           forbidden:(message,code='FORBIDDEN')=>{throw new HttpError(403,code,message);},
           supervisor:requestRole==='admin'||role==='manager'};
+        if(!legacyTableQrOrdering&&method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route))return response(res,404,{code:'TABLE_ORDERING_DISABLED'});
         const special=attendanceWrite(db,method,route,body,h)??partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
         if(special){
           out=special;
@@ -445,27 +485,21 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             db.prepare("INSERT INTO printer_profile(id,host,port,enabled,transport,device_path,baud_rate) VALUES('default',?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET host=excluded.host,port=excluded.port,enabled=1,transport=excluded.transport,device_path=excluded.device_path,baud_rate=excluded.baud_rate").run(host,port,transport,devicePath,baudRate);
             return {profile:{host,port,enabled:1,transport,devicePath,baudRate}};
           });
+        } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/reprint$/)) {
+          out=transactWithEvents(db,route,body,()=>{
+            const sourceId=route.split('/')[4];
+            const original=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(sourceId);
+            if(!original)missing('Comprovante original');
+            if(original.status!=='DONE')conflict('Reimpressão exige comprovante enviado anteriormente');
+            const newId=randomUUID();
+            const payload={...JSON.parse(original.payload_json),copyOfJobId:sourceId};
+            db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES(?,?,?,?,?,?)')
+              .run(newId,original.kind,original.aggregate_id,JSON.stringify(payload),'PENDING',stamp());
+            auditForRequest(db,original.aggregate_id,'RECEIPT_REPRINT_REQUESTED',{sourceId,jobId:newId});
+            return {id:newId,status:'PENDING',copyOfJobId:sourceId};
+          },201);
         } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
-          const id=route.split('/')[4];
-          const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);if(!job)missing('Impressão');
-          if(job.status==='DONE'||sendingPrintJobs.has(id)) conflict('Impressão já enviada ou em andamento; nova via exige fluxo explícito');
-          const jobPayload=JSON.parse(job.payload_json);
-          const profileId=jobPayload.profileId??'default';
-          const printer=db.prepare('SELECT * FROM printer_profile WHERE id=? AND enabled=1').get(profileId);
-          if(!printer)conflict('Impressora não configurada');
-          // Impresso pelo aplicativo local; a entrega TCP não confirma impressão física.
-          sendingPrintJobs.add(id);
-          try {
-            const bytes=receiptBytes(jobPayload);
-            if(printer.transport==='serial')await transmitSerial(printer.device_path,printer.baud_rate,bytes);
-            else if(printer.transport==='windows')await transmitWindowsRaw(printer.device_path,bytes);
-            else await transmit(printer.host,printer.port,bytes);
-            db.prepare("UPDATE outbox_event SET status='DONE',attempts=attempts+1 WHERE id=?").run(id);
-            auditForRequest(db,job.aggregate_id,'RECEIPT_SENT',{jobId:id});out={status:200,body:{id,status:'DONE',warning:'Envio ao transporte concluído; impressão física não confirmada'}};
-          } catch(e) {
-            db.prepare("UPDATE outbox_event SET status='FAILED',attempts=attempts+1 WHERE id=?").run(id);
-            out={status:502,body:{code:'PRINT_FAILED',message:'Não foi possível enviar à impressora',jobId:id}};
-          } finally {sendingPrintJobs.delete(id);}
+          out=await sendPrintJob(route.split('/')[4],requestActor);
         } else return response(res,404,{code:'NOT_FOUND',message:'Rota não encontrada'});
         return response(res,out.status,out.body);
       }
@@ -506,8 +540,9 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
       fs.createReadStream(path.join(publicDir,file)).pipe(res);
     } catch(e) {
-      const status=e instanceof HttpError?e.status:400;
-      return response(res,status,{code:e.code??'INVALID_OPERATION',message:e instanceof HttpError?e.message:e.message||'Erro interno'});
+      const status=e instanceof HttpError?e.status:500;
+      if(status===500)console.error('[Nexus API] Falha inesperada:',e?.code??e?.name??'INTERNAL_ERROR');
+      return response(res,status,{code:e instanceof HttpError?e.code:'INTERNAL_ERROR',message:e instanceof HttpError?e.message:'Falha interna. Verifique os logs locais.'});
     }
   }
 
@@ -539,6 +574,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         req.resume();res.shouldKeepAlive=false;
         throw new HttpError(402,'LICENSE_REQUIRED','Avaliação comercial encerrada: novos pedidos estão indisponíveis. Consulte os dados existentes no host.');
       }
+      if(!legacyTableQrOrdering&&route.startsWith('/api/public/table/'))return response(res,404,{code:'TABLE_ORDERING_DISABLED'});
       const tablePage=publicTableRead(db,method,route);
       if(tablePage)return response(res,tablePage.status,tablePage.body);
       if(method==='POST'&&/^\/api\/public\/table\/[^/]+\/requests$/.test(route)){
@@ -566,7 +602,12 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     listen({port=3434,host='127.0.0.1'}={}){return new Promise((resolve,reject)=>{
       if(!lanConfig&&host!=='127.0.0.1')return reject(new Error('A API LAN requer TLS e tokens por perfil'));
       if(lanConfig&&!['0.0.0.0','127.0.0.1'].includes(host))return reject(new Error('Host LAN não autorizado'));
-      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();resolve(origin);});
+      server.once('error',reject);server.listen(port,host,()=>{const address=server.address();origin=`${lanConfig?'https':'http'}://${host==='0.0.0.0'?'127.0.0.1':host}:${address.port}`;server.off('error',reject);peerPoller.start();automaticBackups.start();
+        printTimer=setInterval(()=>{void printPendingOnce().catch(error=>{
+          console.error('[Nexus impressão] Falha no processamento da fila:',error?.code??'INTERNAL_ERROR');
+        });},3000);
+        printTimer.unref?.();
+        resolve(origin);});
     });},
     startPublicPortal({port=3435,host='127.0.0.1'}={}){
       if(closed)return Promise.reject(new Error('Servidor encerrado'));
@@ -586,9 +627,13 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     },
     syncPeersOnce(){return peerPoller.syncOnce();},
     backup(dest){return createBackup(db,dest);},
+    printPendingOnce(){return printPendingOnce();},
     async close(){
       if(closed)return;closed=true;
       await peerPoller.stop();
+      await automaticBackups.stop();
+      if(printTimer)clearInterval(printTimer);
+      await Promise.allSettled([...activePrintTasks]);
       for(const client of kitchenListeners)client.end();kitchenListeners.clear();
       if(portalServer?.listening)await new Promise(resolve=>portalServer.close(resolve));
       if(server.listening)await new Promise(resolve=>server.close(resolve));

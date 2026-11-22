@@ -6,6 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 const migrationDir = fileURLToPath(new URL('../migrations/', import.meta.url));
+/** Schema is discovered from checked-in migrations, never a frozen constant. */
+export function listMigrations(){
+  const files=fs.readdirSync(migrationDir).filter(name=>/^\d{3}_[a-zA-Z0-9_-]+\.sql$/.test(name)).sort();
+  const versions=files.map(name=>[Number(name.slice(0,3)),name]);
+  if(!versions.length||new Set(versions.map(([n])=>n)).size!==versions.length)
+    throw new Error('Migrações ausentes ou duplicadas');
+  return versions;
+}
+export function latestSchemaVersion(){return Math.max(...listMigrations().map(([n])=>n));}
 export const defaultDataPath = () => path.join(os.homedir(), '.pdv-nexus-2', 'nexus.db');
 
 export function openDatabase(dataPath = defaultDataPath()) {
@@ -25,10 +34,11 @@ function safeguardMigrations(db,dataPath){
  const exists=db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get();
  if(!exists)return; // clean installation
  const current=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()?.version??0;
- if(current>=22||current<=0)return;
+ const latest=latestSchemaVersion();
+ if(current>=latest||current<=0)return;
  const backupDir=path.join(path.dirname(dataPath),'backups');
  fs.mkdirSync(backupDir,{recursive:true,mode:0o700});
- const name='before-v22-from-v'+current+'-'+Date.now()+'-'+randomUUID()+'.sqlite';
+ const name='before-v'+latest+'-from-v'+current+'-'+Date.now()+'-'+randomUUID()+'.sqlite';
  const target=path.join(backupDir,name),temporary=target+'.tmp';
  try{
    db.prepare('VACUUM INTO ?').run(temporary);
@@ -45,7 +55,7 @@ function safeguardMigrations(db,dataPath){
 function migrate(db) {
   const current = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()
     ? new Set(db.prepare('SELECT version FROM schema_migrations').all().map(r => r.version)) : new Set();
-  for (const [version, filename] of [[1,'001_init.sql'],[2,'002_cash_and_hardware.sql'],[3,'003_restaurant.sql'],[4,'004_refunds.sql'],[5,'005_order_notes.sql'],[6,'006_auth_categories.sql'],[7,'007_paired_devices.sql'],[8,'008_combos_splits.sql'],[9,'009_inventory_ledger.sql'],[10,'010_delivery_requests.sql'],[11,'011_delivery_settings.sql'],[12,'012_installation_identity.sql'],[13,'013_multiunit_summary.sql'],[14,'014_delivery_privacy.sql'],[15,'015_delivery_request_idempotency.sql'],[16,'016_readonly_operational_mirror.sql'],[17,'017_retail_extensions.sql'],[18,'018_purchase_orders.sql'],[19,'019_table_qr_line_edits.sql'],[20,'020_guest_payment_refund_stations.sql'],[21,'021_pizzeria_weight_counter.sql'],[22,'022_tablet_attendance.sql']]) {
+  for (const [version, filename] of listMigrations()) {
     if (current.has(version)) continue;
     db.exec('BEGIN IMMEDIATE');
     try {

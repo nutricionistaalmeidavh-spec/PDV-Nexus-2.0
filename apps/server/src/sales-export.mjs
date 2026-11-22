@@ -1,11 +1,12 @@
 /** Exportacao de dados de vendas para contabilidade/emissao externa; NAO gera documento fiscal. */
+import {bad} from './request-validation.mjs';
 const MAX_ORDERS=10000;
 
 function periodDate(value,label){
   if(value===null||value==='')return null;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error(label+' invalida: use AAAA-MM-DD');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))bad(label+' invalida: use AAAA-MM-DD');
   const date=new Date(value+'T00:00:00.000Z');
-  if(!Number.isFinite(date.valueOf())||date.toISOString().slice(0,10)!==value)throw new Error(label+' invalida');
+  if(!Number.isFinite(date.valueOf())||date.toISOString().slice(0,10)!==value)bad(label+' invalida');
   return value;
 }
 function addCents(a,b){
@@ -25,15 +26,15 @@ function csvCell(value){
 export function buildSalesDocument(db,params=new URLSearchParams()){
   const from=periodDate(params.get('from'),'Data inicial');
   const to=periodDate(params.get('to'),'Data final');
-  if(from&&to&&from>to)throw new Error('Data inicial posterior a data final');
+  if(from&&to&&from>to)bad('Data inicial posterior a data final');
   const orders=db.prepare(
-    "SELECT o.id,o.service_mode AS serviceMode,o.created_at AS createdAt,"+
+    "SELECT o.id,o.order_number AS orderNumber,o.service_mode AS serviceMode,o.created_at AS createdAt,"+
     "o.closed_at AS closedAt,r.amount_cents AS refundedCents,r.cash_cents AS cashRefundCents,"+
     "r.reason AS refundReason,r.created_at AS refundCreatedAt "+
     "FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id "+
     "WHERE o.status='CLOSED' AND o.closed_at IS NOT NULL "+
-    "AND (? IS NULL OR substr(o.closed_at,1,10)>=?) "+
-    "AND (? IS NULL OR substr(o.closed_at,1,10)<=?) "+
+    "AND (? IS NULL OR date(o.closed_at,'-3 hours')>=?) "+
+    "AND (? IS NULL OR date(o.closed_at,'-3 hours')<=?) "+
     "ORDER BY o.closed_at,o.id LIMIT ?"
   ).all(from,from,to,to,MAX_ORDERS+1);
   if(orders.length>MAX_ORDERS)throw new Error('Muitas vendas para exportar. Selecione um periodo menor.');
@@ -58,6 +59,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
     if(!Number.isSafeInteger(refundedCents)||refundedCents<0||refundedCents>grossCents)throw new Error('Devolucao inconsistente no pedido '+row.id);
     return {
       orderId:row.id,
+      orderNumber:row.orderNumber,
       serviceMode:row.serviceMode,
       createdAt:row.createdAt,
       closedAt:row.closedAt,

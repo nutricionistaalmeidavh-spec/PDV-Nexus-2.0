@@ -1,4 +1,5 @@
 import {recordReceivedBatch,allocateFefo} from './retail-supply.mjs';
+import {businessDay} from './business-day.mjs';
 /** Single-writer inventory ledger; no parallel balance/cost store. Quantities: thousandths of g/ml/unit. */
 import {randomUUID} from 'node:crypto';
 const isInteger=x=>Number.isSafeInteger(x);
@@ -56,7 +57,7 @@ export function snapshotLineRecipe(db,lineId,productId){
   const insert=db.prepare('INSERT INTO order_line_recipe_snapshot(line_id,ingredient_id,ingredient_name_snapshot,quantity_milli) VALUES(?,?,?,?)');
   for(const row of combined.values())insert.run(lineId,row.id,row.name,row.quantityMilli);
 }
-export function consumeStockForOrder(db,orderId,actor,conflict){
+export function consumeStockForOrder(db,orderId,actor,conflict,{allowShortage=false,reason=''}={}){
   const rows=db.prepare('SELECT s.ingredient_id AS ingredientId,s.quantity_milli AS quantityMilli,l.quantity '+
     'FROM order_line_recipe_snapshot s JOIN order_line l ON l.id=s.line_id WHERE l.order_id=? AND l.cancelled_at IS NULL').all(orderId);
   const usage=new Map();
@@ -65,25 +66,44 @@ export function consumeStockForOrder(db,orderId,actor,conflict){
     if(!positive(qty))throw new Error('Quantidade da ficha técnica inválida');
     usage.set(x.ingredientId,safeAdd(usage.get(x.ingredientId)??0,qty));
   }
-  // Caller wraps consumption and payments in the same BEGIN IMMEDIATE transaction.
+  // Keep the ledger truthful: consume only existing usable stock; carry approved missing
+  // quantity as an explicit shortage instead of inventing a physical receipt.
   const plans=[];
   for(const [id,qty] of usage){
     const ing=db.prepare('SELECT * FROM stock_ingredient WHERE id=?').get(id);
-    if(!ing||ing.on_hand_milli<qty)conflict('Estoque insuficiente: '+(ing?.name??id),'STOCK_INSUFFICIENT');
-    plans.push({ing,qty});
+    if(!ing)conflict('Ingrediente indisponível: '+id,'STOCK_INSUFFICIENT');
+    if(!allowShortage&&ing.on_hand_milli<qty)conflict('Estoque insuficiente: '+ing.name,'STOCK_INSUFFICIENT');
+    let consume=qty;
+    if(allowShortage){
+      const batches=db.prepare('SELECT remaining_milli AS remainingMilli,expiry_date AS expiryDate FROM ingredient_batch WHERE ingredient_id=? AND remaining_milli>0').all(id);
+      const tracked=batches.reduce((n,row)=>safeAdd(n,row.remainingMilli),0);
+      if(tracked>ing.on_hand_milli)throw new Error('Divergência entre lotes e saldo de estoque');
+      const today=businessDay();
+      const usable=ing.on_hand_milli-tracked+batches.filter(row=>row.expiryDate>=today).reduce((n,row)=>safeAdd(n,row.remainingMilli),0);
+      consume=Math.min(qty,usable);
+    }
+    plans.push({ing,consume,shortage:qty-consume});
   }
   let cogsCents=0;
-  for(const {ing,qty} of plans){
-    allocateFefo(db,ing.id,qty,actor,orderId,conflict);
-    const movement=applyMovement(db,ing,-qty,0,'SALE','Consumo da venda '+orderId,actor,orderId);
-    cogsCents=safeAdd(cogsCents,-movement.valueDeltaCents);
+  const shortages=[];
+  for(const {ing,consume,shortage} of plans){
+    if(consume>0){
+      allocateFefo(db,ing.id,consume,actor,orderId,conflict);
+      const movement=applyMovement(db,ing,-consume,0,'SALE','Consumo da venda '+orderId,actor,orderId);
+      cogsCents=safeAdd(cogsCents,-movement.valueDeltaCents);
+    }
+    if(shortage>0){
+      db.prepare('INSERT INTO stock_shortage(id,order_id,ingredient_id,shortage_milli,actor_id,reason,created_at) VALUES(?,?,?,?,?,?,?)')
+        .run(randomUUID(),orderId,ing.id,shortage,actor,reason,new Date().toISOString());
+      shortages.push({ingredientId:ing.id,ingredientName:ing.name,shortageMilli:shortage});
+    }
   }
-  return {cogsCents,ingredients:plans.length};
+  return {cogsCents,ingredients:plans.length,shortages};
 }
 export function inventoryRead(db,method,route,params,h){
   if(method!=='GET')return null;
   if(route==='/api/stock/ingredients'){
-    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active FROM stock_ingredient WHERE restaurant_id='r-local' ORDER BY name COLLATE NOCASE").all();
+    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active,(SELECT COALESCE(SUM(s.shortage_milli),0) FROM stock_shortage s WHERE s.ingredient_id=stock_ingredient.id) AS shortageMilli FROM stock_ingredient WHERE restaurant_id='r-local' ORDER BY name COLLATE NOCASE").all();
     return {status:200,body:{ingredients}};
   }
   const history=route.match(/^\/api\/stock\/ingredients\/([^/]+)\/movements$/);
@@ -97,7 +117,7 @@ export function inventoryRead(db,method,route,params,h){
     return {status:200,body:{productId:recipe[1],items:db.prepare('SELECT ingredient_id AS ingredientId,quantity_milli AS quantityMilli FROM stock_recipe_item WHERE product_id=? ORDER BY ingredient_id').all(recipe[1])}};
   }
   if(route==='/api/stock/report'){
-    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active FROM stock_ingredient WHERE restaurant_id='r-local' AND active=1 ORDER BY name COLLATE NOCASE").all();
+    const ingredients=db.prepare("SELECT id,name,unit,on_hand_milli AS onHandMilli,book_value_cents AS bookValueCents,low_stock_milli AS lowStockMilli,active,(SELECT COALESCE(SUM(s.shortage_milli),0) FROM stock_shortage s WHERE s.ingredient_id=stock_ingredient.id) AS shortageMilli FROM stock_ingredient WHERE restaurant_id='r-local' AND active=1 ORDER BY name COLLATE NOCASE").all();
     const totalValueCents=ingredients.reduce((x,i)=>safeAdd(x,i.bookValueCents),0);
     return {status:200,body:{ingredients:ingredients.map(i=>({...i,lowStock:i.lowStockMilli>0&&i.onHandMilli<=i.lowStockMilli})),totalValueCents,lowStockCount:ingredients.filter(i=>i.lowStockMilli>0&&i.onHandMilli<=i.lowStockMilli).length}};
   }
@@ -106,7 +126,7 @@ export function inventoryRead(db,method,route,params,h){
     const date=v=>{if(v===null||v==='')return null;if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return null;const date=new Date(v+'T00:00:00.000Z');return Number.isFinite(date.valueOf())&&date.toISOString().slice(0,10)===v?v:null;};
     const start=date(from),end=date(to);
     if((from&&start===null)||(to&&end===null)||(start&&end&&start>end))h.bad('Período inválido');
-    const orders=db.prepare("SELECT o.id,o.closed_at AS closedAt,r.amount_cents AS refundCents FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id WHERE o.status='CLOSED' AND (? IS NULL OR substr(o.closed_at,1,10)>=?) AND (? IS NULL OR substr(o.closed_at,1,10)<=?)").all(start,start,end,end);
+    const orders=db.prepare("SELECT o.id,o.closed_at AS closedAt,r.amount_cents AS refundCents FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id WHERE o.status='CLOSED' AND (? IS NULL OR date(o.closed_at,'-3 hours')>=?) AND (? IS NULL OR date(o.closed_at,'-3 hours')<=?)").all(start,start,end,end);
     const lines=db.prepare('SELECT COALESCE(SUM(unit_price_cents*quantity),0) AS gross FROM order_line WHERE order_id=? AND cancelled_at IS NULL');
     const cogs=db.prepare("SELECT COALESCE(SUM(-value_delta_cents),0) AS cost FROM stock_movement WHERE source_order_id=? AND kind='SALE'");
     let grossSalesCents=0,refundedCents=0,cogsCents=0;
