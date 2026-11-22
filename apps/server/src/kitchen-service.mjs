@@ -23,7 +23,7 @@ function decodePageCursor(raw,h){
   data=JSON.parse(text);
  }catch{h.bad('Cursor de paginação inválido');}
  if(!Array.isArray(data)||data.length!==3||![0,1,2].includes(data[0])||
-   typeof data[1]!=='string'||!/^\\d{4}-\\d{2}-\\d{2}T/.test(data[1])||data[1].length>40||
+   typeof data[1]!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(data[1])||data[1].length>40||
    typeof data[2]!=='string'||!/^[-a-z0-9]{8,64}$/i.test(data[2]))
    h.bad('Cursor de paginação inválido');
  return data;
@@ -35,7 +35,7 @@ export function kitchenRead(db,method,route,h,params=new URLSearchParams()){
  if(method!=='GET')return null;
  if(route==='/api/kitchen/tickets') {
     const rawLimit=params.get('limit'),limit=rawLimit===null?200:Number(rawLimit);
-    if(rawLimit!==null&&(!/^[1-9]\\d*$/.test(rawLimit)||!Number.isSafeInteger(limit)||limit>200))
+    if(rawLimit!==null&&(!/^[1-9]\d*$/.test(rawLimit)||!Number.isSafeInteger(limit)||limit>200))
       h.bad('Limite de paginação inválido');
     const cursor=decodePageCursor(params.get('cursor'),h);
     const station=params.get('stationId');
