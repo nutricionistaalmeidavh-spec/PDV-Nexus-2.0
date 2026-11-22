@@ -11,9 +11,20 @@ const hashPassword=(password,salt)=>scryptSync(password,Buffer.from(salt,'hex'),
 function userView(row) {return {id:row.id,username:row.username,role:row.role};}
 
 export function createOperatorAuth(db) {
-  const sessions=new Map(),failures=new Map();
+  const sessions=new Map(),failures=new Map(),ipFailures=new Map();
+  let attempts=0;
+  function prune(now=Date.now()){
+    if(++attempts%64!==0&&failures.size<=2048&&ipFailures.size<=1024&&sessions.size<=8192)return;
+    for(const [k,v] of failures)if(now-v.last>attemptWindowMs*2)failures.delete(k);
+    for(const [k,v] of ipFailures)if(now-v.last>attemptWindowMs*2)ipFailures.delete(k);
+    for(const [k,v] of sessions)if(v.expires<=now)sessions.delete(k);
+    while(failures.size>2048)failures.delete(failures.keys().next().value);
+    while(ipFailures.size>1024)ipFailures.delete(ipFailures.keys().next().value);
+    while(sessions.size>8192)sessions.delete(sessions.keys().next().value);
+  }
   function configured(){return db.prepare('SELECT COUNT(*) AS amount FROM operator_account').get().amount>0;}
   function login(req,user) {
+    prune();
     const token=randomBytes(32).toString('base64url');
     const key=digest(token);
     sessions.set(key,{user:userView(user),expires:Date.now()+memorySeconds*1000});
@@ -62,9 +73,12 @@ export function createOperatorAuth(db) {
     }
     if(req.method==='POST'&&route==='/api/auth/login'){
       const username=body?.username,password=body?.password;
-      if(!validUsername(username)||typeof password!=='string')return reply(res,401,{code:'INVALID_CREDENTIALS',message:'Credenciais invalidas'});
-      const id=username.toLowerCase(),now=Date.now(),entry=failures.get(id);
-      if(entry?.until>now)return reply(res,429,{code:'TOO_MANY_ATTEMPTS',message:'Aguarde antes de tentar novamente'});
+      if(!validUsername(username)||typeof password!=='string'||password.length>128)return reply(res,401,{code:'INVALID_CREDENTIALS',message:'Credenciais invalidas'});
+      const ip=req.socket.remoteAddress??'unknown',id=ip+'|'+username.toLowerCase(),now=Date.now();
+      prune(now);
+      const prior=failures.get(id),entry=prior?.until>0&&prior.until<=now?null:prior;
+      const ipPrior=ipFailures.get(ip),ipEntry=ipPrior?.until>0&&ipPrior.until<=now?null:ipPrior;
+      if(entry?.until>now||ipEntry?.until>now)return reply(res,429,{code:'TOO_MANY_ATTEMPTS',message:'Aguarde antes de tentar novamente'});
       const account=db.prepare('SELECT * FROM operator_account WHERE username=? COLLATE NOCASE AND enabled=1').get(username);
       // Mesmo em usuario inexistente executar scrypt para reduzir enumeracao por timing.
       const actual=hashPassword(password,account?.password_salt??'0'.repeat(32));
@@ -72,7 +86,9 @@ export function createOperatorAuth(db) {
       const valid=timingSafeEqual(Buffer.from(actual,'hex'),Buffer.from(compare,'hex'))&&!!account;
       if(!valid){
         const count=(entry?.count??0)+1;
-        failures.set(id,{count,until:count>=5?now+attemptWindowMs:0});
+        failures.set(id,{count,until:count>=5?now+attemptWindowMs:0,last:now});
+        const ipCount=(ipEntry?.count??0)+1;
+        ipFailures.set(ip,{count:ipCount,until:ipCount>=30?now+attemptWindowMs:0,last:now});
         return reply(res,401,{code:'INVALID_CREDENTIALS',message:'Credenciais invalidas'});
       }
       failures.delete(id);
