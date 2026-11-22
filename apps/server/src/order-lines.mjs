@@ -34,7 +34,7 @@ export function orderLinesWrite(db,method,route,body,h){
             const next=addOrderLine(order,{id:randomUUID(),productId:product.id,productName:product.name,unitPriceCents,quantity:body.quantity});
             const line=next.lines.at(-1);
             db.prepare('INSERT INTO order_line(id,order_id,product_id,product_name_snapshot,unit_price_cents,quantity) VALUES (?,?,?,?,?,?)').run(line.id,id,line.productId,line.productName,line.unitPriceCents,line.quantity);
-            db.prepare('UPDATE order_line SET note_snapshot=? WHERE id=?').run(note,line.id);
+            db.prepare('UPDATE order_line SET note_snapshot=?,waiter_device_id=(SELECT waiter_device_id FROM order_waiter WHERE order_id=?) WHERE id=?').run(note,id,line.id);
             if(product.is_combo){
               const items=db.prepare('SELECT c.product_id AS productId,c.quantity,p.name FROM menu_combo_item c JOIN menu_product p ON p.id=c.product_id WHERE c.combo_id=?').all(product.id);
               if(!items.length)conflict('Combo sem componentes cadastrados');
