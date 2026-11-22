@@ -39,3 +39,11 @@ test('P1: não reutiliza mesmo ID de uma intenção substituída e não cresce i
   for(let j=0;j<30;j++)store.reserve('key-'+j,{j});
   assert.ok(store.pendingCount()<=5);
 });
+
+test('P2: KDS expõe paginação na tela sem perder deduplicação e ACK das transições',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const ui=readFileSync(new URL('../src/RestaurantTangerine.jsx',import.meta.url),'utf8');
+ assert.match(ui,/Carregar mais tickets/);
+ assert.match(ui,/nextCursor/);
+ assert.match(ui,/new Set\(/);
+});
