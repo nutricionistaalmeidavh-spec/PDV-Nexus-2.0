@@ -104,7 +104,8 @@ try {
  const closed=state.orders.filter(o=>o.status==='CLOSED');
  assert.equal(closed.length,1,'Não duplicar fechamento');
  const closedId=closed[0].id;
- await page.reload();await clickNav('Pedidos');await page.getByText('#'+closedId.slice(-8)).waitFor();
+ const displayId=Number.isSafeInteger(closed[0].orderNumber)?String(closed[0].orderNumber).padStart(6,'0'):closedId.slice(-8);
+ await page.reload();await clickNav('Pedidos');await page.getByText('#'+displayId,{exact:true}).waitFor();
  await snap('react-04-pedidos-persistidos');
  // P0-P3: telas React agora consultam o mesmo host em vez de mostrar apenas prévias.
  await clickNav('Estoque');
