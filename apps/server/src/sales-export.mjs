@@ -28,7 +28,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
   const to=periodDate(params.get('to'),'Data final');
   if(from&&to&&from>to)bad('Data inicial posterior a data final');
   const orders=db.prepare(
-    "SELECT o.id,o.service_mode AS serviceMode,o.created_at AS createdAt,"+
+    "SELECT o.id,o.order_number AS orderNumber,o.service_mode AS serviceMode,o.created_at AS createdAt,"+
     "o.closed_at AS closedAt,r.amount_cents AS refundedCents,r.cash_cents AS cashRefundCents,"+
     "r.reason AS refundReason,r.created_at AS refundCreatedAt "+
     "FROM sales_order o LEFT JOIN order_refund r ON r.order_id=o.id "+
@@ -59,6 +59,7 @@ export function buildSalesDocument(db,params=new URLSearchParams()){
     if(!Number.isSafeInteger(refundedCents)||refundedCents<0||refundedCents>grossCents)throw new Error('Devolucao inconsistente no pedido '+row.id);
     return {
       orderId:row.id,
+      orderNumber:row.orderNumber,
       serviceMode:row.serviceMode,
       createdAt:row.createdAt,
       closedAt:row.closedAt,
