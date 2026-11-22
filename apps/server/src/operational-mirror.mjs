@@ -2,6 +2,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import net from 'node:net';
 import {verifyLiveSummary} from './summary-live.mjs';
+import {readBoundedJson} from './bounded-json.mjs';
 
 const sha=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const time=()=>new Date().toISOString();
@@ -176,7 +177,7 @@ export function createOperationalPoller(db,options){
        redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'
      });
      if(!response.ok)throw Error('Status do peer: '+response.status);
-     const snapshot=await response.json();
+     const snapshot=await readBoundedJson(response,{maxBytes});
      validate(snapshot,msg=>{throw Error(msg)});
      if(snapshot.unitId===unit(db))throw Error('O peer possui o mesmo identificador local');
      let summary=null,summaryError=false;
@@ -187,7 +188,7 @@ export function createOperationalPoller(db,options){
         redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'
        });
        if(!financeResponse.ok)throw Error('Resumo BI remoto indisponível');
-       summary=verifyLiveSummary(await financeResponse.json());
+       summary=verifyLiveSummary(await readBoundedJson(financeResponse,{maxBytes:524288}));
        if(summary.unitId!==snapshot.unitId)throw Error('Identidade do peer divergente');
       }catch{summaryError=true;}
      }
