@@ -76,7 +76,7 @@ export function CatalogToolsPanel({mode,api,categories,products,onRefresh}){
   </Section>
   <Section title="Editar produtos">
    {products.map(p=><Row key={p.id}><span className="grow"><strong>{p.name}</strong><small>{formatMoney(p.priceCents)} {p.barcode?'· '+p.barcode:''}</small></span>
-    <button className="btn secondary" disabled={busy||mode!=='live'} onClick={()=>setEditing({type:'product',id:p.id,name:p.name,price:(p.priceCents/100).toFixed(2).replace('.',','),barcode:p.barcode||''})}}>Editar</button>
+    <button className="btn secondary" disabled={busy||mode!=='live'} onClick={()=>setEditing({type:'product',id:p.id,name:p.name,price:(p.priceCents/100).toFixed(2).replace('.',','),barcode:p.barcode||''})}>Editar</button>
    </Row>)}
   </Section>
   <Section title="Adicionais e personalizações">
