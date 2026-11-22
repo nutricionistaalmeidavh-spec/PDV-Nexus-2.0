@@ -8,7 +8,7 @@ import {openDatabase,latestSchemaVersion} from '../src/db.mjs';
 import {inspectBackup} from '../src/restore.mjs';
 import {kitchenRead} from '../src/kitchen-service.mjs';
 import {allowedOperator} from '../src/operator-auth.mjs';
-import {mayFinishExistingOperation} from '../src/license-operation-policy.mjs';
+import {mayFinishExistingOperation,mayOpenCashForUnfinishedOrders} from '../src/license-operation-policy.mjs';
 import {roleAllows} from '../src/lan-security.mjs';
 
 test('P0: cashier pode enviar comprovantes sem poder configurar impressora',()=>{
@@ -259,4 +259,17 @@ test('P0: operação iniciada com licença válida pode ser confirmada, cancelad
   assert.equal(mayFinishExistingOperation('POST','/api/orders/new/lines'),false);
   assert.equal(mayFinishExistingOperation('POST','/api/orders/order-123/transfer-table'),false);
   assert.equal(mayFinishExistingOperation('POST','/api/stock/ingredients'),false);
+});
+
+test('P0: caixa pode reabrir após licença expirar somente quando há comanda anterior não concluída',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-expired-cash-'));
+ const db=openDatabase(path.join(dir,'db.sqlite'));
+ t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+ assert.equal(mayOpenCashForUnfinishedOrders(db,'POST','/api/cash/open'),false);
+ const id=randomUUID();
+ db.prepare("INSERT INTO sales_order(id,restaurant_id,terminal_id,service_mode,status,revision,created_at) VALUES(?,'r-local','t-local','counter','DRAFT',0,?)").run(id,new Date().toISOString());
+ assert.equal(mayOpenCashForUnfinishedOrders(db,'POST','/api/cash/open'),true);
+ assert.equal(mayOpenCashForUnfinishedOrders(db,'POST','/api/orders'),false);
+ db.prepare("UPDATE sales_order SET status='CANCELLED' WHERE id=?").run(id);
+ assert.equal(mayOpenCashForUnfinishedOrders(db,'POST','/api/cash/open'),false);
 });
