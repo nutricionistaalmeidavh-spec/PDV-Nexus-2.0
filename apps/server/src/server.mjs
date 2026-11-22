@@ -196,7 +196,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           if(!isLoopbackHost || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))
             throw new HttpError(403,'LOCAL_ONLY','Autenticacao de operador permitida apenas no host local');
           if(!['GET','POST','PATCH'].includes(method))return response(res,405,{code:'METHOD_NOT_ALLOWED'});
-          const authBody=method==='POST'?await readJson(req):null;
+          const authBody=(method==='POST'||method==='PATCH')?await readJson(req):null;
           return operatorAuth.handle(req,res,route,authBody);
         }
         // Resgate de PIN é público somente no host local ou na LAN HTTPS configurada.
