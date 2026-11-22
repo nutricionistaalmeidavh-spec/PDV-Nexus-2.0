@@ -1,3 +1,4 @@
+import {businessDay} from './business-day.mjs';
 /** P2 BI e planejamento: apenas leituras do SQLite local e dos snapshots já validados.
  * Não calcula pagamentos a partir de fluxo de caixa nem cria outro ledger. */
 import {localSummary} from './multiunit-sync.mjs';
@@ -8,7 +9,7 @@ const iso=day=>{
  if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==day)throw Error('Data inválida');
  return day;
 };
-const todayUTC=()=>new Date().toISOString().slice(0,10);
+const todayUTC=()=>businessDay();
 const moveDay=(day,offset)=>new Date(Date.parse(iso(day)+'T00:00:00Z')+offset*86400000).toISOString().slice(0,10);
 const between=(start,end)=>Math.round((Date.parse(iso(end)+'T00:00:00Z')-Date.parse(iso(start)+'T00:00:00Z'))/86400000);
 const whole=(value,label,min,max)=>{const n=Number(value);if(!Number.isSafeInteger(n)||n<min||n>max)throw Error(label+' inválido');return n;};
@@ -107,7 +108,7 @@ function dashboard(db,params){
  const period=range(params);
  const orders=db.prepare(`WITH
   scope AS (SELECT id,closed_at,service_mode FROM sales_order WHERE status='CLOSED'
-    AND substr(closed_at,1,10) BETWEEN ? AND ?),
+    AND date(closed_at,'-3 hours') BETWEEN ? AND ?),
   lines AS (SELECT l.order_id,SUM(l.quantity*l.unit_price_cents) AS gross
     FROM order_line l JOIN scope o ON o.id=l.order_id WHERE l.cancelled_at IS NULL GROUP BY l.order_id),
   refunds AS (SELECT r.order_id,SUM(r.amount_cents) AS amount FROM order_refund r
@@ -117,7 +118,7 @@ function dashboard(db,params){
   costs AS (SELECT m.source_order_id AS order_id,SUM(-m.value_delta_cents) AS amount
     FROM stock_movement m JOIN scope o ON o.id=m.source_order_id WHERE m.kind='SALE'
     GROUP BY m.source_order_id)
-  SELECT o.id,substr(o.closed_at,1,10) AS day,substr(o.closed_at,12,2) AS hour,
+  SELECT o.id,date(o.closed_at,'-3 hours') AS day,strftime('%H',o.closed_at,'-3 hours') AS hour,
    o.service_mode AS serviceMode,COALESCE(l.gross,0) AS gross,
    COALESCE(r.amount,0)+COALESCE(ir.amount,0) AS refund,COALESCE(c.amount,0) AS cogs
   FROM scope o LEFT JOIN lines l ON l.order_id=o.id
@@ -137,17 +138,17 @@ function dashboard(db,params){
  const topProducts=db.prepare(`SELECT l.product_id AS productId,MAX(l.product_name_snapshot) AS name,
   SUM(l.quantity) AS quantity,SUM(l.quantity*l.unit_price_cents) AS grossCents
   FROM order_line l JOIN sales_order o ON o.id=l.order_id
-  WHERE o.status='CLOSED' AND l.cancelled_at IS NULL AND substr(o.closed_at,1,10) BETWEEN ? AND ?
+  WHERE o.status='CLOSED' AND l.cancelled_at IS NULL AND date(o.closed_at,'-3 hours') BETWEEN ? AND ?
   GROUP BY l.product_id ORDER BY quantity DESC,productId LIMIT 20`).all(period.from,period.to).map(p=>({ ...p,quantity:safe(p.quantity),grossCents:safe(p.grossCents)}));
  const topCategories=db.prepare(`SELECT c.id AS categoryId,c.name,SUM(l.quantity) AS quantity,
   SUM(l.quantity*l.unit_price_cents) AS grossCents
   FROM order_line l JOIN sales_order o ON o.id=l.order_id
   JOIN menu_product p ON p.id=l.product_id JOIN menu_category c ON c.id=p.category_id
-  WHERE o.status='CLOSED' AND l.cancelled_at IS NULL AND substr(o.closed_at,1,10) BETWEEN ? AND ?
+  WHERE o.status='CLOSED' AND l.cancelled_at IS NULL AND date(o.closed_at,'-3 hours') BETWEEN ? AND ?
   GROUP BY c.id ORDER BY grossCents DESC,categoryId LIMIT 20`).all(period.from,period.to);
  const methods=db.prepare(`SELECT p.method,SUM(p.amount_cents) AS confirmedCents
   FROM payment p JOIN sales_order o ON o.id=p.order_id
-  WHERE p.state='CONFIRMED' AND o.status='CLOSED' AND substr(o.closed_at,1,10) BETWEEN ? AND ?
+  WHERE p.state='CONFIRMED' AND o.status='CLOSED' AND date(o.closed_at,'-3 hours') BETWEEN ? AND ?
   GROUP BY p.method ORDER BY p.method`).all(period.from,period.to);
  return {status:200,body:{
   period,totals:{...totals,grossMarginCents:totals.netSalesCents-totals.cogsCents,
@@ -156,7 +157,7 @@ function dashboard(db,params){
   byMode:[...byMode].map(([serviceMode,values])=>({serviceMode,...values})),
   byHour:[...byHour].sort(([a],[b])=>a.localeCompare(b)).map(([hour,values])=>({hour,...values})),
   topProducts,topCategories,methods,source:'canonical-sqlite',
-  refundAttribution:'sale-closing-date',categoryAttribution:'current-product-category',clock:'UTC'
+  refundAttribution:'sale-closing-date',categoryAttribution:'current-product-category',clock:'America/Sao_Paulo'
  }};
 }
 
@@ -165,11 +166,11 @@ function forecast(db,params){
   lookbackDays=whole(params.get('lookbackDays')??56,'Histórico',7,84);
  const from=moveDay(asOf,-lookbackDays);
  const rows=db.prepare(`SELECT l.product_id AS productId,MAX(l.product_name_snapshot) AS name,
-  substr(o.closed_at,1,10) AS day,SUM(MAX(0,l.quantity-COALESCE(r.refunded,0))) AS quantity
+  date(o.closed_at,'-3 hours') AS day,SUM(MAX(0,l.quantity-COALESCE(r.refunded,0))) AS quantity
   FROM order_line l JOIN sales_order o ON o.id=l.order_id
   LEFT JOIN (SELECT line_id,SUM(quantity) AS refunded FROM order_line_refund GROUP BY line_id) r ON r.line_id=l.id
-  WHERE o.status='CLOSED' AND l.cancelled_at IS NULL AND substr(o.closed_at,1,10) BETWEEN ? AND ?
-  GROUP BY l.product_id,substr(o.closed_at,1,10)
+  WHERE o.status='CLOSED' AND l.cancelled_at IS NULL AND date(o.closed_at,'-3 hours') BETWEEN ? AND ?
+  GROUP BY l.product_id,date(o.closed_at,'-3 hours')
   ORDER BY day DESC,productId LIMIT 12001`).all(from,asOf);
  if(rows.length>12000)throw Error('Muitas linhas de demanda; use período menor');
  const byProduct=new Map();
@@ -196,9 +197,9 @@ function replenishment(db,params){
   ORDER BY name COLLATE NOCASE,id LIMIT 501`).all();
  if(ingredients.length>500)throw Error('Reposição: limite de 500 ingredientes por consulta');
  const batches=db.prepare('SELECT remaining_milli AS remainingMilli,expiry_date AS expiryDate FROM ingredient_batch WHERE ingredient_id=? AND remaining_milli>0');
- const usage=db.prepare(`SELECT substr(created_at,1,10) AS day,SUM(-quantity_delta_milli) AS quantityMilli
-  FROM stock_movement WHERE ingredient_id=? AND kind='SALE' AND substr(created_at,1,10) BETWEEN ? AND ?
-  GROUP BY substr(created_at,1,10) ORDER BY day`);
+ const usage=db.prepare(`SELECT date(created_at,'-3 hours') AS day,SUM(-quantity_delta_milli) AS quantityMilli
+  FROM stock_movement WHERE ingredient_id=? AND kind='SALE' AND date(created_at,'-3 hours') BETWEEN ? AND ?
+  GROUP BY date(created_at,'-3 hours') ORDER BY day`);
  const from=moveDay(today,-lookbackDays+1);
  const rows=ingredients.map(i=>({
   id:i.id,name:i.name,unit:i.unit,...recommendReplenishment({...i,batches:batches.all(i.id),
