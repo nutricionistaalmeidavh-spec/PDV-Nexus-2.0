@@ -67,3 +67,20 @@ test('P2: sincronização de resumo financeiro é opt-in e desligada por padrão
  assert.equal(poller.status().summarySyncEnabled,false);
  await poller.stop();
 });
+
+test('P2: peer antigo sem resumo BI continua sincronizando o espelho operacional',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p2-fallback-'));
+ const a=openDatabase(path.join(dir,'a.db')),b=openDatabase(path.join(dir,'b.db'));
+ t.after(()=>{a.close();b.close();fs.rmSync(dir,{recursive:true,force:true})});
+ const packet=operationalRead(a,'GET','/api/sync/operational/export',{}).body;
+ const poller=createOperationalPoller(b,{peers:[{url:'https://10.0.0.9',token:'x'.repeat(40)}],
+  summarySync:true,transport:async url=>url.endsWith('/api/sync/summary/daily')
+   ?{ok:false,status:404}: {ok:true,status:200,json:async()=>packet}});
+ const sync=await poller.syncOnce();
+ assert.equal(sync.ok,1,'espelho não fica refém do BI opcional');
+ assert.equal(sync.summaryFailed,1);
+ assert.equal(b.prepare('SELECT COUNT(*) AS n FROM operational_mirror_peer').get().n,1);
+ assert.deepEqual(poller.liveSummaries(),[]);
+ assert.ok(poller.status().peers[0].lastSummaryError);
+ await poller.stop();
+});
