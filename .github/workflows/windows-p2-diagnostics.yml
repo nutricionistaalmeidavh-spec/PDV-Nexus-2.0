@@ -2,7 +2,7 @@ name: Windows P2 focused diagnostics (no release)
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, 'fix/p0-stabilizacao-operacional-20261122']
   push:
     branches: [main, 'feat/p2-operational-mirror-hardening-20261120', 'feat/nexus-tangerine-p2-p4-20261121']
 jobs:
