@@ -99,7 +99,7 @@ export function kitchenOperationsWrite(db,method,route,body,h){
   const id=randomUUID(),kind=allowedKind[body.type];
   db.prepare(`INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at)
    VALUES(?,?,?,?,'PENDING',?)`).run(id,kind,order.id,JSON.stringify({
-    id:order.id,kind:body.type,stationName,profileId,lines,totalCents:lines.reduce((sum,l)=>sum+l.quantity*l.unitPriceCents,0),
+    id:order.id,orderNumber:order.orderNumber,kind:body.type,stationName,profileId,lines,totalCents:lines.reduce((sum,l)=>sum+l.quantity*l.unitPriceCents,0),
     tableId:order.tableId,nonFiscal:true
    }),h.stamp());
   h.audit(db,order.id,'OPERATIONAL_PRINT_QUEUED',{jobId:id,kind,stationId:body.stationId??null});
