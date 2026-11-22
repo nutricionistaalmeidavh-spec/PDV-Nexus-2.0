@@ -3,6 +3,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import {isPrivateIpv4 as isPrivateIPv4,isPrivatePeerHost,isLocalLanHostname} from './private-network.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { databaseOrder } from './order-read.mjs';
@@ -65,11 +66,6 @@ function cashExpected(db,session) {
 function visibleCash(db) {
   const session=cashSession(db);
   return session?{id:session.id,status:session.status,openedAt:session.opened_at,openingCents:session.opening_amount_cents,expectedCents:cashExpected(db,session)}:null;
-}
-function isPrivateIPv4(ip) {
-  if(net.isIP(ip)!==4) return false;
-  const v=ip.split('.').map(Number);
-  return v[0]===10 || v[0]===127 || v[0]===192&&v[1]===168 || v[0]===172&&v[1]>=16&&v[1]<=31;
 }
 async function transmit(host,port,buffer) {
   return new Promise((resolve,reject)=>{
@@ -171,7 +167,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       const host=req.headers.host||'';
       const isLoopbackHost=/^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(host);
       const hostname=host.split(':')[0];
-      const isLanHost=net.isIP(hostname)===4&&isPrivateIPv4(hostname) || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(hostname);
+      const isLanHost=isPrivateIPv4(hostname)||isLocalLanHostname(hostname);
       if(!isLoopbackHost && !(lanConfig&&isLanHost))throw new HttpError(403,'INVALID_HOST','Host não permitido');
       const allowed=`${lanConfig?'https':'http'}://${host}`;
       if(req.headers.origin&&req.headers.origin!==allowed)throw new HttpError(403,'CROSS_ORIGIN','Origem não permitida');
@@ -273,8 +269,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           const target=url.searchParams.get('url');
           let candidate;
           try{candidate=new URL(target);}catch{bad('URL do QR invalida');}
-          const isLanAddress=net.isIP(candidate.hostname)===4&&isPrivateIPv4(candidate.hostname)&&!candidate.hostname.startsWith('127.')
-            || /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.local$/i.test(candidate.hostname);
+          const isLanAddress=isPrivatePeerHost(candidate.hostname);
           if(!target||target.length>256||candidate.protocol!=='https:'||!isLanAddress||candidate.username||candidate.password
             ||!['/restaurant.html','/kitchen.html'].includes(candidate.pathname)||candidate.search||candidate.hash)
             bad('Use URL HTTPS da rede privada para salao ou cozinha');
