@@ -158,6 +158,7 @@ export function ManagementOverview({orders=[],tables=[],session,onGo,api,mode}){
     ['estoque','Estoque','Saldos e movimentações',Boxes],
     ['financeiro','Financeiro','Recebimentos confirmados',Wallet],
     ['relatorios','Relatórios','Vendas, CMV e desempenho',BarChart3],
+    ['inteligencia','BI e previsões','Demanda, reposição e consolidação',BarChart3],
     ['usuarios','Usuários','Acessos e permissões',LayoutDashboard],
     ['integracoes','Integrações','Periféricos e serviços opcionais',ClipboardList]
    ].map(([id,label,description,Icon])=><Button key={id} variant="default" className="nexus-management-shortcut"

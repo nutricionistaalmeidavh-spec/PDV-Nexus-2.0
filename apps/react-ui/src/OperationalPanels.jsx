@@ -82,8 +82,8 @@ export function UnitsPanel({mode,api}){
  useEffect(()=>{
   if(mode!=='live'){setState({offline:true});return;}
   let live=true;
-  Promise.all(['/api/sync/units','/api/sync/conflicts','/api/sync/operational/status','/api/sync/operational/peers'].map(p=>api(p)))
-   .then(([units,conflicts,status,peers])=>{if(live)setState({units,conflicts,status,peers})})
+  Promise.all(['/api/sync/units','/api/bi/consolidated','/api/sync/conflicts','/api/sync/operational/status','/api/sync/operational/peers'].map(p=>api(p)))
+   .then(([units,bi,conflicts,status,peers])=>{if(live)setState({units,bi,conflicts,status,peers})})
    .catch(e=>{if(live)setState({error:e.message})});
   return()=>{live=false;};
  },[mode,api,revision]);
@@ -102,9 +102,9 @@ export function UnitsPanel({mode,api}){
   <Issue text={error||state.error}/>{message&&<Notice>{message}</Notice>}
   {state.offline?<Section title="Host indisponível">As unidades exigem host local autenticado.</Section>:state.pending?<p>Consultando unidades...</p>:<>
    <div className="metric-grid">
-     <div className="metric-card"><span>Unidades consolidadas</span><strong>{state.units?.units?.length??0}</strong></div>
-     <div className="metric-card"><span>Vendas brutas</span><strong>{currency(state.units?.totals?.grossSalesCents)}</strong></div>
-     <div className="metric-card"><span>CMV</span><strong>{currency(state.units?.totals?.cogsCents)}</strong></div>
+     <div className="metric-card"><span>Unidades consolidadas</span><strong>{state.bi?.units?.length??0}</strong></div>
+     <div className="metric-card"><span>Vendas brutas</span><strong>{currency(state.bi?.totals?.grossSalesCents)}</strong></div>
+     <div className="metric-card"><span>CMV</span><strong>{currency(state.bi?.totals?.cogsCents)}</strong></div>
    </div>
    <Section title="Consolidação manual">
     <div className="row wrap compact">
@@ -112,10 +112,12 @@ export function UnitsPanel({mode,api}){
      <label className="field">Importar resumo de outra unidade <input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void execute(()=>importFile(file));}}/></label>
      <button className="btn secondary" disabled={busy} onClick={()=>setRevision(n=>n+1)}>Atualizar</button>
     </div>
-    <div className="stack">{(state.units?.units||[]).map(u=><Row key={u.unitId}><span><strong>{u.local?'Esta instalação':'Unidade importada'} · {u.unitId}</strong><small>Revisão {u.revision}</small></span><strong>{currency(u.totals?.grossSalesCents)}</strong></Row>)}</div>
+    <div className="stack">{(state.bi?.units||[]).map(u=><Row key={u.unitId}><span><strong>{u.local?'Esta instalação':u.source==='https-lan-read-only'?'Consulta HTTPS LAN':'Unidade importada'} · {u.unitId}</strong><small>{u.source==='https-lan-read-only'?'Consulta periódica':`Revisão ${u.revision}`} · {u.stale?'Dados antigos':u.local?'Dados locais':'Atualizado'}{u.importedAt?' · '+new Date(u.importedAt).toLocaleString('pt-BR'):''}</small></span><strong>{currency(u.totals?.grossSalesCents)}</strong></Row>)}</div>
    </Section>
    <Section title="Espelhos operacionais de consulta">
      <Row><span>Situação</span><strong>{state.status?.enabled?'Ativado · somente leitura':'Desativado'}</strong></Row>
+     <Row><span>Resumos gerenciais remotos</span><strong>{state.status?.summarySyncEnabled?'Consulta HTTPS opcional habilitada':'Importação manual (padrão)'}</strong></Row>
+     <p className="help">A consulta HTTPS opcional requer configuração explícita no host e nunca escreve dados operacionais da outra unidade. Dados importados podem estar desatualizados.</p>
      <button className="btn secondary" disabled={busy||!state.status?.enabled} onClick={()=>void execute(async()=>{const result=await api('/api/sync/operational/pull',{method:'POST',body:{}});return result.ok+' unidades consultadas, '+result.failed+' falhas';})}>Consultar agora</button>
      <div className="stack">{(state.peers?.peers||[]).map(peer=><Row key={peer.unitId}><span><strong>{peer.unitId}</strong><small>Revisão {peer.revision} · {peer.orders?.length||0} pedidos · {peer.products?.length||0} produtos · {peer.stock?.length||0} ingredientes</small></span></Row>)}</div>
      <p className="help">O espelho não altera vendas nem saldo da unidade local.</p>

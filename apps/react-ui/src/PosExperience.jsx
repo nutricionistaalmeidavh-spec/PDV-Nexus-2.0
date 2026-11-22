@@ -130,6 +130,10 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
    closeButtonProps={{'aria-label':'Fechar'}}>
   <Stack gap={0} className="nexus-payment-container">
    <Stack gap="md" className="nexus-payment-scroll">
+   {order?.serviceMode==='table'&&order?.pendingKitchenTickets>0&&<Paper p="md" radius="md" withBorder style={{borderColor:'#ce7a23',background:'#fff6e8'}} role="status">
+     <Text fw={800}>Atenção: pedido ainda em preparação</Text>
+     <Text size="sm">{order.pendingKitchenTickets} item(ns) pendentes no KDS. É permitido receber a conta e liberar a mesa; o preparo continuará associado a este atendimento.</Text>
+   </Paper>}
    <Paper p="lg" radius="lg" className="nexus-payment-total">
     <Text size="xs" fw={800} tt="uppercase">Total a receber</Text>
     <Text className="hero-number" fw={800}>{money(total)}</Text>

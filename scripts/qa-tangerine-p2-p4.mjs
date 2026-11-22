@@ -143,6 +143,33 @@ try{
  const document=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
  assert.equal(document.documentType,'PDV_NEXUS_UNIT_SUMMARY');
  await shot('06-unidades-exportacao');
+
+ await clickNav('BI e previsões');
+ await page.getByRole('heading',{name:'BI e planejamento'}).waitFor();
+ const bi=await data('/api/bi/dashboard');
+ assert.ok(bi.totals.orders>=1,'BI tem de incluir venda concluída');
+ assert.ok(bi.totals.grossSalesCents>0,'BI não pode inventar gráfico sem fechamento');
+ await page.getByText('Receita líquida',{exact:true}).first().waitFor();
+ await shot('p2-06-bi-desempenho');
+ await page.locator('.nexus-management').getByRole('button',{name:'Demanda prevista'}).click();
+ await page.getByRole('heading',{name:/Demanda para os próximos/}).waitFor();
+ const prediction=await data('/api/bi/forecast?days=7');
+ assert.ok(prediction.products.length>=1);
+ await shot('p2-07-bi-previsao');
+ const reorder=await data('/api/bi/replenishment');
+ assert.equal(reorder.automaticPurchase,false,'BI nunca dispara compras automaticamente');
+ await page.locator('.nexus-management').getByRole('button',{name:'Reposição'}).click();
+ try{await page.getByRole('heading',{name:'Sugestões de reposição'}).waitFor({timeout:9000});}
+ catch(error){
+  const visible=await page.locator('body').innerText().catch(()=>'(DOM indisponível)');
+  throw new Error('Falha ao abrir aba Reposição: '+visible.slice(0,1400)+' | PAGEERRORS: '+errors.join(' | ').slice(0,1800),{cause:error});
+ }
+ await shot('p2-08-bi-reposicao');
+ await page.locator('.nexus-management').getByRole('button',{name:'Unidades',exact:true}).click();
+ await page.getByRole('heading',{name:'Origem e atualização das unidades'}).waitFor();
+ const consolidated=await data('/api/bi/consolidated');
+ assert.ok(consolidated.units.some(x=>x.local),'visão central identifica o host canônico');
+ await shot('p2-09-bi-unidades');
  await clickNav('Integrações');
  await page.getByRole('heading',{name:'Diagnósticos de periféricos'}).waitFor();
  await shot('07-hardware');

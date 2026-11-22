@@ -23,6 +23,7 @@ export function partialPaymentWrite(db,method,route,body,h){
   h.assertRevision(order,body.expectedRevision);
   if(order.status!=='OPEN')h.conflict('Confirme a comanda antes de cobrar','ORDER_NOT_OPEN');
   if(!order.tableId)h.conflict('Recebimento por convidado requer comanda de mesa','TABLE_REQUIRED');
+  if(db.prepare("SELECT 1 FROM table_order_request WHERE order_id=? AND status='PENDING' LIMIT 1").get(order.id))h.conflict('Aprove ou rejeite pedidos pendentes antes de cobrar','PENDING_TABLE_REQUESTS');
   const summary=splitSummary(db,order.id);
   if(!summary.fullyAssigned)h.conflict('Distribua todos os itens antes de cobrar','SPLIT_REQUIRED');
   const guest=h.requireString(body.guest,'Convidado',60);

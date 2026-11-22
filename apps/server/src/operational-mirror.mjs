@@ -1,6 +1,7 @@
 /** Optional read-only mirror of peer units. Never writes another unit's canonical sales or stock. */
 import {createHash,randomUUID} from 'node:crypto';
 import net from 'node:net';
+import {verifyLiveSummary} from './summary-live.mjs';
 
 const sha=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const time=()=>new Date().toISOString();
@@ -141,8 +142,10 @@ function isPrivateHost(hostname){
  return parts[0]===10||(parts[0]===172&&parts[1]>=16&&parts[1]<=31)||(parts[0]===192&&parts[1]===168);
 }
 export function validatePeerOptions(options){
- if(options==null)return {peers:[],intervalMs:60000,transport:fetch};
+ if(options==null)return {peers:[],intervalMs:60000,transport:fetch,summarySync:false};
  if(typeof options!=='object'||Array.isArray(options)||!Array.isArray(options.peers)||options.peers.length>8)throw new Error('Configuração de sincronização inválida');
+ const summarySync=options.summarySync??false;
+ if(typeof summarySync!=='boolean')throw new Error('Resumo de BI automático deve ser booleano');
  const intervalMs=options.intervalMs??60000;
  if(!Number.isSafeInteger(intervalMs)||intervalMs<30000||intervalMs>3600000)throw new Error('Intervalo de sincronização deve ser 30s a 60min');
  const peers=options.peers.map(p=>{
@@ -153,16 +156,17 @@ export function validatePeerOptions(options){
   return {url:u.origin,token:p.token};
  });
  if(new Set(peers.map(p=>p.url)).size!==peers.length)throw new Error('Unidades remotas duplicadas');
- return {peers,intervalMs,transport:options.transport??fetch};
+ return {peers,intervalMs,transport:options.transport??fetch,summarySync};
 }
 export function createOperationalPoller(db,options){
  const config=validatePeerOptions(options);
- const state=config.peers.map(p=>({url:p.url,lastSuccess:null,lastError:null}));
+ const state=config.peers.map(p=>({url:p.url,lastSuccess:null,lastError:null,lastSummaryAt:null,lastSummaryError:null}));
+ const live=new Map();
  let timer=null,running=false,stopped=false,stopResolver=null;
  async function syncOnce(){
   if(stopped)return {stopped:true,ok:0,failed:0};
   if(running)return {busy:true,ok:0,failed:0};
-  running=true;let ok=0,failed=0;
+  running=true;let ok=0,failed=0,summaryOk=0,summaryFailed=0;
   try{
    for(let i=0;i<config.peers.length;i++){
     const peer=config.peers[i];
@@ -175,6 +179,18 @@ export function createOperationalPoller(db,options){
      const snapshot=await response.json();
      validate(snapshot,msg=>{throw Error(msg)});
      if(snapshot.unitId===unit(db))throw Error('O peer possui o mesmo identificador local');
+     let summary=null,summaryError=false;
+     if(config.summarySync){
+      try{
+       const financeResponse=await config.transport(peer.url+'/api/sync/summary/daily',{
+        method:'GET',headers:{authorization:'Bearer '+peer.token,accept:'application/json'},
+        redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'
+       });
+       if(!financeResponse.ok)throw Error('Resumo BI remoto indisponível');
+       summary=verifyLiveSummary(await financeResponse.json());
+       if(summary.unitId!==snapshot.unitId)throw Error('Identidade do peer divergente');
+      }catch{summaryError=true;}
+     }
      db.exec('BEGIN IMMEDIATE');
      try{
       const applied=store(db,snapshot,(msg)=>{throw Error(msg)});
@@ -182,16 +198,23 @@ export function createOperationalPoller(db,options){
         .run(randomUUID(),applied.unitId,'OPERATIONAL_MIRROR_IMPORTED','automated-peer-sync',JSON.stringify({revision:applied.revision,gapDetected:applied.gapDetected}),time());
       db.exec('COMMIT');
      }catch(e){db.exec('ROLLBACK');throw e;}
+     if(summary){
+      const receivedAt=time();live.set(summary.unitId,{...summary,receivedAt});
+      state[i].lastSummaryAt=receivedAt;state[i].lastSummaryError=null;summaryOk++;
+     }else if(summaryError){
+      state[i].lastSummaryError='Resumo BI indisponível, antigo ou não validado';summaryFailed++;
+     }
      state[i].lastSuccess=time();state[i].lastError=null;ok++;
     }catch(e){failed++;state[i].lastError='Falha de conexão, validação ou revisão do peer';}
    }
-   return {ok,failed};
+   return {ok,failed,summaryOk,summaryFailed};
   }finally{running=false;if(stopResolver){stopResolver();stopResolver=null;}}
  }
  function start(){
   if(!timer&&config.peers.length){timer=setInterval(()=>void syncOnce(),config.intervalMs);timer.unref?.();}
  }
  async function stop(){stopped=true;if(timer)clearInterval(timer);timer=null;if(running)await new Promise(resolve=>{stopResolver=resolve});}
- function status(){return {enabled:config.peers.length>0,intervalMs:config.intervalMs,peers:state.map(s=>({...s})),mode:'HTTPS_READ_ONLY',operationalWrites:false};}
- return {start,stop,syncOnce,status};
+ function status(){return {enabled:config.peers.length>0,summarySyncEnabled:config.summarySync,intervalMs:config.intervalMs,peers:state.map(s=>({...s})),mode:'HTTPS_READ_ONLY',operationalWrites:false};}
+ function liveSummaries(){return [...live.values()].map(x=>({...x}));}
+ return {start,stop,syncOnce,status,liveSummaries};
 }

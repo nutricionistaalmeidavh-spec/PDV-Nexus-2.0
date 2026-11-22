@@ -35,6 +35,7 @@ export function orderLifecycleWrite(db,method,route,body,h){
           return transact(db,route,body,()=>{
             const order=databaseOrder(db,id);assertRevision(order,body.expectedRevision);
             if(order.suspended)conflict('Retome a venda antes de finalizar','ORDER_SUSPENDED');
+            if(db.prepare("SELECT 1 FROM table_order_request WHERE order_id=? AND status='PENDING' LIMIT 1").get(id))conflict('Existem pedidos do tablet aguardando aprovação. Aprove ou rejeite antes do pagamento','PENDING_TABLE_REQUESTS');
              if(db.prepare('SELECT 1 FROM payment WHERE order_id=? LIMIT 1').get(id))conflict('Finalize pagamentos por convidado no fluxo de recebimentos parciais','PARTIAL_PAYMENT_EXISTS');
              try{assertSplitConsistent(db,id);}catch(e){conflict(e.message,'INCOMPLETE_SPLIT');}
             const session=cashSession(db);if(!session)conflict('Abra o caixa antes de receber pagamento','CASH_CLOSED');
@@ -55,10 +56,12 @@ export function orderLifecycleWrite(db,method,route,body,h){
             const stock=consumeStockForOrder(db,id,actor,conflict);
             for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id) VALUES(?,?,?,?,?,?,?)')
               .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id);
+            const pendingKitchenTickets=db.prepare("SELECT COUNT(*) AS n FROM kitchen_ticket WHERE order_id=? AND status IN ('PENDING','PREPARING','READY')").get(id).n;
             writeOrder(db,next);
+            if(order.tableId&&pendingKitchenTickets) audit(db,id,'TABLE_RELEASED_WITH_PENDING_KITCHEN',{tableId:order.tableId,pendingKitchenTickets});
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
               .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
-            audit(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents});
+            audit(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents,pendingKitchenTickets});
             return {order:databaseOrder(db,id),changeCents:change};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/cancel$/)) {

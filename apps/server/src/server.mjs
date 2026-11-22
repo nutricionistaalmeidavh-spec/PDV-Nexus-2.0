@@ -17,6 +17,8 @@ import {supplyRead,supplyWrite} from './retail-supply.mjs';
 import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
 import {financialRead} from './retail-finance.mjs';
+import {businessIntelligenceRead} from './management-intelligence.mjs';
+import {liveSummaryRead} from './summary-live.mjs';
 import {checkUpdates,currentVersion} from './system-maintenance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
@@ -38,6 +40,7 @@ import {retailAdvancedRead,retailAdvancedWrite} from './retail-advanced.mjs';
 import {captureStableScale} from './scale-capture.mjs';
 import {lineHistory,lineWrite} from './order-line-edits.mjs';
 import {tableQrRead,tableQrWrite,publicTableRead,publicTableSubmit} from './table-qr.mjs';
+import {attendanceRead,attendanceWrite,tabletIdentity,tabletRead,tabletWrite,pairedWaiterIdentity} from './table-attendance.mjs';
 import { refundWrite } from './refunds.mjs';
 import { cashWrite } from './cash-service.mjs';
 import { receiptBytes } from './non-fiscal-service.mjs';
@@ -119,7 +122,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
     return result;
   }
   async function handler(req,res) {
-    let requestActor='unauthenticated',requestRole=null;
+    let requestActor='unauthenticated',requestRole=null,requestDeviceId=null;
     const auditForRequest=(db,aggregateId,action,payload={})=>audit(db,aggregateId,action,payload,requestActor);
     const url=new URL(req.url,'http://localhost');
     const route=url.pathname;
@@ -154,6 +157,18 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           // Rejeitar a operação sem manter um POST parcialmente lido em keep-alive.
           req.resume();res.shouldKeepAlive=false;
           throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
+        }
+        // Tablet de mesa: bearer exclusivo por dispositivo; não compartilha permissões do caixa.
+        // Fora do loopback exige a configuração HTTPS LAN do host.
+        if(route.startsWith('/api/tablet/')&&route!=='/api/tablet/settings'){
+          const identity=tabletIdentity(db,req.headers.authorization);
+          if(!identity)throw new HttpError(401,'TABLET_AUTH_REQUIRED','Tablet não pareado ou credencial revogada');
+          requestActor='tablet:'+identity.id;
+          const h={transact:transactWithEvents,audit:auditForRequest,stamp,databaseOrder,snapshotLineRecipe,notifyKitchen,bad,conflict,missing};
+          const out=method==='GET'?tabletRead(db,method,route,identity):method==='POST'?
+            tabletWrite(db,method,route,await readJson(req),identity,h):null;
+          if(!out)return response(res,404,{code:'TABLET_ROUTE_NOT_FOUND'});
+          return response(res,out.status,out.body);
         }
         if(route.startsWith('/api/public/')){
           const qrPage=publicTableRead(db,method,route);
@@ -190,6 +205,11 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         const role=lanRole(req,lanConfig,token=>lookupPairedRole(db,token));
         if(role&&role!=='local')requestActor='lan-'+role;
+        if(role==='waiter'){
+          const raw=req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):null;
+          const waiter=pairedWaiterIdentity(db,raw);
+          if(waiter){requestDeviceId=waiter.id;requestActor='waiter:'+waiter.id;}
+        }
         if(!role)throw new HttpError(401,'AUTH_REQUIRED','Token do dispositivo obrigatório');
         if(!roleAllows(role,method,route))throw new HttpError(403,'FORBIDDEN','A função do dispositivo não permite esta operação');
         if(role==='local'){
@@ -199,6 +219,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           requestRole=operator.role;
           if(!allowedOperator(operator.role,method,route))throw new HttpError(403,'OPERATOR_FORBIDDEN','Perfil sem permissao para este comando');
         }
+        if(method==='GET'&&route==='/api/attendance/me')return response(res,200,{waiterDeviceId:requestDeviceId});
         if(method==='GET'&&route==='/api/kitchen/events'){
           res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-cache, no-store, must-revalidate','connection':'keep-alive','x-content-type-options':'nosniff'});
           res.write('retry: 2500\nevent: ready\ndata: {}\n\n');
@@ -247,12 +268,16 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(method==='POST'&&route==='/api/sync/operational/pull')return response(res,200,await peerPoller.syncOnce());
         const operationalResult=operationalRead(db,method,route,peerPoller);
         if(operationalResult)return response(res,operationalResult.status,operationalResult.body);
+        const summaryResult=liveSummaryRead(db,method,route);
+        if(summaryResult)return response(res,summaryResult.status,summaryResult.body);
         const syncResult=syncRead(db,method,route);
         if(syncResult)return response(res,syncResult.status,syncResult.body);
         const privacyResult=privacyRead(db,method,route);
         if(privacyResult)return response(res,privacyResult.status,privacyResult.body);
         const deliveryResult=deliveryRead(db,method,route);
         if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
+        const biResult=businessIntelligenceRead(db,method,route,url.searchParams,peerPoller);
+        if(biResult)return response(res,biResult.status,biResult.body);
         const financeResult=financialRead(db,method,route,url.searchParams);
         if(financeResult)return response(res,financeResult.status,financeResult.body);
         const purchaseResult=purchasesRead(db,method,route);
@@ -300,6 +325,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           res.end(isCsv?salesToCsv(document):JSON.stringify(document));
           return;
         }
+        const attendanceResult=attendanceRead(db,method,route);
+        if(attendanceResult)return response(res,attendanceResult.status,attendanceResult.body);
         const restaurantResult=restaurantRead(db,method,route,{missing},url.searchParams);
         if(restaurantResult)return response(res,restaurantResult.status,restaurantResult.body);
         const extraReaders=[
@@ -364,10 +391,10 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
           return response(res,revoked?200:404,{revoked});
         }
         let out;
-        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,
+        const h={transact:transactWithEvents,requireString,requireCents,bad,conflict,missing,assertRevision,databaseOrder,audit:auditForRequest,actor:requestActor,operatorRole:requestRole,deviceRole:role,deviceId:requestDeviceId,stamp,cashSession,cashExpected,visibleCash,snapshotLineRecipe,scaleReadings,
           forbidden:(message,code='FORBIDDEN')=>{throw new HttpError(403,code,message);},
           supervisor:requestRole==='admin'||role==='manager'};
-        const special=partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
+        const special=attendanceWrite(db,method,route,body,h)??partialPaymentWrite(db,method,route,body,h)??itemRefundWrite(db,method,route,body,h)??kitchenOperationsWrite(db,method,route,body,h)??pizzaWrite(db,method,route,body,h)??retailAdvancedWrite(db,method,route,body,h)??lineWrite(db,method,route,body,h)??tableQrWrite(db,method,route,body,h)??purchasesWrite(db,method,route,body,h)??supplyWrite(db,method,route,body,h)??operationalWrite(db,method,route,body,h)??syncWrite(db,method,route,body,h)??privacyWrite(db,method,route,body,h)??deliveryWrite(db,method,route,body,h)??inventoryWrite(db,method,route,body,h)??categoryWrite(db,method,route,body,h)??comboWrite(db,method,route,body,h)??restaurantWrite(db,method,route,body,h)??refundWrite(db,method,route,body,h)??cashWrite(db,method,route,body,h)??orderWrite(db,method,route,body,h);
         if(special){
           out=special;
           if(method==='POST'&&/^\/api\/tables\/[^/]+\/qr$/.test(route)&&out.body?.url){
@@ -472,7 +499,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       // Somente portal público do cliente e recursos de atualização dos PWAs antigos.
       // As páginas operacionais clássicas e scripts administrativos não são mais servidos.
       const file=route.slice(1);
-      if(!['menu.html','menu.js','menu.css','table.html','table.js','table.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
+      if(!['menu.html','menu.js','menu.css','table.html','table.js','table.css','tablet.html','tablet.js','tablet.css','manifest.webmanifest','pwa-icon.svg','sw.js','pwa-192.png','pwa-512.png'].includes(file))
         return response(res,404,{code:'NOT_FOUND'});
       const ext=path.extname(file);
       const contentType=ext==='.js'?'text/javascript; charset=utf-8':ext==='.css'?'text/css; charset=utf-8':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':ext==='.webmanifest'?'application/manifest+json':'text/html; charset=utf-8';

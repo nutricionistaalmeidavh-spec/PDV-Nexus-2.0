@@ -31,11 +31,12 @@ export function lanRole(req,config,dynamicRole=()=>null) {
 }
 export function roleAllows(role,method,route) {
   if(role==='local'||role==='manager')return true;
-  if(role==='mirror')return method==='GET'&&route==='/api/sync/operational/export';
+  if(role==='mirror')return method==='GET'&&['/api/sync/operational/export','/api/sync/summary/daily'].includes(route);
   if(role==='kitchen') return (method==='GET'&&['/api/kitchen/tickets','/api/kitchen/events'].includes(route)) ||
     (method==='POST'&&/^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route)) ||
     (method==='GET'&&route==='/api/health');
   if(role==='waiter')return (method==='GET'&&(
+    (route==='/api/attendance/overview'||route==='/api/attendance/me')||
     ['/api/products','/api/orders','/api/tables','/api/restaurant/summary','/api/health'].includes(route)||
     /^\/api\/orders\/[^/]+$/.test(route)||
     /^\/api\/orders\/[^/]+\/line-history$/.test(route)||
@@ -43,6 +44,9 @@ export function roleAllows(role,method,route) {
     /^\/api\/products\/[^/]+\/modifiers$/.test(route))) ||
     (method==='POST'&&(
       route==='/api/orders'|| /^\/api\/tables\/[^/]+\/open$/.test(route)||
+      /^\/api\/orders\/[^/]+\/waiter$/.test(route)||
+      /^\/api\/orders\/[^/]+\/reopen-service$/.test(route)||
+      /^\/api\/attendance\/tickets\/[^/]+\/(claim|deliver)$/.test(route)||
       /^\/api\/orders\/[^/]+\/(lines|confirm|transfer-table)$/.test(route)||
       /^\/api\/orders\/[^/]+\/lines\/[^/]+\/(edit|cancel)$/.test(route)||
       /^\/api\/tables\/[^/]+\/qr$/.test(route)||

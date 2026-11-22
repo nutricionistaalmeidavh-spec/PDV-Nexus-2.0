@@ -21,15 +21,18 @@ function totals(rows){
 }
 export function localSummary(db){
  const daily=db.prepare(`
-  WITH gross AS (SELECT order_id,SUM(unit_price_cents*quantity) AS total FROM order_line GROUP BY order_id),
+  WITH gross AS (SELECT order_id,SUM(unit_price_cents*quantity) AS total FROM order_line WHERE cancelled_at IS NULL GROUP BY order_id),
+       full_refunds AS (SELECT order_id,SUM(amount_cents) AS total FROM order_refund GROUP BY order_id),
+       item_refunds AS (SELECT order_id,SUM(amount_cents) AS total FROM order_line_refund GROUP BY order_id),
        costs AS (SELECT source_order_id AS order_id,SUM(-value_delta_cents) AS total
                  FROM stock_movement WHERE kind='SALE' GROUP BY source_order_id)
   SELECT substr(o.closed_at,1,10) AS day,COUNT(*) AS orderCount,
          SUM(g.total) AS grossSalesCents,
-         SUM(COALESCE(ref.amount_cents,0)) AS refundedCents,
+         SUM(COALESCE(ref.total,0)+COALESCE(item_refunds.total,0)) AS refundedCents,
          SUM(COALESCE(costs.total,0)) AS cogsCents
   FROM sales_order o JOIN gross g ON g.order_id=o.id
-  LEFT JOIN order_refund ref ON ref.order_id=o.id
+  LEFT JOIN full_refunds ref ON ref.order_id=o.id
+  LEFT JOIN item_refunds ON item_refunds.order_id=o.id
   LEFT JOIN costs ON costs.order_id=o.id
   WHERE o.status='CLOSED' AND o.closed_at IS NOT NULL
   GROUP BY substr(o.closed_at,1,10) ORDER BY day ASC`).all();
