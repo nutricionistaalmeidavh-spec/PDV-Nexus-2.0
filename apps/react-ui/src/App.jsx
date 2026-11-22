@@ -84,7 +84,7 @@ function App(){
  const refresh=useHostRefresh({api,mode,pairedRole,setProducts,setCategories,setOrders,setSession,setTables,setTickets,setJobs,setError});
  useEffect(()=>{if(mode==='live'||mode==='paired')void refresh().catch(e=>setError(toStringError(e)))},[mode,refresh]);
  useEffect(()=>{if(mode!=='live'||!licenseInfo?.required)return;const timer=setInterval(()=>{void request('/api/license/status').then(setLicenseInfo).catch(()=>{})},60000);return()=>clearInterval(timer)},[mode,licenseInfo?.required]);
- useKitchenPolling({api,mode,view,setTickets,setError});
+ useKitchenPolling({api,mode,view,setTickets,setError,token:mode==='paired'?token:null});
  const run=useBusyCommand({setBusy,setNotice,setError});
  const isDemo=mode==='demo';
  const closingOnly=licenseInfo?.required&&!canCreateNewWork(licenseInfo);
