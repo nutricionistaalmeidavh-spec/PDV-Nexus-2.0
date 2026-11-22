@@ -42,6 +42,7 @@
       "apps/web/public/**/*",
       "apps/react-ui/dist/**/*",
       "apps/desktop/main.cjs",
+      "apps/desktop/network-config.cjs",
       "apps/desktop/edition-manifest.json",
       "packages/core/src/**/*",
       "package.json"
