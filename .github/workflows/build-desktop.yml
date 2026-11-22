@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, 'fix/p0-stabilizacao-operacional-20261122']
   push:
-    branches: [main, 'feat/p0-p1-hardening-20261118', 'feat/p2-stock-delivery-selfhost-20261118', 'feat/react-electron-p0-p2-20261118', 'feat/p2-final-react-compatible-20261118', 'feat/p2-operational-mirror-hardening-20261120', 'feat/nexus-tangerine-p2-p4-20261121']
+    branches: [main, 'feat/p0-p1-hardening-20261118', 'feat/p2-stock-delivery-selfhost-20261118', 'feat/react-electron-p0-p2-20261118', 'feat/p2-final-react-compatible-20261118', 'feat/p2-operational-mirror-hardening-20261120', 'feat/nexus-tangerine-p2-p4-20261121', 'feat/p3-ux-kds-hardware-20261122']
 jobs:
   windows:
     runs-on: windows-latest
