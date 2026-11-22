@@ -33,9 +33,8 @@ test('P0: versão do schema segue as migrações em disco; backup atual é aceit
 
 test('P0: KDS prioriza tickets novos ativos mesmo acima de 200 pendências antigas',t=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-kds-'));
-  t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
   const db=openDatabase(path.join(folder,'nexus.db'));
-  t.after(()=>db.close());
+  t.after(()=>{db.close();fs.rmSync(folder,{recursive:true,force:true});});
   const productId=randomUUID();
   db.prepare("INSERT INTO menu_product(id,category_id,name,price_cents) VALUES(?,'c-default','Produto',100)").run(productId);
   const addOrder=db.prepare("INSERT INTO sales_order(id,restaurant_id,terminal_id,service_table_id,service_mode,status,revision,created_at) VALUES(?,'r-local','t-local',NULL,'counter','OPEN',0,?)");
