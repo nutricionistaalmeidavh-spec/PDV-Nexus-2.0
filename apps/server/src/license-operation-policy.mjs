@@ -4,8 +4,8 @@
  */
 export function mayFinishExistingOperation(method,route){
   if(method!=='POST')return false;
-  return route==='/api/cash/close' ||
-    /^\/api\/orders\/[^/]+\/(?:close|payments\/partial)$/.test(route) ||
+  return route==='/api/cash/close'||route==='/api/cash/print' ||
+    /^\/api\/orders\/[^/]+\/(?:confirm|cancel|close|refund|refund-items|payments\/partial)$/.test(route) ||
     /^\/api\/kitchen\/tickets\/[^/]+\/status$/.test(route) ||
     /^\/api\/attendance\/tickets\/[^/]+\/(?:claim|deliver)$/.test(route) ||
     /^\/api\/delivery\/orders\/[^/]+\/status$/.test(route) ||
