@@ -445,6 +445,19 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             db.prepare("INSERT INTO printer_profile(id,host,port,enabled,transport,device_path,baud_rate) VALUES('default',?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET host=excluded.host,port=excluded.port,enabled=1,transport=excluded.transport,device_path=excluded.device_path,baud_rate=excluded.baud_rate").run(host,port,transport,devicePath,baudRate);
             return {profile:{host,port,enabled:1,transport,devicePath,baudRate}};
           });
+        } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/reprint$/)) {
+          out=transactWithEvents(db,route,body,()=>{
+            const sourceId=route.split('/')[4];
+            const original=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(sourceId);
+            if(!original)missing('Comprovante original');
+            if(original.status!=='DONE')conflict('Reimpressão exige comprovante enviado anteriormente');
+            const newId=randomUUID();
+            const payload={...JSON.parse(original.payload_json),copyOfJobId:sourceId};
+            db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES(?,?,?,?,?,?)')
+              .run(newId,original.kind,original.aggregate_id,JSON.stringify(payload),'PENDING',stamp());
+            auditForRequest(db,original.aggregate_id,'RECEIPT_REPRINT_REQUESTED',{sourceId,jobId:newId});
+            return {id:newId,status:'PENDING',copyOfJobId:sourceId};
+          },201);
         } else if(method==='POST'&&route.match(/^\/api\/print\/jobs\/[^/]+\/send$/)) {
           const id=route.split('/')[4];
           const job=db.prepare("SELECT * FROM outbox_event WHERE id=? AND kind LIKE 'PRINT_%'").get(id);if(!job)missing('Impressão');
