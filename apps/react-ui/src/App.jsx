@@ -35,7 +35,7 @@ const embedded=new URLSearchParams(window.location.search).has('embedded');
 const centsLabel=c=>formatMoney(Number.isSafeInteger(c)?c:0);
 const initials=s=>(s||'Nexus').split(' ').slice(0,2).map(x=>x[0]).join('').toUpperCase();
 
-const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,divisao:UsersIcon,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,unidades:Store,privacidade:Shield,usuarios:UsersIcon,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
+const navIcons={venda:ShoppingCart,pedidos:ClipboardList,produtos:Package,mesas:UtensilsCrossed,delivery:Truck,kds:ChefHat,garcom:Smartphone,atendimento:ClipboardList,divisao:UsersIcon,caixa:Wallet,geral:LayoutDashboard,estoque:Boxes,financeiro:ChartBar,relatorios:ChartBar,unidades:Store,privacidade:Shield,usuarios:UsersIcon,integracoes:Cable,dispositivos:Monitor,impressao:Printer,sistema:Settings,exportacao:Download,'primeiro-acesso':BookOpen};
 function App(){
  const [mode,setMode]=useState('boot'),[user,setUser]=useState(null),[needsSetup,setNeedsSetup]=useState(false),[loginError,setLoginError]=useState('');
  const [licenseInfo,setLicenseInfo]=useState(null);
@@ -127,7 +127,8 @@ function App(){
  case 'produtos':return <div className="stack"><Products products={products} categories={categories} onAddProduct={addCatalogProduct} onAddCategory={addCategory} onToggle={toggleProduct} busy={busy} canEdit={canEdit}/><CatalogToolsPanel mode={mode} api={api} categories={categories} products={products} onRefresh={refresh}/><SaleUnitsConfig api={api} products={products} mode={mode} onChanged={refresh}/></div>;
  case 'caixa':return <Cash session={session} onAction={cashAction} busy={busy}/>;
  case 'mesas':return <Tables tables={tables} selected={selected} onSelect={openTable} onNew={createTable} busy={busy}/>;
- case 'kds':return <div className="stack"><Kitchen api={api} tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/><AttendancePanel api={api} mode={mode} pairedRole={pairedRole}/></div>;
+ case 'kds':return <Kitchen api={api} tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
+ case 'atendimento':return <AttendancePanel api={api} mode={mode} pairedRole={pairedRole}/>;
  case 'garcom':return <Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/>;
  case 'restaurante-config':return <div className="stack"><PizzeriaSettings api={api} products={products} onRefresh={refresh} mode={mode}/><KitchenStationsManager api={api} products={products} onChanged={refresh} mode={mode}/><TabletAdminPanel api={api} tables={tables} mode={mode}/></div>;
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':order?.serviceMode==='table'?'mesas':'venda');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session} canManage={canEdit}/>;
