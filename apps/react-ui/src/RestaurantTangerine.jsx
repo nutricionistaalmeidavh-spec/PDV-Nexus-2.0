@@ -121,10 +121,11 @@ export function RestaurantKitchen({tickets=[],onUpdate,busy,onRefresh}){
      <Stack gap="sm">
       {groupTickets.map(ticket=><Card key={ticket.id} className="kds-ticket" withBorder radius="lg" p="md">
        <Group align="start" justify="space-between" gap="xs">
-        <Text fw={800}>#{String(ticket.orderId||'').slice(-6)}</Text>
-        <Badge color="gray" variant="light">{ticket.tableLabel||'Balcão'}</Badge>
+        <Text fw={800}>Atendimento #{String(ticket.attendanceId||ticket.orderId||'').slice(-8)}</Text>
+        <Group gap="xs"><Badge color="gray" variant="light">{ticket.tableLabel||'Balcão'}</Badge>{ticket.paid&&<Badge color="green">Pago</Badge>}</Group>
        </Group>
        <Text fw={800} size="lg" my="sm">{ticket.quantity} × {ticket.productName}</Text>
+       {ticket.waiterName&&<Text size="xs" c="dimmed">Garçom: {ticket.waiterName}</Text>}
        {ticket.note&&<Text size="sm" mb="xs" className="nexus-kds-note">Obs.: {ticket.note}</Text>}
        {ticket.modifiers&&<Text size="sm" c="dimmed">Adicionais: {ticket.modifiers}</Text>}
        <Button color={group.tone} fullWidth mt="md" onClick={()=>onUpdate(ticket,group.next)} disabled={busy}>
