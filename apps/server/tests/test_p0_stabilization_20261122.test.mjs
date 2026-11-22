@@ -120,3 +120,33 @@ test('P0: vencimento comercial preserva fechamento e execução de pedidos já i
   assert.equal(mayFinishExistingOperation('POST','/api/products'),false);
   assert.equal(mayFinishExistingOperation('POST','/api/stock/ingredients'),false);
 });
+
+test('P0: supervisor consegue finalizar falta de estoque com motivo e débito rastreável',async t=>{
+  const {createApp}=await import('../src/server.mjs');
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-stock-'));
+  const app=createApp({dataPath:path.join(folder,'nexus.db')});
+  const origin=await app.listen({port:0});
+  t.after(async()=>{await app.close();fs.rmSync(folder,{force:true,recursive:true});});
+  let cookie='';
+  const req=async(method,route,body)=>{
+    const response=await fetch(origin+route,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(cookie?{cookie}:{})},
+      body:body?JSON.stringify(body):undefined});
+    const session=response.headers.get('set-cookie');
+    if(session)cookie=session.split(';')[0];
+    return {status:response.status,body:await response.json()};
+  };
+  assert.equal((await req('POST','/api/auth/setup',{username:'admin',password:'senhaForteEstoque2026'})).status,201);
+  assert.equal((await req('POST','/api/cash/open',{commandId:'st-open',openingCents:0})).status,201);
+  const product=(await req('POST','/api/products',{commandId:'st-product',name:'Misto',priceCents:1200})).body.product;
+  const ingredient=(await req('POST','/api/stock/ingredients',{commandId:'st-ingredient',name:'Queijo',unit:'g'})).body.ingredient;
+  assert.equal((await req('POST','/api/stock/recipes/'+product.id,{commandId:'st-recipe',items:[{ingredientId:ingredient.id,quantityMilli:1000}]})).status,200);
+  const order=(await req('POST','/api/orders',{commandId:'st-order',serviceMode:'counter'})).body.order;
+  assert.equal((await req('POST','/api/orders/'+order.id+'/lines',{commandId:'st-line',expectedRevision:0,productId:product.id,quantity:1})).status,200);
+  assert.equal((await req('POST','/api/orders/'+order.id+'/confirm',{commandId:'st-confirm',expectedRevision:1})).status,200);
+  const settlement={commandId:'st-close-first',expectedRevision:2,payments:[{method:'pix',amountCents:1200}]};
+  assert.equal((await req('POST','/api/orders/'+order.id+'/close',settlement)).status,409);
+  assert.equal((await req('POST','/api/orders/'+order.id+'/close',{...settlement,commandId:'st-close-approved',inventoryOverrideReason:'Conferência física divergente autorizada pelo supervisor'})).status,200);
+  const stock=await req('GET','/api/stock/report');
+  assert.equal(stock.body.ingredients.find(x=>x.id===ingredient.id).shortageMilli,1000);
+  assert.equal(stock.body.ingredients.find(x=>x.id===ingredient.id).onHandMilli,0);
+});
