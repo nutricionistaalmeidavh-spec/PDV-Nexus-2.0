@@ -51,6 +51,9 @@ test('P2 BI usa venda confirmada e devolução por item, sem somar pagamento dua
  assert.equal(report.body.totals.cogsCents,1000);
  assert.equal(report.body.byDay.reduce((s,d)=>s+d.netSalesCents,0),2500);
  assert.equal(report.body.topProducts[0].quantity,2);
+ const packet=(await api('GET','/api/sync/export')).body;
+ assert.equal(packet.daily.at(-1).refundedCents,2500,'snapshot multiloja inclui devolução parcial');
+ assert.equal(packet.daily.at(-1).netSalesCents,2500);
  assert.equal(report.body.source,'canonical-sqlite');
  const stock=await api('GET','/api/bi/replenishment?lookbackDays=28&leadDays=3&safetyDays=2');
  assert.equal(stock.status,200,JSON.stringify(stock.body));
