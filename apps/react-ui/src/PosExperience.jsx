@@ -93,7 +93,7 @@ export function PosProductModal({product,requester,onClose,onSubmit,busy,demo}){
  </Modal>;
 }
 
-export function PosPaymentModal({order,onClose,onPay,busy}){
+export function PosPaymentModal({order,onClose,onPay,busy,canOverrideStock=false}){
  const total=sumOrder(order);
  const [method,setMethod]=useState('cash');
  const [tendered,setTendered]=useState((total/100).toFixed(2));
@@ -101,6 +101,7 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
  const [first,setFirst]=useState((Math.floor(total/2)/100).toFixed(2));
  const [secondMethod,setSecondMethod]=useState('pix');
  const [error,setError]=useState('');
+ const [overrideStock,setOverrideStock]=useState(false),[overrideReason,setOverrideReason]=useState('');
  let change=0;
  try{
   change=method==='cash'?Math.max(0,parseMoney(tendered)-(split?parseMoney(first):total)):0;
@@ -121,7 +122,8 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
     return [one,second];
    })():paymentDraft(total,method,method==='cash'?parseMoney(tendered):0).payments;
    setError('');
-   onPay(payments);
+   if(overrideStock&&(!canOverrideStock||overrideReason.trim().length<8))throw Error('Informe um motivo de pelo menos 8 caracteres com autorização do supervisor');
+   onPay(payments,overrideStock?overrideReason.trim():null);
   }catch(e){setError(asError(e));}
  };
  return <Modal opened onClose={onClose} centered size="lg" radius="lg"
@@ -162,6 +164,15 @@ export function PosPaymentModal({order,onClose,onPay,busy}){
     <Text fw={600}>Troco calculado</Text><Text fw={800} size="lg">{money(change)}</Text>
    </Group>
    <Text size="xs" c="dimmed">Pix e cartão são registrados somente após confirmação manual. Não há processamento automático ou dependência de gateway pago.</Text>
+   {canOverrideStock&&<Paper withBorder p="md" radius="md">
+    <Checkbox label="Supervisor: permitir venda com divergência de estoque"
+     checked={overrideStock} onChange={e=>setOverrideStock(e.currentTarget.checked)}/>
+    {overrideStock&&<Textarea label="Motivo obrigatório da autorização" minRows={2}
+      value={overrideReason} onChange={e=>setOverrideReason(e.currentTarget.value)}
+      minLength={8} maxLength={240}
+      description="A falta será registrada e auditada, sem criar entrada fictícia no estoque."
+      placeholder="Ex.: divergência identificada na contagem física do depósito"/>}
+   </Paper>}
    {error&&<Group gap="xs" role="alert"><CircleAlert size={16} color="#B91C1C"/><Text c="red.8" size="sm">{error}</Text></Group>}
    </Stack>
    <Group className="nexus-modal-actions" justify="space-between" align="center" wrap="nowrap">
