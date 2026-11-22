@@ -106,7 +106,7 @@ function Replenishment({data}){
 function Consolidated({data}){
  return <Stack gap="lg">
   <Paper withBorder p="md"><Text fw={750}>Consolidação entre unidades — somente leitura</Text>
-   <Text size="sm" c="dimmed">A unidade atual é consultada ao vivo. Outras unidades dependem da última importação de snapshot validado; os indicadores remotos não são tempo real.</Text>
+   <Text size="sm" c="dimmed">A unidade atual é consultada ao vivo. Demais lojas usam snapshots manuais ou consulta periódica HTTPS LAN, quando explicitamente ativada; não são transações em tempo real.</Text>
   </Paper>
   <Totals totals={data.totals}/>
   <Section title="Receita consolidada por dia"><Trend rows={data.byDay}/></Section>
@@ -114,8 +114,8 @@ function Consolidated({data}){
    <div style={style}><Table striped highlightOnHover>
     <Table.Thead><Table.Tr><Table.Th>Unidade</Table.Th><Table.Th>Situação dos dados</Table.Th><Table.Th ta="right">Pedidos</Table.Th><Table.Th ta="right">Líquido</Table.Th></Table.Tr></Table.Thead>
     <Table.Tbody>{data.units.map(u=><Table.Tr key={u.unitId}>
-     <Table.Td><Text size="sm" fw={700}>{u.unitId}</Text><Text size="xs" c="dimmed">Revisão {u.revision}{u.importedAt?' · Importação '+new Date(u.importedAt).toLocaleString('pt-BR'):''}</Text></Table.Td>
-     <Table.Td><Badge color={u.local?'green':u.stale?'orange':'blue'}>{u.local?'Esta unidade / atual':u.stale?'Snapshot desatualizado':'Snapshot importado'}</Badge></Table.Td>
+     <Table.Td><Text size="sm" fw={700}>{u.unitId}</Text><Text size="xs" c="dimmed">{u.source==='https-lan-read-only'?'Consulta periódica HTTPS':'Revisão '+u.revision}{u.importedAt?' · Última atualização '+new Date(u.importedAt).toLocaleString('pt-BR'):''}</Text></Table.Td>
+     <Table.Td><Badge color={u.local?'green':u.stale?'orange':'blue'}>{u.local?'Esta unidade / atual':u.stale?'Dados desatualizados':u.source==='https-lan-read-only'?'Consulta HTTPS LAN':'Snapshot importado'}</Badge></Table.Td>
      <Table.Td ta="right">{u.totals.orders}</Table.Td><Table.Td ta="right">{money(u.totals.netSalesCents)}</Table.Td>
     </Table.Tr>)}</Table.Tbody>
    </Table></div>
