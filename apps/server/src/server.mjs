@@ -14,7 +14,7 @@ import { openDatabase, createBackup, defaultDataPath } from './db.mjs';
 import {createAutomaticBackupScheduler} from './backup-scheduler.mjs';
 import {createOperatorAuth,allowedOperator} from './operator-auth.mjs';
 import {createCommercialLicense} from './commercial-license.mjs';
-import {mayFinishExistingOperation} from './license-operation-policy.mjs';
+import {mayFinishExistingOperation,mayOpenCashForUnfinishedOrders} from './license-operation-policy.mjs';
 import {supplyRead,supplyWrite} from './retail-supply.mjs';
 import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
@@ -193,7 +193,7 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
             return response(res,route==='/api/license/trial/request'?202:200,result);
           }catch(e){throw new HttpError(e.status>=400&&e.status<600?e.status:400,'LICENSE_ERROR',e.message)}
         }
-        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!mayFinishExistingOperation(method,route)&&!(await licenseControl.status()).active){
+        if(licenseControl.required&&method!=='GET'&&route!=='/api/system/backup'&&!route.startsWith('/api/auth/')&&!mayFinishExistingOperation(method,route)&&!mayOpenCashForUnfinishedOrders(db,method,route)&&!(await licenseControl.status()).active){
           // Rejeitar a operação sem manter um POST parcialmente lido em keep-alive.
           req.resume();res.shouldKeepAlive=false;
           throw new HttpError(402,'LICENSE_REQUIRED','Avaliacao encerrada. Dados disponiveis para consulta e backup.');
