@@ -8,7 +8,7 @@ import {createApp} from '../src/server.mjs';
 
 async function fixture(t){
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nexus-p0-qr-'));
-  const app=createApp({dataPath:path.join(dir,'nexus.db')});
+  const app=createApp({dataPath:path.join(dir,'nexus.db'),legacyTableQrOrdering:true}); // compatibilidade de testes do módulo legado; desabilitado no produto
   const local=await app.listen({port:0});
   const publicOrigin=await app.startPublicPortal({port:0});
   let cookie='';
