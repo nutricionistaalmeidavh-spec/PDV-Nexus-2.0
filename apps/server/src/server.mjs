@@ -17,6 +17,7 @@ import {supplyRead,supplyWrite} from './retail-supply.mjs';
 import {purchasesRead,purchasesWrite} from './purchases.mjs';
 import {validatePrinterQueueName,transmitWindowsRaw} from './windows-raw-printer.mjs';
 import {financialRead} from './retail-finance.mjs';
+import {businessIntelligenceRead} from './management-intelligence.mjs';
 import {checkUpdates,currentVersion} from './system-maintenance.mjs';
 import {encodeEan13,decodeEan13,decodeScaleLabel,parseScaleSerial,validateSerialDevicePath,transmitSerial} from './retail-hardware.mjs';
 import {createDevicePairing,lookupPairedRole} from './device-pairing.mjs';
@@ -272,6 +273,8 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         if(privacyResult)return response(res,privacyResult.status,privacyResult.body);
         const deliveryResult=deliveryRead(db,method,route);
         if(deliveryResult)return response(res,deliveryResult.status,deliveryResult.body);
+        const biResult=businessIntelligenceRead(db,method,route,url.searchParams);
+        if(biResult)return response(res,biResult.status,biResult.body);
         const financeResult=financialRead(db,method,route,url.searchParams);
         if(financeResult)return response(res,financeResult.status,financeResult.body);
         const purchaseResult=purchasesRead(db,method,route);
