@@ -332,12 +332,15 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
         }
         if(method==='GET'&&route==='/api/hardware/scale/parse'){
           const raw=url.searchParams.get('raw')??'',brand=url.searchParams.get('brand')??'generic';
-          const parsed=parseScaleSerial(raw,{brand});
+          let parsed;
+          try{parsed=parseScaleSerial(raw,{brand});}catch{bad('Leitura serial inválida ou instável');}
           return response(res,200,{reading:parsed,warning:'Leitura por texto; confirme estabilidade e homologação antes de vender'});
         }
         if(method==='GET'&&route==='/api/hardware/scale/label'){
           const code=url.searchParams.get('code')??'',mode=url.searchParams.get('mode')??'weight';
-          return response(res,200,{label:decodeScaleLabel(code,{mode})});
+          let label;
+          try{label=decodeScaleLabel(code,{mode});}catch{bad('Etiqueta de balança inválida');}
+          return response(res,200,{label});
         }
         const stockResult=inventoryRead(db,method,route,url.searchParams,{missing,bad});
         if(stockResult)return response(res,stockResult.status,stockResult.body);
@@ -540,8 +543,9 @@ export function createApp({dataPath=defaultDataPath(),operationMode='demo',lan=n
       res.writeHead(200,{'content-type':contentType,'x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'cache-control':'no-store'});
       fs.createReadStream(path.join(publicDir,file)).pipe(res);
     } catch(e) {
-      const status=e instanceof HttpError?e.status:400;
-      return response(res,status,{code:e.code??'INVALID_OPERATION',message:e instanceof HttpError?e.message:e.message||'Erro interno'});
+      const status=e instanceof HttpError?e.status:500;
+      if(status===500)console.error('[Nexus API] Falha inesperada:',e?.code??e?.name??'INTERNAL_ERROR');
+      return response(res,status,{code:e instanceof HttpError?e.code:'INTERNAL_ERROR',message:e instanceof HttpError?e.message:'Falha interna. Verifique os logs locais.'});
     }
   }
 
