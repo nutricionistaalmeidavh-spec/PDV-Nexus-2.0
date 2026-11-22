@@ -124,7 +124,7 @@ export function tabletWrite(db,method,route,body,identity,h){
     (id,table_id,order_id,token_hash,auto_accept,created_at,expires_at)
     VALUES(?,?,?,?,?,?,?)`)
     .run(randomUUID(),identity.tableId,orderId,digest,config.auto_accept,now,expiry);
-  db.prepare('UPDATE table_qr_session SET expires_at=? WHERE token_hash=? AND revoked_at IS NULL').run(expiry,digest);
+  db.prepare('UPDATE table_qr_session SET expires_at=?,auto_accept=? WHERE token_hash=? AND revoked_at IS NULL').run(expiry,config.auto_accept,digest);
   return {order:{id:orderId,tableId:identity.tableId},reused:!!existing.order};
  },201);
  if(route==='/api/tablet/orders'){
