@@ -1,11 +1,12 @@
 /** Exportacao de dados de vendas para contabilidade/emissao externa; NAO gera documento fiscal. */
+import {bad} from './request-validation.mjs';
 const MAX_ORDERS=10000;
 
 function periodDate(value,label){
   if(value===null||value==='')return null;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error(label+' invalida: use AAAA-MM-DD');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))bad(label+' invalida: use AAAA-MM-DD');
   const date=new Date(value+'T00:00:00.000Z');
-  if(!Number.isFinite(date.valueOf())||date.toISOString().slice(0,10)!==value)throw new Error(label+' invalida');
+  if(!Number.isFinite(date.valueOf())||date.toISOString().slice(0,10)!==value)bad(label+' invalida');
   return value;
 }
 function addCents(a,b){
@@ -25,7 +26,7 @@ function csvCell(value){
 export function buildSalesDocument(db,params=new URLSearchParams()){
   const from=periodDate(params.get('from'),'Data inicial');
   const to=periodDate(params.get('to'),'Data final');
-  if(from&&to&&from>to)throw new Error('Data inicial posterior a data final');
+  if(from&&to&&from>to)bad('Data inicial posterior a data final');
   const orders=db.prepare(
     "SELECT o.id,o.service_mode AS serviceMode,o.created_at AS createdAt,"+
     "o.closed_at AS closedAt,r.amount_cents AS refundedCents,r.cash_cents AS cashRefundCents,"+
