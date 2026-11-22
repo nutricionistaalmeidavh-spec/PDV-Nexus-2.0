@@ -106,17 +106,23 @@ export function recommendReplenishment(ingredient,{today=todayUTC(),lookbackDays
 function dashboard(db,params){
  const period=range(params);
  const orders=db.prepare(`WITH
-  lines AS (SELECT order_id,SUM(quantity*unit_price_cents) AS gross FROM order_line WHERE cancelled_at IS NULL GROUP BY order_id),
-  refunds AS (SELECT order_id,SUM(amount_cents) AS amount FROM order_refund GROUP BY order_id),
-  item_refunds AS (SELECT order_id,SUM(amount_cents) AS amount FROM order_line_refund GROUP BY order_id),
-  costs AS (SELECT source_order_id AS order_id,SUM(-value_delta_cents) AS amount FROM stock_movement WHERE kind='SALE' GROUP BY source_order_id)
+  scope AS (SELECT id,closed_at,service_mode FROM sales_order WHERE status='CLOSED'
+    AND substr(closed_at,1,10) BETWEEN ? AND ?),
+  lines AS (SELECT l.order_id,SUM(l.quantity*l.unit_price_cents) AS gross
+    FROM order_line l JOIN scope o ON o.id=l.order_id WHERE l.cancelled_at IS NULL GROUP BY l.order_id),
+  refunds AS (SELECT r.order_id,SUM(r.amount_cents) AS amount FROM order_refund r
+    JOIN scope o ON o.id=r.order_id GROUP BY r.order_id),
+  item_refunds AS (SELECT ir.order_id,SUM(ir.amount_cents) AS amount FROM order_line_refund ir
+    JOIN scope o ON o.id=ir.order_id GROUP BY ir.order_id),
+  costs AS (SELECT m.source_order_id AS order_id,SUM(-m.value_delta_cents) AS amount
+    FROM stock_movement m JOIN scope o ON o.id=m.source_order_id WHERE m.kind='SALE'
+    GROUP BY m.source_order_id)
   SELECT o.id,substr(o.closed_at,1,10) AS day,substr(o.closed_at,12,2) AS hour,
    o.service_mode AS serviceMode,COALESCE(l.gross,0) AS gross,
    COALESCE(r.amount,0)+COALESCE(ir.amount,0) AS refund,COALESCE(c.amount,0) AS cogs
-  FROM sales_order o LEFT JOIN lines l ON l.order_id=o.id
+  FROM scope o LEFT JOIN lines l ON l.order_id=o.id
   LEFT JOIN refunds r ON r.order_id=o.id LEFT JOIN item_refunds ir ON ir.order_id=o.id
   LEFT JOIN costs c ON c.order_id=o.id
-  WHERE o.status='CLOSED' AND substr(o.closed_at,1,10) BETWEEN ? AND ?
   ORDER BY o.closed_at,o.id LIMIT 10001`).all(period.from,period.to);
  if(orders.length>10000)throw Error('BI: selecione intervalo menor, limite de 10 mil vendas');
  const totals=empty(),byDay=new Map(),byMode=new Map(),byHour=new Map();
