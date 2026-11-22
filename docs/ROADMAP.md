@@ -99,3 +99,18 @@ Guia de recuperação: [RESTAURACAO_E_ATUALIZACAO.md](RESTAURACAO_E_ATUALIZACAO.
 Checklists [x] indicam alteração em código/teste da branch, **não** homologação física. A PR permanece separada da main até autorização de merge; workflow verde do commit final é obrigatório.
 
 Detalhes de P2–P4: [REFACTOR_P2_P3_P4_20261121.md](REFACTOR_P2_P3_P4_20261121.md). As marcações [x] são entregas de branch, sujeitas à validação da PR final; não representam merge nem release.
+
+
+## Complemento P3 — Correções da auditoria de operação (22/11/2026, PR #38)
+
+Esta etapa não substitui a refatoração React P3 histórica da PR #29 nem marca QA físico como concluído. É a continuação da PR #37 (P0–P2).
+
+- [x] **Electron:** cancelar pedidos, devolver vendas e editar nome/preço/EAN de produtos e categorias por diálogos React acessíveis, sem `window.prompt`. Confirmação e motivos são enviados à API canônica auditada.
+- [x] **KDS:** eventos SSE por `fetch` autenticado (token de dispositivo no cabeçalho), com reconexão e polling de recuperação a cada 30 segundos. Nenhuma segunda fila ou pedido local.
+- [x] **Balança:** recusar valor decimal em quadro sem unidade `kg` ou `g` para não converter inadvertidamente gramas em quilos.
+- [x] **Comprovante:** manter natureza não fiscal e UUID curto de auditoria; exibir empresa, data/hora em São Paulo, mesa, pagamentos e troco do snapshot imutável, se fornecidos; arquivos legados seguem válidos.
+- [x] **Documentação:** corrigir referências desatualizadas sobre React, versão de migração dinâmica e leitura por peso.
+- [ ] **Gates finais na HEAD:** CI Linux/Windows, testes React, Playwright browser, diagnósticos Windows e instalador unsigned em runner descartável.
+- [ ] **Homologação física:** impressão real, balança por modelo/protocolo, segurança LAN, tablets/PWA e instalação no PC dos clientes permanecem pendentes; não inferir de simuladores.
+
+A PR #38 é **empilhada sobre a #37**, não deve ser mesclada diretamente na `main` antes da base. Nenhuma release é publicada automaticamente e não existe dependência de SaaS pago. O QR público de restaurante continua apenas visualização; pedidos usam garçom ou tablet fixo na mesa Pro.

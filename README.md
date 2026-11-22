@@ -66,7 +66,7 @@ npm run desktop
 - Testes físicos de impressora térmica, USB, balança, gaveta e escopo de dispositivos por modelo.
 - Login local de operador implementado; faltam recuperação local assistida de acesso e validação do instalador em PCs reais.
 - Estoque por ingrediente, fichas técnicas e custo médio disponíveis no P2. Combos de escolha dinâmica, conciliação financeira avançada e sincronização entre unidades ainda não foram implementados.
-- Interface P0/P1 utiliza HTML/CSS/JS local, sem React/Vite; a possível migração deve ser uma decisão de produto explícita, não uma dependência oculta.
+- A interface operacional atual usa React/Vite compilado e servido pelo host local, sem CDN; rotas históricas redirecionam para a UI canônica. O servidor, Electron e o SQLite continuam self-hosted, sem dependência de nuvem.
 
 Consulte o [checklist de QA](docs/QA_RUNBOOK.md), [status/roadmap](docs/ROADMAP.md), [P0](docs/P0_IMPLEMENTATION.md), [P1](docs/P1_IMPLEMENTATION.md), [P2](docs/P2_IMPLEMENTATION.md) e [arquitetura](docs/ARCHITECTURE.md). Fundação, P0 e P1 foram integrados à `main` com autorização. **Não publicar release sem autorização.**
 

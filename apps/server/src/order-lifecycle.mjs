@@ -67,8 +67,13 @@ export function orderLifecycleWrite(db,method,route,body,h){
             const pendingKitchenTickets=db.prepare("SELECT COUNT(*) AS n FROM kitchen_ticket WHERE order_id=? AND status IN ('PENDING','PREPARING','READY')").get(id).n;
             writeOrder(db,next);
             if(order.tableId&&pendingKitchenTickets) audit(db,id,'TABLE_RELEASED_WITH_PENDING_KITCHEN',{tableId:order.tableId,pendingKitchenTickets});
+            const restaurantName=db.prepare("SELECT display_name FROM restaurant WHERE id='r-local'").get()?.display_name??'PDV Nexus 2.0';
+            const tableLabel=order.tableId?db.prepare('SELECT label FROM service_table WHERE id=?').get(order.tableId)?.label??null:null;
+            const issuedAt=stamp();
+            const receipt={id,orderNumber:order.orderNumber,restaurantName,tableLabel,issuedAt,
+              lines:next.lines,totalCents:amount,payments,changeCents:change};
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
-              .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,orderNumber:order.orderNumber,lines:next.lines,totalCents:amount}),'PENDING',stamp());
+              .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify(receipt),'PENDING',issuedAt);
             audit(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents,pendingKitchenTickets});
             return {order:databaseOrder(db,id),changeCents:change};
           });

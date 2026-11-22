@@ -1,4 +1,5 @@
 import React,{useEffect,useState} from 'react';
+import {Modal,Stack,Group,Button} from '@mantine/core';
 import {formatMoney,parseMoney} from './model.mjs';
 const uid=()=>crypto.randomUUID();
 function Section({title,children}){return <section className="panel"><div className="sectiontitle"><h2>{title}</h2></div>{children}</section>}
@@ -6,6 +7,7 @@ function Row({children}){return <div className="list-row">{children}</div>}
 function Failure({error}){return error?<p className="errorbox" role="alert">{error}</p>:null;}
 export function CatalogToolsPanel({mode,api,categories,products,onRefresh}){
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [editing,setEditing]=useState(null);
  const [selectedProduct,setSelectedProduct]=useState(''),[modifierName,setModifierName]=useState(''),[modifierPrice,setModifierPrice]=useState('0,00');
  const [comboName,setComboName]=useState(''),[comboPrice,setComboPrice]=useState('0,00'),[comboCategory,setComboCategory]=useState(''),[parts,setParts]=useState([]);
  const [mods,setMods]=useState([]);
@@ -13,9 +15,25 @@ export function CatalogToolsPanel({mode,api,categories,products,onRefresh}){
  async function action(route,method,body){
    if(mode!=='live'||busy)return;
    setBusy(true);setError('');setNotice('');
-   try{await api(route,{method,body:{commandId:uid(),...body}});setNotice('Alteração salva no servidor.');await onRefresh?.();}
-   catch(e){setError(e.message)}finally{setBusy(false)}
+   try{await api(route,{method,body:{commandId:uid(),...body}});setNotice('Alteração salva no servidor.');await onRefresh?.();return true;}
+   catch(e){setError(e.message);return false;}finally{setBusy(false)}
  }
+ const submitEdit=async event=>{
+  event.preventDefault();
+  if(!editing||busy||mode!=='live')return;
+  try{
+   const name=editing.name.trim();
+   if(!name)throw Error('Nome obrigatório');
+   let ok;
+   if(editing.type==='category')ok=await action('/api/categories/'+encodeURIComponent(editing.id),'PATCH',{name});
+   else {
+    const priceCents=parseMoney(editing.price),barcode=(editing.barcode||'').trim()||null;
+    if(barcode&&!/^\d{13}$/.test(barcode))throw Error('Código EAN-13 inválido');
+    ok=await action('/api/products/'+encodeURIComponent(editing.id),'PATCH',{name,priceCents,barcode});
+   }
+   if(ok)setEditing(null);
+  }catch(e){setError(e.message);}
+ };
  const simple=products.filter(p=>!p.isCombo&&p.active);
  const addPart=(id,quantity)=>{
    if(!id)return;
@@ -25,21 +43,46 @@ export function CatalogToolsPanel({mode,api,categories,products,onRefresh}){
  return <section className="stack">
   <div className="pageheading"><div><p className="eyebrow">CARDÁPIO / CONFIGURAÇÕES</p><h2>Edição de catálogo, adicionais e combos</h2><p className="subtext">Todos os preços e componentes são gravados no catálogo canônico.</p></div></div>
   <Failure error={error}/>{notice&&<p className="help" role="status">{notice}</p>}
+  <Modal opened={Boolean(editing)} onClose={()=>{if(!busy)setEditing(null)}} centered
+   title={editing?.type==='category'?'Renomear categoria':'Editar produto'} closeOnClickOutside={!busy}>
+   {editing&&<form onSubmit={event=>void submitEdit(event)}>
+    <Stack gap="md">
+     <label className="field">Nome
+      <input autoFocus required maxLength={editing.type==='category'?80:120} value={editing.name}
+       onChange={e=>setEditing(s=>({...s,name:e.target.value}))}/>
+     </label>
+     {editing.type==='product'&&<>
+      <label className="field">Preço (R$)
+       <input required inputMode="decimal" value={editing.price}
+        onChange={e=>setEditing(s=>({...s,price:e.target.value}))}/>
+      </label>
+      <label className="field">EAN-13 opcional
+       <input inputMode="numeric" pattern="[0-9]{13}" maxLength={13} value={editing.barcode}
+        onChange={e=>setEditing(s=>({...s,barcode:e.target.value}))}/>
+      </label>
+     </>}
+     <Group justify="flex-end">
+      <Button variant="default" disabled={busy} onClick={()=>setEditing(null)}>Cancelar</Button>
+      <Button color="orange" type="submit" loading={busy} disabled={!editing.name.trim()}>Salvar alterações</Button>
+     </Group>
+    </Stack>
+   </form>}
+  </Modal>
   <Section title="Editar e arquivar categorias">
    {categories.map(c=><Row key={c.id}><span className="grow"><strong>{c.name}</strong><small>{c.active?'Ativa':'Arquivada'}</small></span>{!!c.active&&<>
-     <button className="btn secondary" disabled={busy||mode!=='live'} onClick={()=>{const name=window.prompt('Novo nome da categoria',c.name);if(name?.trim()&&name.trim()!==c.name)void action('/api/categories/'+encodeURIComponent(c.id),'PATCH',{name:name.trim()});}}>Renomear</button>
+     <button className="btn secondary" disabled={busy||mode!=='live'} onClick={()=>setEditing({type:'category',id:c.id,name:c.name})}>Renomear</button>
      <button className="btn secondary" disabled={busy||mode!=='live'||c.id==='c-default'} onClick={()=>{if(window.confirm('Arquivar categoria? Seus produtos deixarão de estar disponíveis para novas vendas.'))void action('/api/categories/'+encodeURIComponent(c.id)+'/archive','POST',{});}}>Arquivar</button>
     </>}</Row>)}
   </Section>
   <Section title="Editar produtos">
    {products.map(p=><Row key={p.id}><span className="grow"><strong>{p.name}</strong><small>{formatMoney(p.priceCents)} {p.barcode?'· '+p.barcode:''}</small></span>
-    <button className="btn secondary" disabled={busy||mode!=='live'} onClick={()=>{const name=window.prompt('Nome do produto',p.name);if(!name?.trim())return;const raw=window.prompt('Novo preço (R$)',String(p.priceCents/100).replace('.',','));if(raw===null)return;const barcode=window.prompt('EAN-13 opcional',p.barcode||'');if(barcode===null)return;try{void action('/api/products/'+encodeURIComponent(p.id),'PATCH',{name:name.trim(),priceCents:parseMoney(raw),barcode:barcode.trim()||null});}catch(e){setError(e.message)}}}>Editar</button>
+    <button className="btn secondary" disabled={busy||mode!=='live'} onClick={()=>setEditing({type:'product',id:p.id,name:p.name,price:(p.priceCents/100).toFixed(2).replace('.',','),barcode:p.barcode||''})}>Editar</button>
    </Row>)}
   </Section>
   <Section title="Adicionais e personalizações">
    <label className="field">Produto<select value={selectedProduct} onChange={e=>setSelectedProduct(e.target.value)}><option value="">Selecione um produto</option>{simple.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
    {mods.map(m=><Row key={m.id}><span>{m.name}</span><strong>{formatMoney(m.priceCents)}</strong></Row>)}
-   <form className="form-grid" onSubmit={e=>{e.preventDefault();if(!selectedProduct)return;try{void action('/api/products/'+encodeURIComponent(selectedProduct)+'/modifiers','POST',{name:modifierName.trim(),priceCents:parseMoney(modifierPrice)}).then(()=>{setModifierName('');setModifierPrice('0,00');})}catch(e){setError(e.message)}}}>
+   <form className="form-grid" onSubmit={e=>{e.preventDefault();if(!selectedProduct)return;try{void action('/api/products/'+encodeURIComponent(selectedProduct)+'/modifiers','POST',{name:modifierName.trim(),priceCents:parseMoney(modifierPrice)}).then(ok=>{if(ok){setModifierName('');setModifierPrice('0,00');}})}catch(e){setError(e.message)}}}>
     <label className="field">Nome<input required maxLength="80" value={modifierName} onChange={e=>setModifierName(e.target.value)}/></label>
     <label className="field">Preço adicional (R$)<input required value={modifierPrice} onChange={e=>setModifierPrice(e.target.value)}/></label>
     <button className="btn primary" disabled={!selectedProduct||busy||mode!=='live'}>Cadastrar adicional</button>
@@ -57,7 +100,7 @@ export function CatalogToolsPanel({mode,api,categories,products,onRefresh}){
      <button className="btn secondary" disabled={!simple.length}>Adicionar componente</button>
     </form>
     {parts.map(p=><Row key={p.productId}><span>{p.quantity} × {products.find(x=>x.id===p.productId)?.name}</span><button className="btn secondary" onClick={()=>setParts(list=>list.filter(x=>x.productId!==p.productId))}>Remover</button></Row>)}
-    <button className="btn primary" disabled={!comboName.trim()||!parts.length||busy||mode!=='live'} onClick={()=>{try{void action('/api/combos','POST',{name:comboName.trim(),priceCents:parseMoney(comboPrice),categoryId:comboCategory||'c-default',components:parts}).then(()=>{setComboName('');setComboPrice('0,00');setParts([])})}catch(e){setError(e.message)}}}>Salvar combo</button>
+    <button className="btn primary" disabled={!comboName.trim()||!parts.length||busy||mode!=='live'} onClick={()=>{try{void action('/api/combos','POST',{name:comboName.trim(),priceCents:parseMoney(comboPrice),categoryId:comboCategory||'c-default',components:parts}).then(ok=>{if(ok){setComboName('');setComboPrice('0,00');setParts([]);}})}catch(e){setError(e.message)}}}>Salvar combo</button>
   </Section>
  </section>;
 }

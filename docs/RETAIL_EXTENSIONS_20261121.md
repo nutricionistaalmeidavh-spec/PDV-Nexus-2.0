@@ -15,7 +15,7 @@ Core R$ 0, self-hosted, código e componentes open source. Nenhuma nuvem, API co
 - EAN de produto cadastrado, validado pelo dígito de controle, único, pesquisável por nome/código na UI. GET /api/catalog/barcode?code=... consulta produto.
 - GET /api/hardware/scale/label?code=...&mode=weight|price valida EAN prefixado 2x e extrai PLU de cinco posições, peso em gramas ou preço em centavos.
 - GET /api/hardware/scale/parse?brand=generic|toledo|filizola&raw=... decodifica quadros em diagnóstico, sem abrir porta física. Protocolos completos variam por fabricante/modelo; exigem captura e homologação física.
-- **Ainda não há captura automática do peso da porta serial nem venda fracionada por kg**; a etiqueta só é decodificada, não pode confirmar venda ou preço automaticamente. Instalação de driver só quando necessário.
+- Fluxos de **venda por peso (kg)** e diagnósticos de leitura de balança existem no host e no front-end. A interpretação serial continua dependente de modelo/protocolo: quadros decimais sem unidade explícita são recusados por segurança, e **captura física automática de qualquer balança não deve ser considerada homologada**. Driver serial é opcional e só instalado no host que utiliza esse periférico.
 
 ## Impressão não fiscal
 - TCP ESC/POS padrão foi preservado.

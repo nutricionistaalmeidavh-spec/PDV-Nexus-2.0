@@ -61,6 +61,6 @@ flowchart LR
 | Alterações fiscais ou hardware incompatível | adapters desacoplados e validação por UF/modelo |
 | Exposição da API LAN | pareamento, permissão, autenticação, bind/configuração controlados |
 
-## Não escopo de M0.1
+## Histórico do M0.1 e limites atuais
 
-Não há API, interface, gravação de pedidos, regras fiscais, sincronização entre unidades, impressão ou backup implementados. O schema é inicial e não substitui testes de integração ao implementar o repositório SQLite.
+O M0.1 originalmente entregou apenas a fundação. Nas etapas seguintes foram implementados o host HTTP local, React/Vite, transações SQLite, estoque e vendas, fila de impressão, backup/restauração, KDS e espelhos opcionais **somente leitura**. Não existe multiwriter distribuído nem emissão fiscal integrada; os comprovantes são não fiscais e o fluxo fiscal continua externo. Validar hardware real, certificados LAN e instalação no estabelecimento antes de disponibilizar a clientes.
