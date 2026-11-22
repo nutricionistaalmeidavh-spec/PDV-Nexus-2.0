@@ -55,10 +55,12 @@ export function orderLifecycleWrite(db,method,route,body,h){
             const stock=consumeStockForOrder(db,id,actor,conflict);
             for(const p of payments)db.prepare('INSERT INTO payment(id,order_id,method,amount_cents,state,created_at,cash_session_id) VALUES(?,?,?,?,?,?,?)')
               .run(randomUUID(),id,p.method,p.amountCents,'CONFIRMED',stamp(),session.id);
+            const pendingKitchenTickets=db.prepare("SELECT COUNT(*) AS n FROM kitchen_ticket WHERE order_id=? AND status IN ('PENDING','PREPARING','READY')").get(id).n;
             writeOrder(db,next);
+            if(order.tableId&&pendingKitchenTickets) audit(db,id,'TABLE_RELEASED_WITH_PENDING_KITCHEN',{tableId:order.tableId,pendingKitchenTickets});
             db.prepare('INSERT INTO outbox_event(id,kind,aggregate_id,payload_json,status,created_at) VALUES (?,?,?,?,?,?)')
               .run(randomUUID(),'PRINT_RECEIPT',id,JSON.stringify({id,lines:next.lines,totalCents:amount}),'PENDING',stamp());
-            audit(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents});
+            audit(db,id,'ORDER_CLOSED',{payments,changeCents:change,cogsCents:stock.cogsCents,pendingKitchenTickets});
             return {order:databaseOrder(db,id),changeCents:change};
           });
         } else if(method==='POST'&&route.match(/^\/api\/orders\/[^/]+\/cancel$/)) {
