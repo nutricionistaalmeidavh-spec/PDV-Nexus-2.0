@@ -8,6 +8,7 @@ import {openDatabase,latestSchemaVersion} from '../src/db.mjs';
 import {inspectBackup} from '../src/restore.mjs';
 import {kitchenRead} from '../src/kitchen-service.mjs';
 import {allowedOperator} from '../src/operator-auth.mjs';
+import {mayFinishExistingOperation} from '../src/license-operation-policy.mjs';
 
 test('P0: cashier pode enviar comprovantes sem poder configurar impressora',()=>{
   assert.equal(allowedOperator('cashier','POST','/api/print/jobs/job/send'),true);
@@ -106,4 +107,16 @@ test('P0: backup automático validado preserva versões recentes e rotaciona som
   assert.equal(autos.length,2);
   assert.equal(fs.existsSync(third),true);
   assert.equal(fs.existsSync(manual),true);
+});
+
+test('P0: vencimento comercial preserva fechamento e execução de pedidos já iniciados',()=>{
+  assert.equal(mayFinishExistingOperation('POST','/api/orders/abc/close'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/orders/abc/payments/partial'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/cash/close'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/kitchen/tickets/abc/status'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/print/jobs/abc/send'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/delivery/orders/abc/status'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/orders'),false);
+  assert.equal(mayFinishExistingOperation('POST','/api/products'),false);
+  assert.equal(mayFinishExistingOperation('POST','/api/stock/ingredients'),false);
 });
