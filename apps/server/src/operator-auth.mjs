@@ -96,6 +96,64 @@ export function createOperatorAuth(db) {
         db.exec('COMMIT');return reply(res,201,{user:userView(account)});
       }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return reply(res,400,{code:'INVALID_OPERATOR',message:e.message});}
     }
+
+    if(req.method==='GET'&&route==='/api/auth/operators'){
+      const supervisor=user(req);
+      if(!supervisor)return reply(res,401,{code:'AUTH_REQUIRED',message:'Entre com a conta de operador'});
+      if(supervisor.role!=='admin')return reply(res,403,{code:'FORBIDDEN',message:'Somente supervisor pode consultar operadores'});
+      const users=db.prepare('SELECT id,username,role,enabled,created_at AS createdAt FROM operator_account ORDER BY username COLLATE NOCASE').all();
+      return reply(res,200,{users});
+    }
+    const operatorChange=route.match(/^\/api\/auth\/operators\/([^/]+)$/);
+    if(req.method==='PATCH'&&operatorChange){
+      const supervisor=user(req);
+      if(!supervisor)return reply(res,401,{code:'AUTH_REQUIRED'});
+      if(supervisor.role!=='admin')return reply(res,403,{code:'FORBIDDEN'});
+      if((body?.role===undefined&&body?.enabled===undefined)||
+         (body?.role!==undefined&&!['admin','cashier'].includes(body.role))||
+         (body?.enabled!==undefined&&typeof body.enabled!=='boolean'))
+        return reply(res,400,{code:'INVALID_OPERATOR',message:'Perfil ou estado inválido'});
+      try{
+        db.exec('BEGIN IMMEDIATE');
+        const existing=db.prepare('SELECT * FROM operator_account WHERE id=?').get(operatorChange[1]);
+        if(!existing){db.exec('ROLLBACK');return reply(res,404,{code:'NOT_FOUND'});}
+        const role=body.role??existing.role,enabled=body.enabled===undefined?existing.enabled:Number(body.enabled);
+        if(supervisor.id===existing.id&&(role!=='admin'||enabled!==1)){
+          db.exec('ROLLBACK');
+          return reply(res,409,{code:'SELF_ADMIN_LOCK',message:'Sua conta de supervisor não pode ser desativada ou rebaixada'});
+        }
+        if(existing.role==='admin'&&existing.enabled===1&&(role!=='admin'||enabled!==1)){
+          const admins=db.prepare("SELECT COUNT(*) AS count FROM operator_account WHERE role='admin' AND enabled=1").get().count;
+          if(admins<=1){db.exec('ROLLBACK');return reply(res,409,{code:'LAST_ADMIN',message:'Mantenha ao menos um supervisor ativo'});}
+        }
+        db.prepare('UPDATE operator_account SET role=?,enabled=? WHERE id=?').run(role,enabled,existing.id);
+        db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
+          .run(randomUUID(),existing.id,'OPERATOR_UPDATED',supervisor.id,JSON.stringify({role,enabled}),stamp());
+        db.exec('COMMIT');
+        for(const [key,session] of sessions)if(session.user.id===existing.id)sessions.delete(key);
+        return reply(res,200,{user:{id:existing.id,username:existing.username,role,enabled}});
+      }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return reply(res,400,{code:'INVALID_OPERATOR',message:'Não foi possível atualizar o operador'});}
+    }
+    const resetPassword=route.match(/^\/api\/auth\/operators\/([^/]+)\/password$/);
+    if(req.method==='POST'&&resetPassword){
+      const supervisor=user(req);
+      if(!supervisor)return reply(res,401,{code:'AUTH_REQUIRED'});
+      if(supervisor.role!=='admin')return reply(res,403,{code:'FORBIDDEN'});
+      if(!validPassword(body?.password))return reply(res,400,{code:'INVALID_PASSWORD',message:'Senha deve ter entre 12 e 128 caracteres'});
+      try{
+        db.exec('BEGIN IMMEDIATE');
+        const existing=db.prepare('SELECT id FROM operator_account WHERE id=?').get(resetPassword[1]);
+        if(!existing){db.exec('ROLLBACK');return reply(res,404,{code:'NOT_FOUND'});}
+        const salt=randomBytes(16).toString('hex');
+        db.prepare('UPDATE operator_account SET password_salt=?,password_hash=? WHERE id=?')
+          .run(salt,hashPassword(body.password,salt),existing.id);
+        db.prepare('INSERT INTO audit_log(id,aggregate_id,action,actor_id,payload_json,created_at) VALUES(?,?,?,?,?,?)')
+          .run(randomUUID(),existing.id,'OPERATOR_PASSWORD_RESET',supervisor.id,'{}',stamp());
+        db.exec('COMMIT');
+        for(const [key,session] of sessions)if(session.user.id===existing.id)sessions.delete(key);
+        return reply(res,200,{ok:true});
+      }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return reply(res,500,{code:'PASSWORD_RESET_FAILED',message:'Falha ao atualizar credencial'});}
+    }
     return reply(res,404,{code:'NOT_FOUND',message:'Rota de autenticacao inexistente'});
   }
   return {handle,user,configured};
