@@ -25,6 +25,8 @@ import {SaleUnitsConfig} from './SaleUnitsConfig.jsx';
 import {PairDevice} from './PairDevice.jsx';
 import {LicenseOnboarding} from './LicenseOnboarding.jsx';
 import {PairedDevicesPanel} from './PairedDevicesPanel.jsx';
+import {AttendancePanel} from './AttendancePanel.jsx';
+import {TabletAdminPanel} from './TabletAdminPanel.jsx';
 
 const demoOrder=()=>({...DEMO_ORDER,lines:[]});
 const toStringError=e=>e instanceof Error?e.message:'Falha não identificada';
@@ -125,9 +127,9 @@ function App(){
  case 'produtos':return <div className="stack"><Products products={products} categories={categories} onAddProduct={addCatalogProduct} onAddCategory={addCategory} onToggle={toggleProduct} busy={busy} canEdit={canEdit}/><CatalogToolsPanel mode={mode} api={api} categories={categories} products={products} onRefresh={refresh}/><SaleUnitsConfig api={api} products={products} mode={mode} onChanged={refresh}/></div>;
  case 'caixa':return <Cash session={session} onAction={cashAction} busy={busy}/>;
  case 'mesas':return <Tables tables={tables} selected={selected} onSelect={openTable} onNew={createTable} busy={busy}/>;
- case 'kds':return <Kitchen api={api} tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/>;
+ case 'kds':return <div className="stack"><Kitchen api={api} tickets={tickets} onUpdate={updateTicket} onRefresh={()=>void refresh()} busy={busy}/><AttendancePanel api={api} mode={mode} pairedRole={pairedRole}/></div>;
  case 'garcom':return <Waiter tables={tables} products={products} onOpenTable={openTable} busy={busy}/>;
- case 'restaurante-config':return <div className="stack"><PizzeriaSettings api={api} products={products} onRefresh={refresh} mode={mode}/><KitchenStationsManager api={api} products={products} onChanged={refresh} mode={mode}/></div>;
+ case 'restaurante-config':return <div className="stack"><PizzeriaSettings api={api} products={products} onRefresh={refresh} mode={mode}/><KitchenStationsManager api={api} products={products} onChanged={refresh} mode={mode}/><TabletAdminPanel api={api} tables={tables} mode={mode}/></div>;
  case 'divisao':return <TableOrderPanel order={order} tables={tables} products={products} api={api} mode={mode} onUpdate={next=>{setOrder(next);void refresh();}} onBack={()=>{setView(mode==='paired'?'garcom':order?.serviceMode==='table'?'mesas':'venda');void refresh();}} onCheckout={selectedOrder=>{setOrder(selectedOrder);setModal({type:'payment'});}} session={session} canManage={canEdit}/>;
  case 'primeiro-acesso':return <Onboarding mode={mode} api={api}/>;
  case 'geral':return <Suspense fallback={<p className="subtext">Carregando gestão local...</p>}><Dashboard orders={orders} session={session} tables={tables} onGo={navigate} api={api} mode={mode}/></Suspense>;
