@@ -19,11 +19,18 @@ export function kitchenRead(db,method,route,h,params=new URLSearchParams()){
       kt.created_at AS createdAt,kt.change_note AS changeNote,kt.kitchen_station_id AS stationId,ks.name AS stationName,ol.product_name_snapshot AS productName,ol.quantity,ol.note_snapshot AS note,
       (SELECT group_concat(name_snapshot, ', ') FROM order_line_modifier WHERE line_id=kt.line_id) AS modifiers,
       (SELECT group_concat(quantity||'x '||product_name_snapshot, ', ') FROM order_line_combo_item WHERE line_id=kt.line_id) AS comboDetails,
-      so.service_mode AS serviceMode,st.label AS tableLabel
+      so.service_mode AS serviceMode,st.label AS tableLabel,
+      so.status AS orderStatus,so.id AS attendanceId,
+      CASE WHEN so.status='CLOSED' THEN 1 ELSE 0 END AS paid,
+      ow.waiter_device_id AS waiterDeviceId,pd.label AS waiterName,
+      dc.waiter_device_id AS claimedBy
       FROM kitchen_ticket kt JOIN order_line ol ON ol.id=kt.line_id
       JOIN sales_order so ON so.id=kt.order_id LEFT JOIN service_table st ON st.id=so.service_table_id LEFT JOIN kitchen_station ks ON ks.id=kt.kitchen_station_id
+      LEFT JOIN order_waiter ow ON ow.order_id=so.id LEFT JOIN paired_device pd ON pd.id=ow.waiter_device_id
+      LEFT JOIN kitchen_delivery_claim dc ON dc.ticket_id=kt.id
       WHERE (kt.status IN ('PENDING','PREPARING','READY') OR (kt.status='CANCELLED' AND kt.change_note IS NOT NULL AND kt.updated_at>=?))
         AND (? IS NULL OR kt.kitchen_station_id=?) ORDER BY kt.created_at ASC LIMIT 200`).all(new Date(Date.now()-12*3600*1000).toISOString(),params.get('stationId'),params.get('stationId'));
+    for(const ticket of tickets)ticket.paid=!!ticket.paid;
     return {status:200,body:{tickets}};
   }
  return null;
