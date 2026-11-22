@@ -1,13 +1,8 @@
 /** P1: setores KDS, perfis de impressão e comprovantes não fiscais. */
 import {randomUUID} from 'node:crypto';
-import net from 'node:net';
+import {isPrivateIpv4} from './private-network.mjs';
 import {validateSerialDevicePath} from './retail-hardware.mjs';
 import {validatePrinterQueueName} from './windows-raw-printer.mjs';
-const isPrivateIp=s=>{
- if(net.isIP(s)!==4)return false;
- const n=s.split('.').map(Number);
- return n[0]===10||n[0]===192&&n[1]===168||n[0]===172&&n[1]>=16&&n[1]<=31||n[0]===127;
-};
 const allowedKind={PREBILL:'PRINT_PREBILL',KITCHEN:'PRINT_KITCHEN'};
 export function kitchenOperationsRead(db,method,route){
  if(method!=='GET')return null;
@@ -63,7 +58,7 @@ export function kitchenOperationsWrite(db,method,route,body,h){
   if(transport==='tcp'){
    host=h.requireString(body.host,'IP da impressora',64);
    port=body.port;
-   if(!isPrivateIp(host)||!Number.isInteger(port)||port<1||port>65535)h.bad('IP privado/porta inválidos');
+   if(!isPrivateIpv4(host)||!Number.isInteger(port)||port<1||port>65535)h.bad('IP privado/porta inválidos');
   }else{
    devicePath=h.requireString(body.devicePath,'Porta ou fila da impressora',128);
    if(transport==='serial'){
