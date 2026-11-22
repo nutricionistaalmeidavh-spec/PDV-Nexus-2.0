@@ -250,3 +250,13 @@ test('P0: erro inesperado do financeiro responde 500 genérico sem vazar ID inte
  assert.equal(body.code,'INTERNAL_ERROR');
  assert.equal(JSON.stringify(body).includes('internal-order-secret'),false);
 });
+
+test('P0: operação iniciada com licença válida pode ser confirmada, cancelada e estornada depois de expirar',()=>{
+  for(const action of ['confirm','cancel','close','refund','refund-items','payments/partial'])
+    assert.equal(mayFinishExistingOperation('POST','/api/orders/order-123/'+action),true,action);
+  assert.equal(mayFinishExistingOperation('POST','/api/cash/print'),true);
+  assert.equal(mayFinishExistingOperation('POST','/api/orders'),false);
+  assert.equal(mayFinishExistingOperation('POST','/api/orders/new/lines'),false);
+  assert.equal(mayFinishExistingOperation('POST','/api/orders/order-123/transfer-table'),false);
+  assert.equal(mayFinishExistingOperation('POST','/api/stock/ingredients'),false);
+});
